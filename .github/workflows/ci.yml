@@ -1,0 +1,30 @@
+name: CI
+
+# 빌드 게이트 자동화 (감사 missed-3): AGENTS.md 가 의존하는 패리티(ws.test)·
+# authz 커버리지 테스트를 사람 손 없이 매 push/PR 마다 강제한다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # 반복 스케줄(recurringDueAt)은 서버 로컬 시간대(맥미니 KST) 기준 — 테스트도 같은 TZ 로 고정
+  TZ: Asia/Seoul
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm lint
+      - run: pnpm test
