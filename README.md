@@ -9,6 +9,28 @@ Slack·LLM·Google OAuth 는 전부 선택이다. 없어도 코어(보드·문�
 - 스택: Next.js(App Router) + Prisma + Postgres(docker)
 - 라이선스: MIT
 
+## 화면
+
+**대시보드** — 마감·상태 분포·담당자별 작업량·최근 활동을 한눈에.
+
+![대시보드](docs/images/dashboard.png)
+
+**태스크 보드** — 프로젝트별 칸반/표 이중 뷰, 빠른 추가·검색·필터.
+
+![태스크 보드](docs/images/board.png)
+
+**문서** — 프로젝트 아래 file-first 문서. 본문은 데이터 디렉토리의 md 파일 + git 이력으로 남는다.
+
+![문서](docs/images/doc.png)
+
+**프로젝트** — 열린 태스크·임박 마감·참여자·연결 레포까지 프로젝트 카드로.
+
+![프로젝트](docs/images/projects.png)
+
+**승인 인박스** — 에이전트·팀원이 올린 결정을 버튼으로 승인/거부/추가요청. Slack 연동 시 채널 카드로도 처리 가능.
+
+![승인](docs/images/approvals.png)
+
 ## 빠른 시작
 
 ```bash
