@@ -1,0 +1,67 @@
+# TeamSpace 로컬 인프라 (구조데이터 + 큐 + 워커)
+# 개발: 이 compose로 postgres/redis만 띄우고 web은 `pnpm dev`로 로컬 실행.
+#   docker compose up -d postgres redis
+# 워커(예약 알림 디스패처)도 띄우려면:
+#   docker compose --profile worker up -d --build worker
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: teamspace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: teamspace
+      POSTGRES_PASSWORD: teamspace
+      POSTGRES_DB: teamspace
+    ports:
+      - "5433:5432"   # 호스트 5432는 타 프로젝트 점유 → 5433으로 매핑
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teamspace -d teamspace"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: teamspace-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 예약/비동기 작업 워커. 만기 스케줄을 스캔해 Slack 발송(DB 폴링).
+  # 기본 up 에선 뜨지 않음(profile=worker). DATABASE_URL/슬랙 토큰은 .env 로 주입.
+  worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: teamspace-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # compose 네트워크 내부에서 postgres 서비스로 접속(.env 의 localhost:5433 대신).
+      DATABASE_URL: postgres://teamspace:teamspace@postgres:5432/teamspace
+      WORKER_INTERVAL_MS: "60000"
+      # 데이터 루트(docs/content/uploads)를 호스트 ./data 와 공유
+      TEAMSPACE_DATA_DIR: /data
+    volumes:
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:

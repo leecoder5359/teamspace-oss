@@ -1,0 +1,766 @@
+// TeamSpace — Prisma schema
+// 하이브리드 저장: 문서 본문은 content/ md 파일(소스오브트루스), 여기엔 구조/운영 데이터만.
+// docs/PLAN.md §3 참조.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- 사용자 / 워크스페이스 ----------
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatarUrl     String?
+  emailVerified DateTime? // Auth.js
+  image         String?   // Auth.js (OAuth 프로필 이미지)
+  createdAt     DateTime  @default(now())
+
+  memberships  WorkspaceMember[]
+  agentTokens  AgentToken[]
+  createdPages Page[]            @relation("PageCreatedBy")
+  ledProjects  Project[]         @relation("ProjectLead")
+
+  // Auth.js (NextAuth) 연동
+  accounts Account[]
+  sessions Session[]
+
+  rowComments RowComment[]
+  pairings    Pairing[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  members     WorkspaceMember[]
+  teams       Team[]
+  pages       Page[]
+  projects    Project[]
+  slackInstall SlackInstall?
+  notifRules  NotifRule[]
+  notifLogs   NotifLog[]
+  schedules   Schedule[]
+  claudeSessions ClaudeSession[]
+  routeRules  WorkspaceRouteRule[]
+  agentTokens AgentToken[]
+  approvals   Approval[]
+  decisions   Decision[]
+  glossary    GlossaryTerm[]
+  changelog   ChangelogEntry[]
+  risks       Risk[]
+  qaScenarios QaScenario[]
+  entities    Entity[]
+  dodItems    DodItem[]
+  onboarding  OnboardingStep[]
+  llmJobs     LlmJob[]
+  pairings    Pairing[]
+}
+
+enum Role {
+  admin
+  editor
+  viewer
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  role        Role      @default(editor)
+  status      String    @default("active") // active | invited (초대 후 미수락) | removed (제거됨 — 자동 재가입 차단)
+  team        Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  teamId      String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([teamId])
+}
+
+// 에이전트별 워크스페이스 스코프 API 토큰 (W1 보안 기반).
+// 발급 시 원문(wst_<64hex>)은 1회만 노출하고 sha256 해시만 저장한다.
+// 발급과 동시에 에이전트용 시스템 User + WorkspaceMember 가 생성되어
+// 작성자 기록(attribution)과 멤버 목록 노출이 사람 팀원과 동일하게 동작한다.
+model AgentToken {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String // 이 토큰의 시스템 User (에이전트 신원)
+  name        String // 예: "office-claude"
+  tokenHash   String    @unique // sha256(token) hex
+  role        Role      @default(editor)
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+
+  @@index([workspaceId])
+}
+
+// ---------- 팀 (워크스페이스 내 멤버 그룹) ----------
+model Team {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  name        String
+  color       String    @default("blue")
+  createdAt   DateTime  @default(now())
+
+  members WorkspaceMember[]
+
+  @@index([workspaceId])
+}
+
+// ---------- 프로젝트 (보드/문서를 묶는 작업 영역) ----------
+model Project {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  name        String
+  short       String?   // 짧은 코드 (예: iOS, AOS, CORE)
+  color       String    @default("blue") // Saebit accent 키 (blue/orange/purple/green/red…)
+  description String?
+  repoUrl     String?   // 코드 repo URL (카드 링크)
+  repoPath    String?   // 로컬 절대경로 (git 상태 조회용, 선택)
+  repoBranch  String?   // 기본 브랜치(선택)
+  docsDir     String?   // docs/ 아래 문서 폴더명 (예: "teamspace", "sample-app")
+  lead        User?     @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  leadId      String?
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  pages       Page[] // 이 프로젝트에 소속된 보드/문서
+  decisions   Decision[]
+  risks       Risk[]
+  qaScenarios QaScenario[]
+
+  @@index([workspaceId])
+}
+
+// ---------- 페이지 (문서 / 데이터베이스) ----------
+enum PageKind {
+  doc
+  database
+}
+
+model Page {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  parent      Page?     @relation("PageTree", fields: [parentId], references: [id])
+  parentId    String?
+  children    Page[]    @relation("PageTree")
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  kind        PageKind  @default(doc)
+  title       String    @default("Untitled")
+  icon        String?
+  position    Int       @default(0)
+
+  // 하이브리드: 문서 본문은 content/ md 파일이 소스오브트루스
+  filePath    String?   // 예: content/<workspaceId>/<pageId>.md
+  markdown    String?   // 파생 캐시(검색/슬랙/세션) — 차후 슬라이스에서 blocks로 격하 예정
+  blocks      Json?     // 진실원본(BlockNote 블록, 무손실) — 아직 소스오브트루스로 전환 안 함
+  contentHash String?   // 파일 SHA, 캐시 무효화용
+  deletedAt   DateTime? // 소프트 삭제(휴지통) — DELETE /api/pages 는 소프트, 영구 삭제는 /api/trash purge
+  rev         Int       @default(0) // 본문 저장마다 +1 (낙관적 잠금 baseRev 비교 대상)
+
+  createdBy   User      @relation("PageCreatedBy", fields: [createdById], references: [id])
+  createdById String
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  // database 종류일 때만 사용
+  dbProperties DbProperty[]
+  dbRows       DbRow[]      @relation("RowsOfDatabase")
+  dbViews      DbView[]
+  rowBacklink  DbRow?       @relation("RowContentPage")
+
+  revisions PageRevision[]
+
+  @@index([workspaceId, parentId])
+  @@index([projectId])
+}
+
+// 문서 버전 히스토리 (W2): 본문 저장마다 그 시점 스냅샷을 적재 — 덮어쓰기 복구용.
+model PageRevision {
+  id        String   @id @default(cuid())
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId    String
+  rev       Int // 저장 시점의 Page.rev (1부터)
+  title     String
+  markdown  String
+  authorId  String? // requireCtx actor userId (사람/에이전트)
+  createdAt DateTime @default(now())
+
+  @@unique([pageId, rev])
+  @@index([pageId, createdAt])
+}
+
+// ---------- 데이터베이스(노션 DB / 태스크 보드 공용) ----------
+enum PropType {
+  text
+  number
+  date
+  select
+  multiselect
+  checkbox
+  person
+  relation
+}
+
+model DbProperty {
+  id             String   @id @default(cuid())
+  database       Page     @relation(fields: [databasePageId], references: [id], onDelete: Cascade)
+  databasePageId String
+  name           String
+  type           PropType
+  config         Json     @default("{}")
+  position       Int      @default(0)
+}
+
+model DbRow {
+  id             String  @id @default(cuid())
+  database       Page    @relation("RowsOfDatabase", fields: [databasePageId], references: [id], onDelete: Cascade)
+  databasePageId String
+  props          Json    @default("{}") // { propId: value }
+  contentPage    Page?   @relation("RowContentPage", fields: [contentPageId], references: [id])
+  contentPageId  String? @unique
+  position       Int     @default(0)
+  updatedById    String? // 마지막 변경 액터(사람/에이전트 User id) — W5 task-13
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  checklist RowChecklistItem[]
+  comments  RowComment[]
+
+  @@index([databasePageId])
+}
+
+// ---------- 태스크(행) 체크리스트 / 댓글 ----------
+model RowChecklistItem {
+  id        String   @id @default(cuid())
+  row       DbRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  rowId     String
+  text      String
+  done      Boolean  @default(false)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([rowId])
+}
+
+model RowComment {
+  id        String   @id @default(cuid())
+  row       DbRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  rowId     String
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([rowId])
+}
+
+enum ViewType {
+  table
+  kanban
+}
+
+model DbView {
+  id             String   @id @default(cuid())
+  database       Page     @relation(fields: [databasePageId], references: [id], onDelete: Cascade)
+  databasePageId String
+  name           String   @default("Default")
+  type           ViewType @default(table)
+  config         Json     @default("{}") // { filters, sort, groupBy }
+  position       Int      @default(0)
+}
+
+// ---------- 슬랙 ----------
+model SlackInstall {
+  id               String    @id @default(cuid())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId      String    @unique
+  teamId           String
+  botTokenEnc      String    // 암호화 저장
+  defaultChannelId String?
+  createdAt        DateTime  @default(now())
+}
+
+enum NotifEvent {
+  task_created
+  task_status
+  task_assigned
+  task_due
+  comment_added
+  doc_saved
+}
+
+enum NotifTarget {
+  channel
+  dm
+}
+
+model NotifRule {
+  id          String      @id @default(cuid())
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  event       NotifEvent
+  target      NotifTarget
+  targetId    String      // channelId 또는 userId
+  projectId   String?     // 프로젝트 스코프(null=전역 기본)
+  enabled     Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+}
+
+// ---------- 알림 발송 내역 (슬랙 등 chat.postMessage 로그) ----------
+model NotifLog {
+  id          String   @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  channel     String   // "#qa-알림" 또는 대상
+  text        String
+  kind        String   @default("manual") // manual | approval | reminder | test
+  state       String   // sent | failed
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+// ---------- 승인/컨펌 (슬랙 인터랙티브) ----------
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  additional
+}
+
+enum ApprovalKind {
+  general
+  status
+  triage
+  doc
+  project
+  deploy
+}
+
+model Approval {
+  id           String         @id @default(cuid())
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  title        String
+  body         String
+  kind         ApprovalKind   @default(general)
+  highRisk     Boolean        @default(false)
+  status       ApprovalStatus @default(pending)
+  responseText String? // 추가요청 내용 / 거부 사유
+  slackChannel String? // 발송 채널
+  slackTs      String? // 발송 메시지 ts (chat.update 용)
+  respondedBy  String? // 슬랙 user id
+  createdBy    String? // 요청자 userId
+  projectId    String? // 연결 프로젝트(선택)
+  createdAt    DateTime       @default(now())
+  respondedAt  DateTime?
+
+  @@index([workspaceId, status])
+}
+
+// ---------- 문서 허브: 결정(decisions) ----------
+enum DecisionStatus {
+  proposed
+  accepted
+  superseded
+}
+
+model Decision {
+  id          String         @id @default(cuid())
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  title       String
+  context     String? // 배경/맥락
+  decision    String? // 결정 내용
+  status      DecisionStatus @default(accepted)
+  decidedAt   DateTime       @default(now())
+  createdAt   DateTime       @default(now())
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// ---------- 문서 허브: 용어집(glossary) / 변경이력(changelog) — 제품 공통 ----------
+model GlossaryTerm {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  term         String
+  definition   String
+  sourcePageId String?  // provenance: 추출 출처 문서 Page id(수동 추가면 null)
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model ChangelogEntry {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  version     String? // 예: v1.2.0
+  title       String
+  body        String?
+  releasedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+// ---------- 문서 허브: 리스크(risks) / QA — 프로젝트 문서 ----------
+enum RiskSeverity {
+  low
+  medium
+  high
+}
+enum RiskStatus {
+  open
+  mitigated
+  closed
+}
+model Risk {
+  id          String       @id @default(cuid())
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  title       String
+  description String?
+  severity    RiskSeverity @default(medium)
+  status      RiskStatus   @default(open)
+  createdAt   DateTime     @default(now())
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+enum QaStatus {
+  pending
+  pass
+  fail
+}
+model QaScenario {
+  id          String   @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  title       String
+  steps       String?
+  expected    String?
+  status      QaStatus  @default(pending)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// ---------- 문서 허브: 데이터모델/DoD/온보딩 — 제품 공통 ----------
+model Entity {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  name         String
+  description  String?
+  fields       String? // 한 줄에 하나씩: "name: type — note"
+  sourcePageId String? // provenance: 추출 출처 문서 Page id(수동 추가면 null)
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model DodItem {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  text        String
+  done        Boolean   @default(false)
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model OnboardingStep {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  title       String
+  body        String?
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+enum ScheduleKind {
+  once
+  cron
+}
+
+enum ScheduleStatus {
+  active
+  paused
+  done
+  failed
+}
+
+model Schedule {
+  id              String         @id @default(cuid())
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  kind            ScheduleKind
+  spec            String         // ISO datetime(once) 또는 cron 표현식 (UTC 저장)
+  timezone        String?        // 표시/계산용 타임존 (spec은 UTC 유지)
+  template        Json           @default("{}")
+  channelId       String
+  slackScheduledId String?       // chat.scheduleMessage 결과 id (취소용)
+  status          ScheduleStatus @default(active)
+  lastRunAt       DateTime?
+  createdAt       DateTime       @default(now())
+}
+
+// ---------- Claude 세션 탐색기 (PLAN §9.1 / M4 준비) ----------
+// 검색은 agentmemory 라이브 위임, 아래는 표시·복원력(:3111 다운 대비) 캐시.
+enum SessionStatus {
+  active
+  ended
+}
+
+enum SessionItemKind {
+  observation
+  summary
+  decision
+  commit
+  file_change
+}
+
+model ClaudeSession {
+  id           String        @id @default(cuid())
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  externalId   String        // agentmemory sessionId
+  project      String?
+  cwd          String?
+  startedAt    DateTime      @default(now())
+  endedAt      DateTime?
+  status       SessionStatus @default(active)
+  lastSyncedAt DateTime?
+
+  items        SessionItem[]
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId])
+  @@index([externalId])
+}
+
+model SessionItem {
+  id          String          @id @default(cuid())
+  session     ClaudeSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String
+  kind        SessionItemKind
+  body        Json            @default("{}") // 관찰/요약/결정/커밋/파일변경 본문 캐시
+  externalRef String?         // agentmemory observation id 등 원본 참조
+  createdAt   DateTime        @default(now())
+
+  @@index([sessionId])
+}
+
+model WorkspaceRouteRule {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  cwdPrefix   String    // cwd 접두사 또는 project glob → 워크스페이스 매핑
+  projectId   String?   // 매핑되는 프로젝트(선택) — /api/context?cwd= 프로젝트 스코프 해석용
+  priority    Int       @default(0)
+
+  @@index([workspaceId])
+}
+
+// 팀 레슨/작업규칙 (W3, 감사 mem-9): 개인 메모리의 feedback류 지식을 팀으로 승격하는 자리.
+// /api/context 주입에 포함되어 모든 팀원·에이전트가 같은 규범을 받는다.
+model Lesson {
+  id          String   @id @default(cuid())
+  workspaceId String
+  projectId   String? // null = 워크스페이스 전역
+  title       String
+  body        String // 규칙 본문 (왜/어떻게 포함 권장)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, projectId])
+}
+
+// ---------- LLM Job Queue (비동기 LLM 작업) ----------
+model LlmJob {
+  id             String    @id @default(cuid())
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId    String
+  kind           String    // "feedback_classify" 등 잡 유형
+  payload        Json      // 호출자가 넘긴 원본(ref 포함)
+  callbackUrl    String
+  callbackSecret String?   // 콜백 POST 의 Bearer 로 재전송
+  status         String    @default("pending") // pending|done|failed
+  attempts       Int       @default(0)
+  result         Json?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+// 지식 승격 제안 큐 (메모리 완성 슬라이스): 세션에서 배운 것을 팀 지식으로 올리는 "제안+승인" 관문.
+// approve 시 kind 에 따라 Lesson 또는 Decision(accepted) 이 생성된다.
+model Proposal {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  kind           String // lesson | decision
+  title          String
+  body           String
+  projectId      String?
+  status         String    @default("pending") // pending | approved | rejected
+  proposedById   String?
+  proposedByName String
+  reviewedById   String?
+  reviewNote     String?
+  createdAt      DateTime  @default(now())
+  reviewedAt     DateTime?
+
+  @@index([workspaceId, status])
+}
+
+// 쓰기 멱등성 (W8 agent-11/18): Idempotency-Key 헤더 재요청 시 저장된 응답을 그대로 반환.
+model IdempotencyRecord {
+  key         String   @id // 클라이언트 제공 키 (워크스페이스 스코프 포함 해시)
+  workspaceId String
+  response    Json
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+// 워커 하트비트 (W7 missed-6): tick 마다 upsert — /api/health 가 신선도를 판정.
+model Heartbeat {
+  id String   @id // "worker" 등 프로세스 이름
+  at DateTime @updatedAt
+}
+
+// ---------- 협업 (W6) ----------
+
+// 인앱 알림 인박스 (inv-4): 슬랙 발송과 별개로 수신자별 적재.
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String // 수신자 (사람/에이전트 User)
+  type        String // assigned | mention | approval | due | comment
+  title       String
+  link        String? // 앱 내 경로 (예: /p/<boardId>)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, userId, readAt])
+}
+
+// 활동 피드 = 경량 감사 로그 (inv-5, auth-7 부분).
+model Activity {
+  id          String   @id @default(cuid())
+  workspaceId String
+  actorId     String? // User id (사람/에이전트)
+  actorName   String // 표시용 스냅샷 (탈퇴/회수 후에도 유지)
+  verb        String // created | updated | deleted | restored | claimed | decided | invited | revoked ...
+  targetType  String // doc | task | decision | approval | member | token | lesson
+  targetId    String?
+  targetTitle String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+// 문서 코멘트 (inv-9·doc-7). @멘션은 body 파싱으로 Notification 생성.
+model PageComment {
+  id        String   @id @default(cuid())
+  pageId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([pageId, createdAt])
+}
+
+// ---------- Auth.js (NextAuth) ----------
+// OAuth(Account)/세션(Session)/검증토큰(VerificationToken) 표준 모델.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- 새 머신 curl|sh 페어링 (W1) ----------
+model Pairing {
+  code             String    @id
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId      String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  agentTokenId     String
+  token            String
+  tokenDeliveredAt DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([workspaceId])
+}

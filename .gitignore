@@ -1,0 +1,63 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+/app/generated/prisma
+
+# document content is an independent git repo (git-backed markdown)
+/content/
+
+# runtime data root (docs/content/uploads) — TEAMSPACE_DATA_DIR 기본 위치
+/data/
+
+# local claude settings
+.claude/settings.local.json
+
+# 에이전트 플러그인 상태·별개 태스크 소스 (진실 원천은 TeamSpace 보드/doc)
+.claude/ralph-loop.local.md
+.understand-anything/
+.beads/
+tasks/prd*.md
+tasks/prd*.json
+
+# user uploads (serving stays under public/ until a serving route exists)
+/public/uploads/

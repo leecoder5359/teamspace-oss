@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "teamspace": {
+      "command": "pnpm",
+      "args": ["exec", "tsx", "scripts/mcp-server.ts"]
+    }
+  }
+}

@@ -1,0 +1,522 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ===== TeamSpace workspace shell ===== */
+.ws-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* 데스크탑: wrap은 레이아웃에서 사라지고 sidebar가 flex에 직접 참여 */
+.ws-sidebar-wrap {
+  display: contents;
+}
+
+.ws-hamburger,
+.ws-backdrop {
+  display: none;
+}
+
+.ws-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  padding: 12px 8px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--background);
+}
+
+.ws-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 12px;
+}
+
+.ws-logo {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.ws-head-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.ws-new-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ws-new-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+.ws-new-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ws-tree,
+.ws-tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ws-tree-children {
+  padding-left: 16px;
+}
+
+.ws-tree-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 14px;
+}
+.ws-tree-link:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+.ws-tree-link.active {
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+  font-weight: 600;
+}
+.ws-tree-icon {
+  flex-shrink: 0;
+}
+.ws-tree-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.ws-editor {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 48px 24px 120px;
+}
+
+.ws-title-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 36px;
+  font-weight: 700;
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.ws-save-state {
+  height: 18px;
+  font-size: 12px;
+  opacity: 0.5;
+  margin-bottom: 12px;
+}
+
+.ws-empty {
+  max-width: 600px;
+  margin: 120px auto;
+  text-align: center;
+  opacity: 0.7;
+  line-height: 1.8;
+}
+
+/* ===== 모바일 반응형 (≤768px): 사이드바를 오프캔버스 드로어로 ===== */
+@media (max-width: 768px) {
+  .ws-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 30;
+    width: 38px;
+    height: 38px;
+    border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+    border-radius: 8px;
+    background: var(--background);
+    color: var(--foreground);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .ws-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 40;
+  }
+
+  .ws-sidebar-wrap {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    will-change: transform;
+  }
+  .ws-sidebar-wrap.open {
+    transform: translateX(0);
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .ws-sidebar {
+    height: 100%;
+    width: 80vw;
+    max-width: 300px;
+  }
+
+  .ws-editor {
+    padding: 64px 16px 96px;
+  }
+
+  .ws-title-input {
+    font-size: 28px;
+  }
+
+  .ws-db {
+    padding: 56px 12px 96px;
+  }
+}
+
+/* ===== 데이터베이스 뷰 (표 / 보드) ===== */
+.ws-db {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 96px;
+}
+
+/* 다른 화면(문서 탭 등)에 끼워 넣을 때: 폭 제한 해제 + 여백 축소 */
+.ws-db--embedded {
+  max-width: none;
+  margin: 0;
+  padding: 14px 18px 28px;
+}
+
+.ws-db-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 16px;
+}
+
+/* 간편 할일 알림 등록 */
+.ws-quickadd {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.ws-quickadd-name {
+  flex: 1 1 240px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  padding: 8px 10px;
+}
+.ws-quickadd-time {
+  border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  padding: 7px 8px;
+}
+.ws-quickadd-btn {
+  border: none;
+  border-radius: 6px;
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.ws-quickadd-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 예약된 알림 목록 */
+.ws-reminders {
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 16px;
+  background: color-mix(in srgb, #f4b400 8%, transparent);
+}
+.ws-reminders-head {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.ws-reminder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 3px 0;
+}
+.ws-reminder-time {
+  flex-shrink: 0;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+.ws-reminder-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-reminder-x {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+.ws-reminder-x:hover {
+  color: #ea4335;
+}
+
+/* 검색 + 필터 툴바 */
+.ws-db-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ws-db-search {
+  flex: 0 1 240px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  padding: 7px 10px;
+}
+.ws-db-filter {
+  border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  padding: 7px 8px;
+}
+.ws-db-clear {
+  border: none;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.ws-db-clear:hover {
+  background: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.ws-db-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  margin-bottom: 16px;
+}
+
+.ws-db-tab {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.ws-db-tab:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+.ws-db-tab.active {
+  border-bottom-color: var(--foreground);
+  font-weight: 600;
+}
+
+/* 표 */
+.ws-table-wrap {
+  overflow-x: auto;
+}
+.ws-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+.ws-table th,
+.ws-table td {
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  padding: 0;
+  text-align: left;
+}
+.ws-table th {
+  padding: 8px 10px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  white-space: nowrap;
+}
+.ws-table-actions {
+  width: 36px;
+  text-align: center;
+}
+.ws-cell-input,
+.ws-cell-select {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  padding: 8px 10px;
+}
+.ws-cell-input:focus,
+.ws-cell-select:focus {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+.ws-row-del {
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px;
+}
+.ws-row-del:hover {
+  color: #ea4335;
+}
+.ws-add-row {
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px 4px;
+}
+.ws-add-row:hover {
+  color: var(--foreground);
+}
+
+/* 보드(칸반) */
+.ws-kanban {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  align-items: flex-start;
+}
+.ws-kanban-col {
+  flex: 0 0 260px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 80px;
+}
+.ws-kanban-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 6px 8px;
+}
+.ws-kanban-count {
+  margin-left: auto;
+  opacity: 0.5;
+  font-weight: 400;
+}
+.ws-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.ws-kanban-card {
+  background: var(--background);
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  cursor: grab;
+}
+.ws-kanban-card.dragging {
+  opacity: 0.4;
+}
+.ws-kanban-card-title {
+  font-size: 14px;
+}
+.ws-kanban-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.ws-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+.ws-kanban-empty {
+  opacity: 0.6;
+  padding: 24px;
+}

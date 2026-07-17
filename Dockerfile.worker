@@ -1,0 +1,24 @@
+# 예약/비동기 작업 워커 컨테이너 (scripts/worker.ts)
+# DB 폴링으로 만기 스케줄을 디스패치. web 빌드와 분리된 경량 이미지.
+FROM node:22-alpine
+
+WORKDIR /app
+
+# pnpm (corepack)
+RUN corepack enable
+
+# 의존성 설치 (락파일 기준 재현 설치)
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Prisma 스키마 + 생성된 클라이언트 + 워커가 쓰는 소스
+COPY prisma ./prisma
+COPY prisma.config.ts tsconfig.json ./
+COPY lib ./lib
+COPY scripts ./scripts
+COPY app/generated ./app/generated
+
+# Prisma 클라이언트 생성(생성물이 없을 경우 대비)
+RUN pnpm exec prisma generate
+
+CMD ["pnpm", "worker"]

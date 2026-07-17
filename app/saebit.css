@@ -1,0 +1,1451 @@
+/* =========================================================================
+   Saebit Design System — tokens + shell + primitives
+   디자인 소스(Saebit 워크스페이스 디자인)의 토큰/컴포넌트 CSS 포팅.
+   토큰은 DesignSync로 가져온 실제 Saebit 값(verbatim): 로열블루 #2F62FF,
+   쿨그레이 중립색, 소프트 셰도우. 라이트/다크 양쪽. 본문 폰트는 Pretendard(CDN),
+   display(Moneygraphy Rounded)는 미적용 시 Pretendard 폴백.
+   globals.css 다음에 로드되어 .ws-* 시각 스타일을 재스킨한다.
+   ========================================================================= */
+
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
+/* 디스플레이 폰트(Moneygraphy Rounded) — 자체 호스팅.
+   라이선스(재배포 금지)상 woff 바이너리는 레포에 포함하지 않는다.
+   public/fonts/ 에 공식 파일(toss.im/moneygraphy-font)을 두면 자동 활성화되고,
+   없으면 var(--font-display) 의 Pretendard 폴백이 그대로 쓰인다(무회귀).
+   자세히: public/fonts/README.md */
+@font-face {
+  font-family: "Moneygraphy Rounded";
+  src: url("/fonts/Moneygraphy-Rounded.woff2") format("woff2"),
+       url("/fonts/Moneygraphy-Rounded.woff") format("woff");
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------- Tokens (light) ---------------- */
+:root,
+:root[data-theme="light"] {
+  /* ── Saebit base scales (verbatim from tokens/colors.css) ── */
+  --blue-50:#EEF3FF; --blue-100:#D9E3FF; --blue-200:#B3C7FF; --blue-300:#85A3FF; --blue-400:#5680FF;
+  --blue-500:#2F62FF; --blue-600:#1F4FE6; --blue-700:#1A42BF; --blue-800:#163599; --blue-900:#122A75;
+  --gray-0:#FFFFFF; --gray-50:#F9FAFB; --gray-100:#F2F4F6; --gray-200:#E5E8EB; --gray-300:#D1D6DB;
+  --gray-400:#B0B8C1; --gray-500:#8B95A1; --gray-600:#6B7684; --gray-700:#4E5968; --gray-800:#333D4B; --gray-900:#191F28;
+  --red-50:#FEECEC; --red-500:#F0494E; --red-600:#D6363B;
+  --green-50:#E7F8F0; --green-500:#12B886; --green-600:#0CA678;
+  --yellow-50:#FFF7E6; --yellow-500:#F5A623; --yellow-600:#E0900F;
+
+  /* ── Saebit semantic aliases ── */
+  --color-primary:var(--blue-500); --color-primary-hover:var(--blue-600); --color-primary-press:var(--blue-700);
+  --color-primary-weak:var(--blue-50); --color-on-primary:#FFFFFF;
+  --text-strong:var(--gray-900); --text-body:var(--gray-800); --text-sub:var(--gray-600);
+  --text-muted:var(--gray-500); --text-disabled:var(--gray-400);
+  --surface-page:var(--gray-100); --surface-card:var(--gray-0); --surface-sunken:var(--gray-50);
+  --surface-hover:var(--gray-100); --surface-press:var(--gray-200);
+  --border-subtle:var(--gray-200); --border-default:var(--gray-300); --border-strong:var(--gray-400);
+  --color-success:var(--green-500); --color-warning:var(--yellow-500); --color-danger:var(--red-500);
+  --color-success-weak:var(--green-50); --color-warning-weak:var(--yellow-50); --color-danger-weak:var(--red-50);
+
+  --radius-xs:6px; --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-pill:999px;
+  --shadow-xs:0 1px 2px rgba(25,31,40,0.06);
+  --shadow-sm:0 2px 8px rgba(25,31,40,0.08);
+  --shadow-md:0 6px 20px rgba(25,31,40,0.10);
+  --shadow-lg:0 12px 32px rgba(25,31,40,0.14);
+  --ease-out:cubic-bezier(0,0,0.2,1); --ease-standard:cubic-bezier(0.4,0,0.2,1);
+
+  --font-display:"Moneygraphy Rounded","Pretendard Variable",Pretendard,system-ui,sans-serif;
+  /* 전체 UI(본문·사이드바 등)도 Moneygraphy Rounded 우선, 미로드 시 Pretendard 폴백 */
+  --font-body:"Moneygraphy Rounded","Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;
+  --font-mono:var(--font-geist-mono),ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* legacy bridge → 기존 .ws-* 들이 사용하는 변수 */
+  --background: var(--surface-page);
+  --foreground: var(--text-strong);
+
+  /* ── --ds-* aliases → real Saebit (keeps component CSS authentic) ── */
+  --ds-bg: var(--surface-page);
+  --ds-surface: var(--surface-card);
+  --ds-surface-2: var(--surface-sunken);
+  --ds-surface-3: var(--gray-200);
+  --ds-sidebar-bg: var(--surface-card);
+  --ds-border: var(--border-subtle);
+  --ds-border-strong: var(--border-default);
+  --ds-text: var(--text-strong);
+  --ds-text-2: var(--text-sub);
+  --ds-text-3: var(--text-muted);
+  --ds-primary: var(--color-primary);
+  --ds-primary-text: var(--color-on-primary);
+  --ds-primary-weak: var(--color-primary-weak);
+  --ds-overlay: rgba(25, 31, 40, 0.45);
+
+  /* typography */
+  --ds-font-sans: var(--font-body);
+  --ds-font-display: var(--font-display);
+  --ds-font-mono: var(--font-mono);
+
+  --ds-fs-xs: 11px;
+  --ds-fs-sm: 12px;
+  --ds-fs-md: 13px;
+  --ds-fs-base: 14px;
+  --ds-fs-lg: 16px;
+  --ds-fs-xl: 20px;
+  --ds-fs-2xl: 28px;
+  --ds-fs-3xl: 34px;
+
+  /* spacing */
+  --ds-sp-1: 4px;
+  --ds-sp-2: 8px;
+  --ds-sp-3: 12px;
+  --ds-sp-4: 16px;
+  --ds-sp-5: 20px;
+  --ds-sp-6: 24px;
+  --ds-sp-8: 32px;
+
+  /* radii (Saebit: control 12 / card 16) */
+  --ds-r-sm: 8px;
+  --ds-r-md: 12px;
+  --ds-r-lg: 16px;
+  --ds-r-xl: 20px;
+  --ds-r-pill: 999px;
+
+  /* shadows (Saebit: soft, cool-tinted) */
+  --ds-shadow-sm: var(--shadow-sm);
+  --ds-shadow-md: var(--shadow-md);
+  --ds-shadow-lg: var(--shadow-lg);
+
+  /* motion */
+  --ds-ease-out: var(--ease-out);
+  --ds-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ds-dur-fast: 0.12s;
+  --ds-dur: 0.2s;
+}
+
+/* ---------------- Tokens (dark) ---------------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Saebit dark remap (verbatim from the design's token override) */
+  --gray-0:#1E232B; --gray-50:#1A1F26; --gray-100:#262C36; --gray-200:#2C333E; --gray-300:#39414D;
+  --gray-400:#586273; --gray-500:#8A94A1; --gray-600:#A7B0BC; --gray-700:#C4CBD4; --gray-800:#DCE1E7; --gray-900:#F2F4F6;
+  --surface-page:#14171C; --surface-card:#1E232B; --surface-sunken:#191D24; --surface-hover:#262C36; --surface-press:#2F3742;
+  --text-strong:#F1F3F5; --text-body:#D5DAE0; --text-sub:#A6AEB9; --text-muted:#7E8896; --text-disabled:#5A6473;
+  --border-subtle:#2A313B; --border-default:#39414D; --border-strong:#4C5563;
+  --color-primary:#3D72FF; --color-primary-hover:#5680FF; --color-primary-press:#85A3FF; --color-primary-weak:#1B2742;
+  --blue-50:#1B2742; --blue-300:#85A3FF;
+  --color-success:#1CC79A; --color-success-weak:#0F2A22; --green-50:#0F2A22; --green-500:#1CC79A; --green-600:#2BD6A8;
+  --color-warning:#F5B23E; --color-warning-weak:#2C2410; --yellow-50:#2C2410; --yellow-500:#F5B23E; --yellow-600:#F5C46B;
+  --color-danger:#FF5C61; --color-danger-weak:#2E1719; --red-50:#2E1719; --red-500:#FF5C61; --red-600:#FF7A7E;
+
+  /* --ds-* dark-only overrides (the rest cascade from the base vars above) */
+  --ds-surface-3: var(--surface-press);
+  --ds-primary-text: #FFFFFF;
+  --ds-overlay: rgba(0, 0, 0, 0.6);
+  --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ds-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --ds-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+
+html,
+body {
+  background: var(--ds-bg);
+  color: var(--ds-text);
+}
+body {
+  font-family: var(--ds-font-sans);
+  font-feature-settings: "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* =========================================================================
+   SHELL
+   ========================================================================= */
+.ws-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--ds-bg);
+}
+
+/* sidebar */
+.ws-sidebar {
+  width: 256px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--ds-border);
+  padding: 0;
+  background: var(--ds-sidebar-bg);
+  overflow: hidden;
+  transition: width var(--ds-dur) var(--ds-ease-out);
+}
+.ws-shell.rail .ws-sidebar {
+  width: 60px;
+}
+
+/* company switcher */
+.ws-side-top {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-sp-2);
+  padding: 12px 12px 8px;
+}
+.ws-company {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--ds-text);
+  cursor: pointer;
+  border-radius: var(--ds-r-md);
+  padding: 6px 6px;
+  text-align: left;
+}
+.ws-company:hover {
+  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
+}
+.ws-company-logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--ds-r-md);
+  background: linear-gradient(135deg, var(--ds-primary), color-mix(in srgb, var(--ds-primary) 55%, #d66));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ws-company-meta {
+  min-width: 0;
+  line-height: 1.2;
+}
+.ws-company-name {
+  font-size: var(--ds-fs-base);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-company-sub {
+  font-size: var(--ds-fs-xs);
+  color: var(--ds-text-3);
+}
+.ws-company-caret {
+  color: var(--ds-text-3);
+  flex-shrink: 0;
+}
+.ws-shell.rail .ws-company-meta,
+.ws-shell.rail .ws-company-caret,
+.ws-shell.rail .ws-nav-label,
+.ws-shell.rail .ws-nav-count,
+.ws-shell.rail .ws-section-label,
+.ws-shell.rail .ws-user-meta,
+.ws-shell.rail .ws-tree {
+  display: none;
+}
+.ws-shell.rail .ws-company {
+  justify-content: center;
+  padding: 6px 0;
+}
+/* rail 모드: 로고+토글을 세로로 쌓아 토글 버튼을 계속 노출(펼치기 유일 수단) */
+.ws-shell.rail .ws-side-top {
+  flex-direction: column;
+  padding: 12px 6px 8px;
+}
+
+.ws-icon-btn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--ds-r-md);
+  background: transparent;
+  color: var(--ds-text-2);
+  cursor: pointer;
+  transition: background var(--ds-dur-fast);
+}
+.ws-icon-btn:hover {
+  background: color-mix(in srgb, var(--ds-text) 8%, transparent);
+  color: var(--ds-text);
+}
+
+/* nav scroll area */
+.ws-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px 12px;
+}
+.ws-nav::-webkit-scrollbar {
+  width: 8px;
+}
+.ws-nav::-webkit-scrollbar-thumb {
+  background: var(--ds-border-strong);
+  border-radius: 8px;
+}
+
+.ws-nav-section {
+  margin-top: 10px;
+}
+.ws-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 2px;
+  font-size: var(--ds-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-text-3);
+}
+.ws-section-add {
+  margin-left: auto;
+}
+
+.ws-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-2);
+  border-radius: var(--ds-r-md);
+  font-size: var(--ds-fs-base);
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--ds-dur-fast), color var(--ds-dur-fast);
+}
+.ws-nav-item:hover {
+  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
+  color: var(--ds-text);
+}
+.ws-nav-item.active {
+  background: var(--ds-primary-weak);
+  color: var(--ds-primary);
+  font-weight: 600;
+}
+.ws-nav-item.active .ws-nav-ico {
+  color: var(--ds-primary);
+}
+.ws-nav-ico {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+  display: inline-flex;
+}
+.ws-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-nav-count {
+  font-size: var(--ds-fs-xs);
+  color: var(--ds-text-3);
+  background: color-mix(in srgb, var(--ds-text) 8%, transparent);
+  border-radius: var(--ds-r-pill);
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+}
+.ws-nav-item.active .ws-nav-count {
+  background: color-mix(in srgb, var(--ds-primary) 18%, transparent);
+  color: var(--ds-primary);
+}
+.ws-shell.rail .ws-nav-item {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* page tree (docs) */
+.ws-tree,
+.ws-tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ws-tree-children {
+  padding-left: 18px;
+}
+.ws-tree-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border-radius: var(--ds-r-md);
+  color: var(--ds-text-2);
+  text-decoration: none;
+  font-size: var(--ds-fs-md);
+}
+.ws-tree-link:hover {
+  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
+  color: var(--ds-text);
+}
+.ws-tree-link.active {
+  background: color-mix(in srgb, var(--ds-text) 10%, transparent);
+  color: var(--ds-text);
+  font-weight: 600;
+}
+.ws-tree-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+}
+.ws-tree-empty {
+  padding: 4px 10px;
+  font-size: var(--ds-fs-sm);
+  color: var(--ds-text-3);
+}
+
+/* ── 노션풍 트리 행 (프로젝트/폴더/문서) ── */
+.ws-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border-radius: var(--ds-r-sm);
+  color: var(--ds-text-2);
+  font-size: var(--ds-fs-md);
+  min-height: 28px;
+  position: relative;
+}
+.ws-tree-row:hover {
+  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
+}
+.ws-tree-row.active {
+  background: color-mix(in srgb, var(--ds-text) 10%, transparent);
+}
+.ws-tree-row.active .ws-tree-name {
+  color: var(--ds-text);
+  font-weight: 600;
+}
+.ws-tree-row.drop-over {
+  box-shadow: inset 0 0 0 1.5px var(--ds-primary);
+  background: var(--ds-primary-weak);
+}
+.ws-tree-twist {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-3);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+.ws-tree-twist:hover {
+  background: color-mix(in srgb, var(--ds-text) 10%, transparent);
+  color: var(--ds-text);
+}
+.ws-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  font: inherit;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.ws-group-name {
+  font-weight: 600;
+  color: var(--ds-text);
+}
+.ws-tree-add {
+  width: 100%;
+  border: none;
+  cursor: pointer;
+}
+.ws-tree-rename {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--ds-text);
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-primary);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+}
+.ws-row-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.ws-tree-row:hover .ws-row-actions {
+  opacity: 1;
+}
+.ws-row-act {
+  width: 22px;
+  height: 22px;
+  color: var(--ds-text-3);
+}
+.ws-row-act:hover {
+  color: var(--ds-text);
+}
+
+/* ── 컨텍스트 메뉴 ── */
+.ws-ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 168px;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-md);
+  box-shadow: var(--ds-shadow-lg);
+  padding: 5px;
+}
+.ws-ctx-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--ds-fs-md);
+  color: var(--ds-text);
+  padding: 7px 10px;
+  border-radius: var(--ds-r-sm);
+  cursor: pointer;
+}
+.ws-ctx-item:hover {
+  background: color-mix(in srgb, var(--ds-text) 7%, transparent);
+}
+.ws-ctx-item.danger {
+  color: #e5484d;
+}
+.ws-ctx-item.danger:hover {
+  background: color-mix(in srgb, #e5484d 12%, transparent);
+}
+.ws-ctx-sep {
+  height: 1px;
+  background: var(--ds-border);
+  margin: 4px 2px;
+}
+
+/* bottom user card */
+.ws-side-foot {
+  border-top: 1px solid var(--ds-border);
+  padding: 8px;
+}
+.ws-user-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--ds-text);
+  cursor: pointer;
+  border-radius: var(--ds-r-md);
+  padding: 6px;
+}
+.ws-user-card:hover {
+  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
+}
+.ws-user-meta {
+  min-width: 0;
+  line-height: 1.25;
+  flex: 1;
+}
+.ws-user-name {
+  font-size: var(--ds-fs-md);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-user-sub {
+  font-size: var(--ds-fs-xs);
+  color: var(--ds-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-shell.rail .ws-user-card {
+  justify-content: center;
+  padding: 6px 0;
+}
+
+/* main */
+.ws-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--ds-bg);
+}
+
+/* hamburger + backdrop (mobile) */
+.ws-hamburger,
+.ws-backdrop {
+  display: none;
+}
+
+/* =========================================================================
+   EDITOR / EMPTY (재스킨)
+   ========================================================================= */
+.ws-editor {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 56px 28px 120px;
+}
+.ws-title-input {
+  font-family: var(--ds-font-display);
+  font-size: var(--ds-fs-3xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.ws-empty {
+  max-width: 560px;
+  margin: 120px auto;
+  text-align: center;
+  color: var(--ds-text-2);
+  line-height: 1.9;
+}
+
+/* dashboard helpers (Saebit) */
+.ws-link { border:none; background:transparent; color:var(--color-primary); font-size:12.5px; font-weight:600; font-family:inherit; cursor:pointer; padding:2px 5px; border-radius:6px; }
+.ws-link:hover { background:var(--color-primary-weak); }
+.ws-listrow:hover { background:var(--surface-hover); border-radius:8px; }
+
+/* coming soon placeholder */
+.ws-placeholder {
+  max-width: 560px;
+  margin: 96px auto;
+  text-align: center;
+  padding: 0 24px;
+}
+.ws-placeholder-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  border-radius: var(--ds-r-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ds-primary-weak);
+  color: var(--ds-primary);
+}
+.ws-placeholder h1 {
+  font-size: var(--ds-fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+.ws-placeholder p {
+  color: var(--ds-text-2);
+  line-height: 1.8;
+  margin: 0;
+}
+.ws-placeholder-badge {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: var(--ds-fs-sm);
+  font-weight: 600;
+  color: var(--ds-text-3);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-pill);
+  padding: 4px 12px;
+}
+
+/* =========================================================================
+   DATABASE VIEW (재스킨)
+   ========================================================================= */
+.ws-db {
+  /* U1/U2: 데이터 화면(보드/테이블/대시보드/승인) 공통 폭.
+     칸반 4컬럼(290px×4+gap≈1202) 이 1180을 넘어 '완료' 컬럼이 잘리던 문제 → 폭 확대. */
+  max-width: var(--ws-data-maxw, min(1480px, 100% - 48px));
+  margin: 0 auto;
+  padding: 40px 28px 96px;
+}
+.ws-db-title {
+  font-family: var(--ds-font-display);
+  font-size: var(--ds-fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 18px;
+}
+
+/* toolbar */
+.ws-db-toolbar {
+  display: flex;
+  gap: var(--ds-sp-2);
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ws-db-search,
+.ws-db-filter,
+.ws-quickadd-name,
+.ws-quickadd-time {
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-md);
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  font-size: var(--ds-fs-base);
+  padding: 7px 11px;
+  transition: border-color var(--ds-dur-fast), box-shadow var(--ds-dur-fast);
+}
+.ws-db-search:focus,
+.ws-db-filter:focus,
+.ws-quickadd-name:focus,
+.ws-quickadd-time:focus {
+  outline: none;
+  border-color: var(--ds-primary);
+  box-shadow: 0 0 0 3px var(--ds-primary-weak);
+}
+.ws-db-search {
+  flex: 0 1 260px;
+}
+.ws-db-clear {
+  border: 1px solid var(--ds-border);
+  background: var(--ds-surface);
+  color: var(--ds-text-2);
+  border-radius: var(--ds-r-md);
+  font-size: var(--ds-fs-sm);
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.ws-db-clear:hover {
+  border-color: var(--ds-border-strong);
+  color: var(--ds-text);
+}
+
+/* segmented control (density / color mode) */
+.ws-seg {
+  display: inline-flex;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-md);
+  overflow: hidden;
+  background: var(--ds-surface);
+}
+.ws-seg-btn {
+  border: none;
+  background: transparent;
+  color: var(--ds-text-2);
+  font-size: var(--ds-fs-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ws-seg-btn + .ws-seg-btn {
+  border-left: 1px solid var(--ds-border);
+}
+.ws-seg-btn.active {
+  background: var(--ds-primary-weak);
+  color: var(--ds-primary);
+  font-weight: 600;
+}
+.ws-toolbar-spacer {
+  flex: 1;
+}
+
+/* quick add */
+.ws-quickadd {
+  display: flex;
+  gap: var(--ds-sp-2);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.ws-quickadd-name {
+  flex: 1 1 240px;
+}
+.ws-quickadd-btn {
+  border: none;
+  border-radius: var(--ds-r-md);
+  background: var(--ds-primary);
+  color: var(--ds-primary-text);
+  font-size: var(--ds-fs-base);
+  font-weight: 600;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: filter var(--ds-dur-fast);
+}
+.ws-quickadd-btn:hover {
+  filter: brightness(1.06);
+}
+.ws-quickadd-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* reminders */
+.ws-reminders {
+  border: 1px solid color-mix(in srgb, var(--ds-primary) 24%, transparent);
+  border-radius: var(--ds-r-lg);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  background: var(--ds-primary-weak);
+}
+.ws-reminders-head {
+  font-size: var(--ds-fs-sm);
+  font-weight: 700;
+  color: var(--ds-text-2);
+  margin-bottom: 6px;
+}
+.ws-reminder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ds-fs-md);
+  padding: 3px 0;
+}
+.ws-reminder-time {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.ws-reminder-x {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.ws-reminder-x:hover {
+  color: var(--c-red, var(--color-danger));
+}
+
+/* tabs */
+.ws-db-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--ds-border);
+  margin-bottom: 18px;
+}
+.ws-db-tab {
+  border: none;
+  background: transparent;
+  color: var(--ds-text-2);
+  padding: 8px 14px;
+  font-size: var(--ds-fs-base);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ws-db-tab:hover {
+  color: var(--ds-text);
+}
+.ws-db-tab.active {
+  border-bottom-color: var(--ds-primary);
+  color: var(--ds-text);
+  font-weight: 600;
+}
+
+/* =========================================================================
+   PRIMITIVES (ui.tsx)
+   ========================================================================= */
+.ds-dot {
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.ds-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--ds-surface);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.ds-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ds-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-r-pill);
+  font-size: var(--ds-fs-sm);
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 9px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-label-chip {
+  border-radius: var(--ds-r-sm);
+}
+
+.ds-dday {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--ds-fs-sm);
+  font-weight: 600;
+  color: var(--ds-text-2);
+}
+.ds-dday-none {
+  color: var(--ds-text-3);
+  font-weight: 400;
+}
+.ds-dday-tag {
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--ds-r-sm);
+  padding: 1px 6px;
+  font-size: var(--ds-fs-xs);
+}
+.ds-dday-over .ds-dday-tag {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--color-danger);
+}
+.ds-dday-today .ds-dday-tag {
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+  color: var(--color-warning);
+}
+.ds-dday-soon .ds-dday-tag {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+}
+.ds-dday-far .ds-dday-tag {
+  background: color-mix(in srgb, var(--ds-text) 8%, transparent);
+  color: var(--ds-text-3);
+}
+
+.ds-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 80px;
+}
+.ds-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--ds-r-pill);
+  background: color-mix(in srgb, var(--ds-text) 10%, transparent);
+  overflow: hidden;
+  min-width: 48px;
+}
+.ds-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--ds-r-pill);
+  transition: width var(--ds-dur) var(--ds-ease-out);
+}
+.ds-progress-low {
+  background: var(--color-primary);
+}
+.ds-progress-mid {
+  background: var(--color-warning);
+}
+.ds-progress-done {
+  background: var(--color-success);
+}
+.ds-progress-label {
+  font-size: var(--ds-fs-xs);
+  color: var(--ds-text-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+  text-align: right;
+}
+
+.ds-idchip {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-xs);
+  font-weight: 600;
+  color: var(--ds-text-3);
+  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
+  border-radius: var(--ds-r-sm);
+  padding: 2px 6px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* =========================================================================
+   KANBAN (재스킨 + density + color mode)
+   ========================================================================= */
+.ws-kanban {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  align-items: flex-start;
+}
+.ws-kanban-col {
+  flex: 0 0 290px;
+  background: var(--ds-surface-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-lg);
+  padding: 10px;
+  min-height: 90px;
+}
+.ws-kanban-col.drop-over {
+  border-color: var(--ds-primary);
+  background: var(--ds-primary-weak);
+}
+.ws-kanban-col-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--ds-fs-md);
+  font-weight: 700;
+  padding: 4px 6px 10px;
+  color: var(--ds-text);
+}
+.ws-kanban-count {
+  margin-left: auto;
+  color: var(--ds-text-3);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.ws-kanban-card {
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-md);
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  cursor: grab;
+  box-shadow: var(--ds-shadow-sm);
+  transition: box-shadow var(--ds-dur-fast), transform var(--ds-dur-fast), border-color var(--ds-dur-fast);
+  position: relative;
+}
+.ws-kanban-card:hover {
+  border-color: var(--ds-border-strong);
+  box-shadow: var(--ds-shadow-md);
+}
+.ws-kanban-card.dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+.ws-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.ws-card-title {
+  font-size: var(--ds-fs-base);
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ws-db[data-density="roomy"] .ws-card-title {
+  -webkit-line-clamp: 3;
+}
+.ws-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.ws-card-progress {
+  margin-bottom: 10px;
+}
+.ws-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ds-border);
+}
+.ws-kanban-empty {
+  color: var(--ds-text-3);
+  padding: 20px 8px;
+  font-size: var(--ds-fs-md);
+  text-align: center;
+}
+
+/* color mode: bar → 카드 좌측 컬러 바 */
+.ws-kanban[data-color="bar"] .ws-kanban-card {
+  border-left: 3px solid var(--card-accent, var(--ds-border));
+}
+
+/* density */
+.ws-db[data-density="compact"] .ws-kanban-card {
+  padding: 7px 10px;
+}
+.ws-db[data-density="compact"] .ws-card-title {
+  margin-bottom: 6px;
+}
+.ws-db[data-density="compact"] .ws-card-foot {
+  padding-top: 6px;
+}
+.ws-db[data-density="roomy"] .ws-kanban-card {
+  padding: 15px 16px;
+}
+.ws-db[data-density="roomy"] .ws-kanban-col {
+  flex-basis: 320px;
+}
+
+/* =========================================================================
+   TABLE (재스킨, sticky header, primitives)
+   ========================================================================= */
+.ws-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-r-lg);
+  background: var(--ds-surface);
+}
+.ws-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-size: var(--ds-fs-base);
+}
+.ws-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ds-surface-2);
+  color: var(--ds-text-2);
+  font-weight: 600;
+  font-size: var(--ds-fs-sm);
+  text-align: left;
+  padding: 10px 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ds-border);
+  cursor: pointer;
+  user-select: none;
+}
+.ws-table thead th:hover {
+  color: var(--ds-text);
+}
+.ws-table th.ws-th-sortable .ws-th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ws-th-icon {
+  color: var(--ds-text-3);
+  flex: 0 0 auto;
+}
+.ws-th-arrow {
+  color: var(--ds-primary);
+}
+.ws-table td {
+  padding: 0;
+  border-bottom: 1px solid var(--ds-border);
+  vertical-align: middle;
+}
+.ws-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.ws-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--ds-text) 3%, transparent);
+}
+.ws-table-actions {
+  width: 40px;
+  text-align: center;
+}
+
+.ws-cell {
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+.ws-db[data-density="compact"] .ws-cell {
+  padding: 5px 12px;
+  min-height: 30px;
+}
+.ws-db[data-density="roomy"] .ws-cell {
+  padding: 14px 12px;
+}
+.ws-cell-title {
+  font-weight: 600;
+  color: var(--ds-text);
+}
+
+/* inline editors */
+.ws-cell-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ds-text);
+  font: inherit;
+  padding: 9px 12px;
+}
+.ws-cell-input:focus {
+  background: var(--ds-primary-weak);
+  box-shadow: inset 0 0 0 1px var(--ds-primary);
+}
+
+/* select-as-pill: 표시는 프리미티브, 편집은 투명 native select 오버레이 */
+.ws-pill-cell {
+  position: relative;
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+}
+.ws-pill-cell select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  font: inherit;
+}
+.ws-pill-empty {
+  color: var(--ds-text-3);
+  font-size: var(--ds-fs-sm);
+}
+
+.ws-row-del {
+  border: none;
+  background: transparent;
+  color: var(--ds-text-3);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--ds-r-sm);
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity var(--ds-dur-fast);
+}
+.ws-table tbody tr:hover .ws-row-del {
+  opacity: 1;
+}
+.ws-row-del:hover {
+  color: var(--c-red, var(--color-danger));
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+.ws-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-3);
+  cursor: pointer;
+  font-size: var(--ds-fs-base);
+  padding: 8px 4px;
+}
+.ws-add-row:hover {
+  color: var(--ds-primary);
+}
+
+/* =========================================================================
+   TASK DETAIL DRAWER (detail.jsx 포팅)
+   ========================================================================= */
+/* ── verbatim Saebit drawer/menu CSS ── */
+.ws-scrim { position:absolute; inset:0; background:rgba(25,31,40,0.40); }
+.ws-status-trigger { display:inline-flex; align-items:center; gap:6px; border:none; background:transparent; cursor:pointer; padding:3px; border-radius:8px; color:var(--text-muted); }
+.ws-status-trigger:hover { background:var(--surface-hover); }
+.ws-prop-trigger { display:inline-flex; align-items:center; gap:7px; border:1px solid transparent; background:transparent; cursor:pointer; padding:3px 8px 3px 4px; border-radius:8px; color:var(--text-body); font-size:12.5px; font-family:inherit; }
+.ws-prop-trigger:hover { background:var(--surface-hover); border-color:var(--border-subtle); }
+.ws-subtab { border:none; background:transparent; color:var(--text-muted); font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; padding:6px 11px; border-radius:8px; }
+.ws-subtab[data-on="1"] { background:var(--surface-sunken); color:var(--text-strong); }
+.ws-toggle-md { border:1px solid var(--border-default); background:var(--surface-card); color:var(--text-sub); font-size:11.5px; font-weight:600; font-family:inherit; cursor:pointer; padding:4px 10px; border-radius:7px; }
+.ws-toggle-md[data-on="1"] { background:var(--text-strong); color:var(--surface-card); border-color:var(--text-strong); }
+.ws-check-item:hover { background:var(--surface-hover); }
+.ws-comment-input:focus { border-color:var(--color-primary) !important; }
+.ws-menuitem:hover { background:var(--surface-hover) !important; }
+.ws-btn-soft { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 11px; border:1px solid var(--border-default); border-radius:9px; background:var(--surface-card); color:var(--text-body); font-size:12.5px; font-weight:600; font-family:inherit; cursor:pointer; transition:.12s; }
+.ws-btn-soft:hover { background:var(--surface-hover); }
+
+/* 문서함 (docs) */
+.ws-filterbar { display:flex; align-items:center; gap:8px; padding:10px 24px; flex:0 0 auto; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap; }
+.ws-search { display:flex; align-items:center; gap:7px; height:34px; padding:0 6px 0 11px; background:var(--surface-card); border:1px solid var(--border-default); border-radius:9px; flex:0 1 280px; min-width:180px; }
+.ws-search input { flex:1; border:none; background:transparent; outline:none; font-size:13px; color:var(--text-strong); font-family:inherit; min-width:0; }
+.ws-doc-row { display:flex; align-items:center; gap:13px; padding:13px 6px; cursor:pointer; transition:background .12s; border-radius:8px; }
+.ws-doc-row:hover { background:var(--surface-hover); }
+.ws-doc-ico { width:38px; height:38px; border-radius:10px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; color:var(--color-primary); background:var(--color-primary-weak); }
+.ws-doc-prose > h1:first-child { margin-top:0; }
+.ws-docs-empty { text-align:center; padding:56px 24px; border:1px dashed var(--border-default); border-radius:16px; background:var(--surface-card); display:flex; flex-direction:column; align-items:center; }
+.ws-icon-btn.primary { background:var(--color-primary); color:#fff; }
+.ws-icon-btn.primary:hover { background:var(--color-primary-hover); }
+.ws-task-chip { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 9px; border:1px solid var(--border-subtle); background:var(--surface-sunken); border-radius:7px; color:var(--text-sub); font-size:11.5px; font-weight:600; cursor:pointer; }
+.ws-task-chip:hover { background:var(--surface-hover); color:var(--text-body); }
+.ws-drawer-wrap { position:fixed; inset:0; z-index:900; }
+
+/* ── structural (drawer shell / proprow / menu / tabs / md) ── */
+.ws-scrim { animation: ws-scrim-in 0.16s var(--ease-out); }
+@keyframes ws-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+.ws-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: min(460px, 100%);
+  background: var(--surface-card);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+  animation: ws-drawer-in 0.2s var(--ease-out);
+}
+@keyframes ws-drawer-in { from { transform: translateX(28px); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+.ws-drawer-head { display: flex; align-items: center; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.ws-drawer-head-spacer { flex: 1; }
+.ws-drawer-body { flex: 1; overflow-y: auto; padding: 18px 18px 24px; }
+.ws-drawer-foot { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border-subtle); flex-shrink: 0; }
+
+.ws-detail-title { margin: 6px 0 0; }
+.ws-detail-title-input {
+  font-family: var(--font-display); font-size: 20px; font-weight: 700;
+  color: var(--text-strong); line-height: 1.35;
+  width: 100%; border: none; outline: none; background: transparent; padding: 2px 4px; border-radius: 7px;
+}
+.ws-detail-title-input:focus { background: var(--surface-hover); }
+
+.ws-prop-block { border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); margin: 16px 0; padding: 7px 0; }
+.ws-prop-row { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0; }
+.ws-prop-label { width: 92px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12.5px; padding-top: 6px; }
+.ws-prop-label svg { color: var(--text-muted); flex-shrink: 0; }
+.ws-prop-value { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0; }
+.ws-prop-input { border: 1px solid transparent; background: transparent; font: inherit; font-size: 12.5px; color: var(--text-body); padding: 4px 6px; border-radius: 8px; min-width: 80px; flex: 1; }
+.ws-prop-input:hover { border-color: var(--border-subtle); background: var(--surface-hover); }
+.ws-prop-input:focus { outline: none; border-color: var(--color-primary); background: var(--surface-card); }
+.ws-prop-date { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 3px 7px; font: inherit; font-size: 12px; color: var(--text-body); background: var(--surface-card); }
+
+.ws-menu-wrap { position: relative; display: inline-flex; }
+.ws-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 168px; background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow-md); padding: 5px; max-height: 280px; overflow-y: auto; }
+.ws-menuitem { display: flex; align-items: center; gap: 7px; width: 100%; border: none; background: transparent; cursor: pointer; padding: 6px 9px; border-radius: 8px; font: inherit; font-size: 12.5px; color: var(--text-body); text-align: left; }
+
+.ws-detail-section-head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--text-sub); margin: 4px 0 8px; }
+.ws-detail-section-head svg { color: var(--text-muted); }
+.ws-empty-hint { color: var(--text-muted); font-size: 12.5px; padding: 4px 0; }
+.ws-docs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ws-subtabs { display: flex; gap: 4px; margin: 18px 0 12px; }
+.ws-tabpane { min-height: 80px; }
+
+.ws-desc-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ws-md-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-sub); background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 2px 7px; }
+.ws-md-body { font-size: 13px; color: var(--text-body); line-height: 1.7; }
+.ws-md-body h3 { font-size: 16px; font-weight: 700; color: var(--text-strong); margin: 14px 0 6px; }
+.ws-md-body h4 { font-size: 14px; font-weight: 700; color: var(--text-strong); margin: 12px 0 4px; }
+.ws-md-body h5 { font-size: 13px; font-weight: 700; color: var(--text-strong); margin: 10px 0 4px; }
+.ws-md-body p { margin: 0 0 8px; }
+.ws-md-body ul { margin: 0 0 8px; padding-left: 18px; }
+.ws-md-body li { margin: 2px 0; }
+.ws-md-body code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border-radius: 4px; padding: 1px 4px; }
+.ws-md-pre, .ws-md-body pre { font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-body); }
+
+.ws-check-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.ws-check-item { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; font-size: 13px; color: var(--text-body); cursor: pointer; }
+.ws-check-item.done span { text-decoration: line-through; color: var(--text-muted); }
+
+.ws-comment { display: flex; gap: 9px; padding: 8px 0; }
+.ws-comment-name { font-size: 12.5px; font-weight: 700; color: var(--text-strong); }
+.ws-comment-time { font-size: 11px; color: var(--text-muted); }
+.ws-comment-text { font-size: 13px; color: var(--text-body); line-height: 1.55; }
+.ws-comment-input { flex: 1; min-width: 0; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card); color: var(--text-body); font: inherit; font-size: 13px; padding: 8px 11px; outline: none; }
+
+.ws-detail-toast { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--text-strong); color: var(--surface-card); font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 10px; box-shadow: var(--shadow-md); z-index: 30; white-space: nowrap; }
+
+.ws-table-row { cursor: pointer; }
+
+/* =========================================================================
+   MOBILE (≤768px) — 오프캔버스 드로어
+   ========================================================================= */
+@media (max-width: 768px) {
+  .ws-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 60;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--ds-border);
+    border-radius: var(--ds-r-md);
+    background: var(--ds-surface);
+    color: var(--ds-text);
+    cursor: pointer;
+    box-shadow: var(--ds-shadow-sm);
+  }
+  .ws-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: var(--ds-overlay);
+    z-index: 70;
+  }
+  .ws-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 80;
+    width: 84vw;
+    max-width: 300px;
+    transform: translateX(-100%);
+    transition: transform var(--ds-dur) var(--ds-ease-out);
+  }
+  .ws-shell.rail .ws-sidebar {
+    width: 84vw;
+    max-width: 300px;
+  }
+  .ws-shell.drawer-open .ws-sidebar {
+    transform: translateX(0);
+    box-shadow: var(--ds-shadow-lg);
+  }
+  /* 모바일에선 rail 접힘 무시하고 풀 라벨 노출 */
+  .ws-shell.rail .ws-nav-label,
+  .ws-shell.rail .ws-nav-count,
+  .ws-shell.rail .ws-section-label,
+  .ws-shell.rail .ws-company-meta,
+  .ws-shell.rail .ws-company-caret,
+  .ws-shell.rail .ws-user-meta,
+  .ws-shell.rail .ws-tree,
+  .ws-shell.rail .ws-head-actions {
+    display: revert;
+  }
+  .ws-shell.rail .ws-side-top {
+    flex-direction: row;
+    padding: 12px 12px 8px;
+  }
+  .ws-editor {
+    padding: 64px 16px 96px;
+  }
+  .ws-db {
+    padding: 60px 14px 96px;
+  }
+}
+
+/* ---------- 로그인 (M3 Auth) ---------- */
+.ws-google-btn, .ws-email-btn, .ws-ghost-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:46px; border-radius:11px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; transition:.12s; white-space:nowrap; }
+.ws-google-btn { background:var(--surface-card); color:var(--text-strong); border:1px solid var(--border-default); margin-bottom:10px; }
+.ws-google-btn:hover { background:var(--surface-hover); }
+.ws-email-btn { background:var(--surface-sunken); color:var(--text-body); border:1px solid var(--border-subtle); }
+.ws-email-btn:hover { background:var(--surface-hover); }
+.ws-ghost-btn { background:transparent; color:var(--color-primary); border:1px dashed var(--border-default); }
+.ws-ghost-btn:hover { background:var(--color-primary-weak); border-color:var(--color-primary); }
