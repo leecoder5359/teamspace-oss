@@ -115,6 +115,11 @@ sudo systemctl daemon-reload && sudo systemctl enable --now teamspace
 - **에이전트 토큰** — 관리자가 설정 화면 › 에이전트 토큰 또는 `pnpm ws token add <이름>` 으로 발급(`wst_…` 1회 노출). API 호출은 `x-ws-token` 헤더.
 - **Claude Code 훅** — `scripts/hooks/teamspace-context.mjs`(SessionStart: 세션마다 팀 컨텍스트 자동 주입) · `teamspace-session-end.mjs`(세션 기록) · `deny-repo-docs.mjs`(PreToolUse: 문서를 레포에 쓰는 것을 차단해 TeamSpace doc 으로 유도).
 - **스킬** — `.claude/skills/`(teamspace API 사용법, brainstorming, writing-plans).
+- **새 머신 부트스트랩** — 중앙 서버가 있으면 한 줄로 페어링·토큰·훅·플러그인까지:
+  ```bash
+  curl -fsSL https://<서버주소>/setup/script | sh -s -- https://<서버주소>
+  ```
+  Claude Code 플러그인 스택([claude-level-up](https://github.com/leecoder5359/claude-level-up) 마켓플레이스: superpowers · understand-anything · agentmemory · watch)도 기본 설치된다. 건너뛰려면 `--no-plugins`, 다른 마켓플레이스는 `--with-plugins <owner/repo>[@scope]`.
 
 ## 연동은 전부 선택
 

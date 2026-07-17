@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# TeamSpace 새 머신 부트스트랩 — 페어링 → 토큰 발급 → 프로젝트 클론 → route-rule → 훅 설치.
+# TeamSpace 새 머신 부트스트랩 — 페어링 → 토큰 발급 → 프로젝트 클론 → route-rule → 훅 설치 → 플러그인 스택.
 # 사용법:
-#   setup.sh <base-url> [--with-plugins <owner/repo>]
-#   TEAMSPACE_BASE_URL=<base-url> setup.sh [--with-plugins <owner/repo>]
+#   setup.sh <base-url> [--no-plugins] [--with-plugins <owner/repo>[@scope]]
+#   TEAMSPACE_BASE_URL=<base-url> setup.sh [--no-plugins] [--with-plugins <owner/repo>[@scope]]
 set -eu
 TTY=/dev/tty
 say() { printf '\033[36m▶ %s\033[0m\n' "$1"; }
@@ -13,22 +13,26 @@ have() { command -v "$1" >/dev/null 2>&1; }
 usage() {
   cat >&2 <<'EOF'
 사용법:
-  setup.sh <base-url> [--with-plugins <owner/repo>]
-  TEAMSPACE_BASE_URL=<base-url> setup.sh [--with-plugins <owner/repo>]
+  setup.sh <base-url> [--no-plugins] [--with-plugins <owner/repo>[@scope]]
+  TEAMSPACE_BASE_URL=<base-url> setup.sh [--no-plugins] [--with-plugins <owner/repo>[@scope]]
 
   <base-url>              중앙 TeamSpace 서버 URL (예: https://teamspace.example.com)
-  --with-plugins <repo>   선택 — 해당 마켓플레이스(owner/repo)의 플러그인 스택도 설치
+  --no-plugins            Claude Code 플러그인 스택 설치를 건너뛴다
+  --with-plugins <repo>   기본 마켓플레이스(leecoder5359/claude-level-up) 대신 다른
+                          마켓플레이스(owner/repo[@scope]) 사용. @scope 생략 시 repo 명을 스코프로 사용
 EOF
 }
 
 # 0) 인자 파싱 — BASE 는 첫 위치 인자 또는 TEAMSPACE_BASE_URL env
 BASE="${TEAMSPACE_BASE_URL:-}"
-WITH_PLUGINS=""
+# 기본 마켓플레이스: 레포명(claude-level-up)과 marketplace.json 의 스코프명(ljun-level-up)이 다르다.
+WITH_PLUGINS="leecoder5359/claude-level-up@ljun-level-up"
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
+    --no-plugins) WITH_PLUGINS=""; shift ;;
     --with-plugins)
-      [ $# -ge 2 ] || { usage; die "--with-plugins 에 <owner/repo> 값이 필요합니다."; }
+      [ $# -ge 2 ] || { usage; die "--with-plugins 에 <owner/repo>[@scope] 값이 필요합니다."; }
       WITH_PLUGINS="$2"; shift 2 ;;
     *) BASE="$1"; shift ;;
   esac
@@ -114,14 +118,21 @@ for n in $SEL; do
 done
 rm -f "$PROJ_LIST"
 
-# 5) (선택) 플러그인 마켓플레이스 + 스택 — --with-plugins <owner/repo> 를 준 경우만.
-#    스코프 이름은 마켓플레이스 인자의 레포명에서 파생한다(owner/repo → repo).
+# 5) 플러그인 마켓플레이스 + 스택 — 기본 설치(--no-plugins 로 스킵).
+#    인자 형식 <owner/repo>[@scope]: 스코프는 @scope, 없으면 레포명에서 파생.
+#    (스코프는 마켓플레이스 marketplace.json 의 name 필드와 일치해야 한다.)
 PLUGIN_SCOPE=""
+PLUGIN_LIST="claude-level-up superpowers understand-anything agentmemory watch"
 if [ -n "$WITH_PLUGINS" ]; then
-  PLUGIN_SCOPE=$(printf '%s' "$WITH_PLUGINS" | sed -E 's#(\.git)?$##' | sed -E 's#.*/##')
-  say "플러그인 마켓플레이스 추가: $WITH_PLUGINS (스코프 @$PLUGIN_SCOPE)"
-  claude plugin marketplace add "$WITH_PLUGINS" 2>/dev/null || true
-  for p in "$PLUGIN_SCOPE" superpowers understand-anything agentmemory; do
+  case "$WITH_PLUGINS" in
+    *@*) PLUGIN_REPO="${WITH_PLUGINS%@*}"; PLUGIN_SCOPE="${WITH_PLUGINS##*@}" ;;
+    *)   PLUGIN_REPO="$WITH_PLUGINS"
+         PLUGIN_SCOPE=$(printf '%s' "$WITH_PLUGINS" | sed -E 's#(\.git)?$##' | sed -E 's#.*/##')
+         PLUGIN_LIST="$PLUGIN_SCOPE superpowers understand-anything agentmemory" ;;
+  esac
+  say "플러그인 마켓플레이스 추가: $PLUGIN_REPO (스코프 @$PLUGIN_SCOPE)"
+  claude plugin marketplace add "$PLUGIN_REPO" 2>/dev/null || true
+  for p in $PLUGIN_LIST; do
     claude plugin install "$p@$PLUGIN_SCOPE" 2>/dev/null || true
   done
 fi
@@ -158,13 +169,12 @@ jq '
   .env = ((.env // {}) + {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS":"1"})
 ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS" || { warn "settings.json 병합 실패 — 수동 확인 필요"; rm -f "$TMP"; }
 
-# 7.5) (선택) enabledPlugins 병합 — --with-plugins 를 준 경우만
+# 7.5) enabledPlugins 병합 — 플러그인 스택을 설치한 경우만(--no-plugins 시 스킵)
 if [ -n "$PLUGIN_SCOPE" ]; then
   TMP=$(mktemp)
-  jq --arg s "$PLUGIN_SCOPE" '
-    .enabledPlugins = ((.enabledPlugins // {})
-      + {("superpowers@"+$s):true,("understand-anything@"+$s):true,("agentmemory@"+$s):true,($s+"@"+$s):true})
-  ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS" || { warn "enabledPlugins 병합 실패 — 수동 확인 필요"; rm -f "$TMP"; }
+  ENTRIES=$(for p in $PLUGIN_LIST; do printf '%s@%s\n' "$p" "$PLUGIN_SCOPE"; done | jq -R . | jq -s 'map({(.): true}) | add')
+  jq --argjson e "$ENTRIES" '.enabledPlugins = ((.enabledPlugins // {}) + $e)' \
+    "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS" || { warn "enabledPlugins 병합 실패 — 수동 확인 필요"; rm -f "$TMP"; }
 fi
 
 # 8) agentmemory env(zshrc) — 이미 있으면 skip
