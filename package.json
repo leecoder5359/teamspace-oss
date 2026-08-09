@@ -2,7 +2,6 @@
   "name": "teamspace",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,6 +11,10 @@
     "test:watch": "vitest",
     "db:seed": "tsx prisma/seed.ts",
     "migrate:docs": "tsx scripts/migrate-docs-to-files.ts",
+    "seed:dogfood": "tsx scripts/seed-phase3-dogfood.ts",
+    "seed:session-tasks": "tsx scripts/seed-session-tasks.ts",
+    "fill:board-meta": "tsx scripts/fill-board-meta.ts",
+    "link:specs": "tsx scripts/link-superpowers-specs.ts",
     "ws": "tsx scripts/ws.ts",
     "worker": "tsx scripts/worker.ts",
     "backup": "bash scripts/backup.sh",

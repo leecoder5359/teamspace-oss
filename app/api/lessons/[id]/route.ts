@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -29,7 +30,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!b) return NextResponse.json({ error: "body 가 비었습니다." }, { status: 400 });
     data.body = b;
   }
-  if (body.projectId !== undefined) data.projectId = body.projectId;
+  if (body.projectId !== undefined) {
+    // POST(lessons/route.ts)는 400 으로 거절하는데 PATCH 는 무검증이었다 — 같은 규칙으로(D5)
+    const ref = await resolveProjectRef(body.projectId, guard.workspaceId);
+    if (!ref.ok) return ref.err;
+    data.projectId = ref.projectId;
+  }
   const updated = await prisma.lesson.update({ where: { id }, data });
   return NextResponse.json({ lesson: updated });
 }

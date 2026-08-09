@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import type { Role } from "@/app/generated/prisma/enums";
 import { roleAtLeast } from "@/lib/authz";
-import { hashToken, isAgentTokenFormat, tokenEquals } from "@/lib/agentToken";
+import { hashToken, isAgentTokenFormat } from "@/lib/agentToken";
 
 export const WS_COOKIE = "ws_active";
 
@@ -104,7 +104,8 @@ async function resolveSessionCtx(): Promise<Ctx | null | { err: NextResponse }> 
   };
 }
 
-/** 레거시 공유 토큰(AUTH_CLI_TOKEN) → 부트스트랩 admin Ctx. deprecated — 에이전트별 토큰(wst_)로 이전 대상. */
+/** AUTH_OPEN_API=true 일 때만 쓰이는 부트스트랩 admin Ctx.
+ *  (AUTH_CLI_TOKEN 경로는 D12 에서 제거 — 이제 이 함수의 유일한 호출자는 그 탈출구다.) */
 async function resolveLegacyCtx(): Promise<Ctx | { err: NextResponse }> {
   // 워크스페이스: ws_active 쿠키(존재 검증) 우선, 없으면 첫 번째
   let workspace: { id: string } | null = null;
@@ -176,21 +177,23 @@ export async function requireCtx(min: Role = "viewer"): Promise<CtxResult> {
     } catch {
       token = null;
     }
-    const legacy = process.env.AUTH_CLI_TOKEN?.trim();
-    if (token && legacy && tokenEquals(token, legacy)) {
-      // deprecated (W8): 에이전트별 wst_ 토큰으로 이전 대상 — 사용 감지 시 서버 로그 경고
-      console.warn("[auth] legacy AUTH_CLI_TOKEN 사용 감지 — 에이전트 토큰(wst_)으로 교체하세요 (pnpm ws token add)");
-      const r = await resolveLegacyCtx();
-      if ("err" in r) return r;
-      ctx = r;
-    } else if (token && isAgentTokenFormat(token)) {
+    // AUTH_CLI_TOKEN(공유 admin 토큰) 경로는 제거했다.
+    //
+    // README·SKILL.md 는 오래전부터 '폐기'라고 적어 두었는데 코드에는 살아 있어서,
+    // 그 변수를 어딘가에 설정하기만 하면 누구든 admin 컨텍스트를 얻을 수 있었다
+    // (경고는 console.warn 뿐). 문서가 없다고 말하는 뒷문은 존재 자체가 위험하다
+    // — 아무도 그게 있는 줄 모르니 회수도 감사도 안 된다(전수조사 D12).
+    // 대체 경로는 에이전트 토큰(wst_): `pnpm ws token add`.
+    if (token && isAgentTokenFormat(token)) {
       const r = await resolveAgentCtx(token);
       if ("err" in r) return r;
       ctx = r;
     } else if (token) {
       return unauthorized("유효하지 않은 토큰입니다.");
     } else if (process.env.AUTH_OPEN_API === "true") {
-      // 데모/로컬 탈출구: 명시적으로 열었을 때만 레거시 admin 컨텍스트로 동작
+      // ⚠️ 데모/로컬 전용 탈출구. 켜면 **토큰 없이 누구나 admin** 이 된다.
+      // 이 서버는 tailscale 로 공개돼 있으므로 상시 배포에서는 절대 켜지 말 것.
+      // (README 에 위험 표기와 함께 문서화 — 코드에만 있는 스위치를 없앤다)
       const r = await resolveLegacyCtx();
       if ("err" in r) return r;
       ctx = r;
