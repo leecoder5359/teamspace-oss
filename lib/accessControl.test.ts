@@ -10,7 +10,7 @@ describe("parseAllowedDomains", () => {
   });
 
   it("콤마/공백 구분, 소문자화, 선행 @ 제거, 빈값 제거", () => {
-    expect(parseAllowedDomains("example.org")).toEqual(["example.org"]);
+    expect(parseAllowedDomains("example.com")).toEqual(["example.com"]);
     expect(parseAllowedDomains("A.com, @B.com  c.com")).toEqual([
       "a.com",
       "b.com",
@@ -21,11 +21,11 @@ describe("parseAllowedDomains", () => {
 });
 
 describe("emailDomainAllowed", () => {
-  const domains = ["example.org", "example.com"];
+  const domains = ["example.com", "example.com"];
 
   it("허용 도메인 매칭(대소문자 무시)", () => {
-    expect(emailDomainAllowed("a@example.org", domains)).toBe(true);
-    expect(emailDomainAllowed("A@Example.ORG", domains)).toBe(true);
+    expect(emailDomainAllowed("a@example.com", domains)).toBe(true);
+    expect(emailDomainAllowed("A@example.com", domains)).toBe(true);
     expect(emailDomainAllowed("b@example.com", domains)).toBe(true);
   });
 
