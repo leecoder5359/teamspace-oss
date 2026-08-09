@@ -3,18 +3,13 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { requireCtx } from "@/lib/workspace";
+import { uploadFileName } from "@/lib/assets";
+import { uploadRoot } from "@/lib/uploadPaths";
 import { recordActivity } from "@/lib/activity";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 20 * 1024 * 1024; // 20MB
-const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
-
-// 파일명 안전화: 경로 구분자·제어문자 제거, 길이 제한
-function safeName(name: string): string {
-  const base = name.split("/").pop()!.split("\\").pop()!.replace(/[\x00-\x1f:*?"<>|]/g, "_").trim() || "file";
-  return base.slice(0, 120);
-}
 
 // POST /api/upload (multipart form-data, field: file) → 로컬 디스크 저장 (W6 inv-12)
 // 응답: { url, markdown } — 문서 본문에 붙여넣어 사용. 이미지면 ![..](url) 형태.
@@ -32,11 +27,14 @@ export async function POST(req: Request) {
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const hash = createHash("sha256").update(buf).digest("hex").slice(0, 8);
-  const name = safeName(file.name);
-  const dir = path.join(UPLOAD_ROOT, guard.workspaceId);
+  // 이름 규칙은 lib/assets 로 모았다 — 가져오기(E4)가 첨부를 복원할 때 같은 규칙을 써야
+  // 같은 파일이 두 번 늘어나지 않는다.
+  const name = file.name.split("\\").pop() ?? file.name;
+  const filename = uploadFileName(name, createHash("sha256").update(buf).digest("hex"));
+  // 저장은 레포 밖(DATA_DIR/uploads) — public/ 은 빌드 산출물이라 런타임 파일을
+  // 두면 배포에서 사라질 수 있고, 정적 서빙은 인증이 없다(OSS 후속).
+  const dir = path.join(uploadRoot(), guard.workspaceId);
   await fs.mkdir(dir, { recursive: true });
-  const filename = `${hash}-${name}`;
   await fs.writeFile(path.join(dir, filename), buf);
 
   const url = `/uploads/${guard.workspaceId}/${encodeURIComponent(filename)}`;
