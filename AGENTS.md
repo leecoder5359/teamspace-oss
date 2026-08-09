@@ -13,6 +13,29 @@ This version has breaking changes — APIs, conventions, and file structure may 
 3. **작업 슬라이스마다 TeamSpace 태스크.** 각 항목 시작 시 보드에 태스크 생성(설명 포함), 완료 시 상태 변경. 스킬 내부 체크리스트·ralph beads/prd 는 보조 수단일 뿐, 진실 원천은 TeamSpace 보드다.
 4. **리뷰·대조·감사 발견사항은 보드 이슈로 자동 등록.** 채팅 나열로 끝내지 않는다.
 
+# 작업사항은 퍼블릭 레포(teamspace-oss)로 동기화한다
+
+이 레포(`leecoder5359/teamspace`, **private**)는 작업 환경이고, 제품의 공개본은
+`leecoder5359/teamspace-oss`(**public**)다. **기능 작업이 끝나면 OSS 로 반영한다.**
+
+두 레포는 **커밋 히스토리를 공유하지 않는다**(OSS 는 스쿼시된 공개본에서 시작). 그래서
+`git push` 로는 못 옮기고 `node scripts/sync-oss.mjs` 를 쓴다:
+
+- 기본은 드라이런. `--apply` 로만 파일을 쓰고 **스크립트는 절대 푸시하지 않는다** —
+  공개 히스토리는 되돌릴 수 없으므로 커밋·푸시는 사람이 diff 를 보고 한다.
+- 세 분류를 스크립트가 안다: **EXCLUDE**(내부 문서·업로드 원본·우리 전용 일회성 스크립트·
+  개인 설정) · **OSS_OWNED**(OSS 가 원본인 이식성 변형 — `lib/dataDir.ts`·`docFiles`·
+  `content`·`setup.sh`·`README`·`.env.example`) · 나머지는 스크럽 후 복사.
+- **스크럽**: tailscale 호스트·사내 도메인·슬랙 채널 id·실제 워크스페이스/보드 id·개인
+  이메일. 목록에 없는 새 내부 문자열은 SUSPECT 스캔이 잡아 **보고**한다(목록 관리는 사람,
+  누락 탐지는 기계).
+- **이식성 퇴행 검사**: "OSS 버전에는 있는데 private 버전에는 없는 `process.env` 참조" 를
+  경고한다. OSS 는 환경 의존값을 env 로 빼 두는 쪽이 앞서 있어서, 그대로 덮으면 일반화가
+  조용히 되돌아간다(스크럽은 값만 바꾸니 이걸 못 잡는다).
+- 새로 하드코딩하지 말 것. 호스트·경로·id 는 env 로 받는다 — `TEAMSPACE_DATA_DIR`,
+  `ALLOWED_DEV_ORIGINS`, `PUBLIC_BASE_URL` 이 이미 그 자리다.
+- 푸시 전 **OSS 클론에서 4게이트**(test·tsc·lint·build)를 돌린다.
+
 # 관리 스킬·CLI를 항상 최신으로 유지
 
 워크스페이스 조작은 두 층으로 관리한다:
