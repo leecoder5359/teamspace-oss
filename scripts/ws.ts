@@ -21,11 +21,13 @@
  * 모든 명령의 엔드포인트(ep) 가 실제 라우트로 존재하는지 패리티 검증한다.
  */
 
-import "dotenv/config"; // .env 자동 로드 — WS_TOKEN/AUTH_CLI_TOKEN 인증 (감사 agent-1)
+import "dotenv/config";
+import { findAssigneeProp, findDateProp, findStatusProp, optionIdByName } from "../lib/taskProps"; // .env 자동 로드 — WS_TOKEN/AUTH_CLI_TOKEN 인증 (감사 agent-1)
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 
-// 토큰 체인(W8): WS_TOKEN > ~/.claude/teamspace.json(에이전트 토큰, 권장) > AUTH_CLI_TOKEN(deprecated)
+// 토큰 체인: WS_TOKEN > ~/.claude/teamspace.json(에이전트 토큰). AUTH_CLI_TOKEN 폴백은
+// 서버에서 그 경로를 제거해(D12) 함께 뺐다 — 남겨두면 401 을 "토큰이 없다"로 오인하게 만든다.
 function fileConfig(): { base?: string; token?: string } {
   try {
     return JSON.parse(readFileSync(`${homedir()}/.claude/teamspace.json`, "utf8"));
@@ -35,7 +37,7 @@ function fileConfig(): { base?: string; token?: string } {
 }
 const FILE_CFG = fileConfig();
 const BASE = process.env.WS_BASE ?? FILE_CFG.base ?? "http://localhost:3002";
-const TOKEN = process.env.WS_TOKEN ?? FILE_CFG.token ?? process.env.AUTH_CLI_TOKEN;
+const TOKEN = process.env.WS_TOKEN ?? FILE_CFG.token;
 
 // ── HTTP ──────────────────────────────────────────────────────────────────
 async function api(method: string, path: string, body?: unknown): Promise<unknown> {
@@ -145,6 +147,17 @@ async function loadBoard(boardId?: string): Promise<BoardData> {
   }
   return (await api("GET", `/api/databases/${id}`)) as BoardData;
 }
+/** rowId 가 속한 보드를 전 보드에서 탐색. task done 이 기본 보드의 상태 propId·옵션을
+ *  다른 보드 행에 병합하던 사고 방지(실사례 2026-07-19: loyo 감사 보드 행 5건이 기본 보드
+ *  propId 로 '완료' 처리돼 실제 상태는 진행 중으로 남았다). */
+async function findBoardOfRow(rowId: string): Promise<BoardData> {
+  const pages = (await api("GET", "/api/pages")) as { pages: { id: string; kind: string }[] };
+  for (const p of pages.pages.filter((x) => x.kind === "database")) {
+    const b = (await api("GET", `/api/databases/${p.id}`)) as BoardData;
+    if (b.rows.some((r) => r.id === rowId)) return b;
+  }
+  throw new Error(`rowId ${rowId} 가 속한 보드를 찾지 못했습니다.`);
+}
 function prop(b: BoardData, re: RegExp, type?: string): PropLite | undefined {
   return b.properties.find((p) => re.test(p.name) && (type ? p.type === type : true));
 }
@@ -154,17 +167,26 @@ function optionId(p: PropLite | undefined, name: string): string | undefined {
 /** 플래그(--status/--priority/--assignee/--due/제목)를 보드 props 레코드로 변환. */
 function buildProps(b: BoardData, a: Args, title?: string): Record<string, unknown> {
   const props: Record<string, unknown> = {};
+  // 속성 탐지는 서버(lib/taskProps)와 같은 규칙을 쓴다.
+  //
+  // 종전엔 여기 사설 정규식이 따로 있어 서버와 갈라졌다 — 담당자를 text 로만 찾아
+  // person 타입 보드에서는 --assignee 가 조용히 버려졌고, 상태 속성도 폴백이 없어
+  // 이름이 다른 보드에서는 --status 가 무시됐다(전수조사 D14). 쓰기(CLI)와
+  // 읽기(서버)가 다른 속성을 고르면 "넣었는데 안 보인다"가 된다.
+  const lite = b.properties.map((p) => ({ id: p.id, name: p.name, type: p.type as string, config: p.config }));
   const titleProp = prop(b, /이름|name|title/i, "text") ?? b.properties.find((p) => p.type === "text");
-  const statusProp = prop(b, /상태|status/i, "select");
+  const statusProp = findStatusProp(lite);
   const prioProp = prop(b, /우선순위|priority/i, "select");
-  const asgnProp = prop(b, /담당자|assignee/i, "text");
-  const dueProp = prop(b, /마감|due|date/i, "date") ?? b.properties.find((p) => p.type === "date");
+  const asgnProp = findAssigneeProp(lite);
+  const dueProp = findDateProp(lite);
 
   if (title && titleProp) props[titleProp.id] = title;
   const status = flag(a, "status");
   if (status && statusProp) {
-    const id = optionId(statusProp, status);
-    if (!id) throw new Error(`상태 옵션 '${status}' 없음. 가능: ${statusProp.config.options?.map((o) => o.name).join(", ")}`);
+    // 옵션 이름 매칭도 서버(optionIdByName: 정확 → 시작 일치)와 같은 규칙으로.
+    // 종전 CLI 는 부분일치 정규식이라 '완료' 검색이 '미완료' 를 잡는 식으로 갈렸다.
+    const id = optionIdByName(statusProp, status);
+    if (!id) throw new Error(`상태 옵션 '${status}' 없음. 가능: ${statusProp.config?.options?.map((o) => o.name).join(", ")}`);
     props[statusProp.id] = id;
   }
   const prio = flag(a, "priority");
@@ -174,9 +196,21 @@ function buildProps(b: BoardData, a: Args, title?: string): Record<string, unkno
     props[prioProp.id] = id;
   }
   const asgn = flag(a, "assignee");
-  if (asgn && asgnProp) props[asgnProp.id] = asgn; // text 속성: 사람 id 아님, 문자열
+  if (asgn && asgnProp) props[asgnProp.id] = asgn; // text/person 속성 — 서버와 같은 규칙으로 찾는다
   const due = flag(a, "due");
   if (due && dueProp) props[dueProp.id] = due; // YYYY-MM-DD / ISO 문자열
+
+  // 값을 줬는데 담을 속성이 없으면 조용히 버리지 않는다 — 종전엔 아무 말 없이
+  // 사라져서 사용자는 반영된 줄 알았다(D14).
+  const dropped = [
+    status && !statusProp ? "--status(상태 select 속성 없음)" : null,
+    prio && !prioProp ? "--priority(우선순위 select 속성 없음)" : null,
+    asgn && !asgnProp ? "--assignee(담당자 text/person 속성 없음)" : null,
+    due && !dueProp ? "--due(date 속성 없음)" : null,
+  ].filter(Boolean);
+  if (dropped.length) {
+    throw new Error(`이 보드에 해당 속성이 없어 반영할 수 없습니다: ${dropped.join(", ")}`);
+  }
   return props;
 }
 
@@ -211,9 +245,21 @@ add({
 });
 add({
   name: "board prop add",
-  usage: 'board prop add <boardId> <name> --type <text|number|date|select|multiselect|checkbox|person|relation>',
+  usage:
+    'board prop add <boardId> <name> --type <text|number|date|select|checkbox|person|relation> [--target <보드id>]   (relation 은 --target 필수, multiselect 는 미구현이라 차단)',
   ep: ["databases/[id]/properties/route.ts"],
-  run: async (a) => out(await api("POST", `/api/databases/${a.pos[0]}/properties`, { name: a.pos[1], type: flag(a, "type") })),
+  run: async (a) => {
+    const type = flag(a, "type");
+    const target = flag(a, "target");
+    if (type === "relation" && !target) throw new Error("relation 속성에는 --target <가리킬 보드id> 가 필요합니다.");
+    out(
+      await api("POST", `/api/databases/${a.pos[0]}/properties`, {
+        name: a.pos[1],
+        type,
+        ...(target ? { config: { targetDatabaseId: target } } : {}),
+      }),
+    );
+  },
 });
 add({
   name: "board prop opt",
@@ -247,7 +293,7 @@ add({
 add({
   name: "task add",
   usage: 'task add <title> [--board <id>] [--status <name>] [--priority <name>] [--assignee <text>] [--due <YYYY-MM-DD>]',
-  ep: ["databases/[id]/route.ts", "databases/[id]/rows/route.ts"],
+  ep: ["pages/route.ts", "databases/[id]/route.ts", "databases/[id]/rows/route.ts"],
   run: async (a) => {
     const title = a.pos[0];
     if (!title) throw new Error("제목이 필요합니다: ws task add <title>");
@@ -258,23 +304,26 @@ add({
 });
 add({
   name: "task set",
-  usage: 'task set <rowId> [--board <id>] [--status][--priority][--assignee][--due]',
-  ep: ["databases/[id]/route.ts", "rows/[id]/route.ts"],
+  usage: 'task set <rowId> [--board <id>] [--status][--priority][--assignee][--due]   (--board 없으면 rowId 소속 보드 자동 탐색)',
+  ep: ["pages/route.ts", "databases/[id]/route.ts", "rows/[id]/route.ts"],
   run: async (a) => {
     const rowId = a.pos[0];
     if (!rowId) throw new Error("rowId가 필요합니다: ws task set <rowId> --status ...");
-    const b = await loadBoard(flag(a, "board"));
+    // task done 과 같은 이유로 기본 보드를 쓰면 안 된다 — findBoardOfRow 주석 참조
+    const boardFlag = flag(a, "board");
+    const b = boardFlag ? await loadBoard(boardFlag) : await findBoardOfRow(rowId);
     out(await api("PATCH", `/api/rows/${rowId}`, { props: buildProps(b, a) }));
   },
 });
 add({
   name: "task done",
-  usage: "task done <rowId> [--board <id>]   (상태→완료)",
-  ep: ["databases/[id]/route.ts", "rows/[id]/route.ts"],
+  usage: "task done <rowId> [--board <id>]   (상태→완료. --board 없으면 rowId 소속 보드 자동 탐색)",
+  ep: ["pages/route.ts", "databases/[id]/route.ts", "rows/[id]/route.ts"],
   run: async (a) => {
     const rowId = a.pos[0];
     if (!rowId) throw new Error("rowId가 필요합니다: ws task done <rowId>");
-    const b = await loadBoard(flag(a, "board"));
+    const boardFlag = flag(a, "board");
+    const b = boardFlag ? await loadBoard(boardFlag) : await findBoardOfRow(rowId);
     const statusProp = prop(b, /상태|status/i, "select");
     const doneId = optionId(statusProp, "완료|done");
     if (!doneId) throw new Error("'완료' 상태 옵션을 찾지 못했습니다.");
@@ -514,6 +563,21 @@ const RESOURCES: ResDef[] = [
   { group: "onboarding", path: "onboarding", listKey: "steps", fields: [["title", "title"], ["body", "body"]] },
   { group: "dod", path: "dod", listKey: "items", fields: [["text", "text"]] },
 ];
+
+/**
+ * CLI 가 각 리소스에 대해 실제로 보내는 계약 — 패리티 테스트가 읽는다.
+ *
+ * 여기 없던 시절엔 MANIFEST 가 '명령 ↔ 라우트 파일 존재'만 노출해서,
+ * 라우트에 PATCH 가 아예 없거나 필드를 일부만 받아도 테스트가 통과했다.
+ * 실제로 set 계열 7개가 405/400 으로 죽어 있었는데 아무도 몰랐다(2026-08-07).
+ */
+export const RESOURCE_CONTRACTS = RESOURCES.map((r) => ({
+  group: r.group,
+  path: r.path,
+  listKey: r.listKey,
+  bodyKeys: r.fields.map(([, bodyKey]) => bodyKey),
+}));
+
 for (const r of RESOURCES) {
   add({
     name: `${r.group} ls`,
@@ -644,6 +708,101 @@ add({
 });
 
 // 멤버 / 워크스페이스
+/* ── 공유 범위 (격차 D3) ──
+   페이지·프로젝트 모두 같은 모양: shares(조회) / share(부여) / unshare(회수) / restrict(잠금 전환).
+   부여 주체는 --user 또는 --team 중 하나. 잠그지 않은 페이지에도 부여할 수 있다(범위를 넓히는 쪽). */
+add({
+  name: "page shares",
+  usage: "page shares <pageId>   (공유 범위·부여 목록)",
+  ep: ["pages/[id]/grants/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/pages/${a.pos[0]}/grants`)) as {
+      visibility: string;
+      canManage: boolean;
+      adminBypass: boolean;
+      grants: { id: string; level: string; user?: { name: string; email: string } | null; team?: { name: string } | null }[];
+    };
+    out(`범위: ${r.visibility}${r.visibility === "restricted" ? " (부여받은 사람만)" : " (위를 따름)"}`);
+    for (const g of r.grants) out(`${g.id}\t${g.level}\t${g.user ? `@${g.user.name}` : `#${g.team?.name}`}`);
+    if (r.adminBypass) out("주의: 워크스페이스 admin 은 비공개 페이지도 볼 수 있습니다(확정 정책).");
+    if (!r.canManage) out("(읽기 전용 — 이 페이지를 편집할 수 있어야 범위를 바꿉니다)");
+  },
+});
+add({
+  name: "page restrict",
+  usage: "page restrict <pageId> <on|off>   (on=부여받은 사람만, off=위를 따름)",
+  ep: ["pages/[id]/grants/route.ts"],
+  run: async (a) =>
+    out(
+      await api("PATCH", `/api/pages/${a.pos[0]}/grants`, {
+        visibility: a.pos[1] === "off" ? "inherit" : "restricted",
+      }),
+    ),
+});
+add({
+  name: "page share",
+  usage: "page share <pageId> (--user <userId> | --team <teamId>) [--level view|edit]",
+  ep: ["pages/[id]/grants/route.ts"],
+  run: async (a) =>
+    out(
+      await api("POST", `/api/pages/${a.pos[0]}/grants`, {
+        userId: flag(a, "user"),
+        teamId: flag(a, "team"),
+        level: flag(a, "level") ?? "view",
+      }),
+    ),
+});
+add({
+  name: "page unshare",
+  usage: "page unshare <pageId> <grantId>",
+  ep: ["pages/[id]/grants/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/pages/${a.pos[0]}/grants?grantId=${a.pos[1]}`)),
+});
+add({
+  name: "project shares",
+  usage: "project shares <projectId>   (프로젝트 공유 범위·부여 목록)",
+  ep: ["projects/[id]/grants/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/projects/${a.pos[0]}/grants`)) as {
+      visibility: string;
+      canManage: boolean;
+      grants: { id: string; level: string; user?: { name: string } | null; team?: { name: string } | null }[];
+    };
+    out(`범위: ${r.visibility}`);
+    for (const g of r.grants) out(`${g.id}\t${g.level}\t${g.user ? `@${g.user.name}` : `#${g.team?.name}`}`);
+    if (!r.canManage) out("(읽기 전용)");
+  },
+});
+add({
+  name: "project restrict",
+  usage: "project restrict <projectId> <on|off>",
+  ep: ["projects/[id]/grants/route.ts"],
+  run: async (a) =>
+    out(
+      await api("PATCH", `/api/projects/${a.pos[0]}/grants`, {
+        visibility: a.pos[1] === "off" ? "inherit" : "restricted",
+      }),
+    ),
+});
+add({
+  name: "project share",
+  usage: "project share <projectId> (--user <userId> | --team <teamId>) [--level view|edit]",
+  ep: ["projects/[id]/grants/route.ts"],
+  run: async (a) =>
+    out(
+      await api("POST", `/api/projects/${a.pos[0]}/grants`, {
+        userId: flag(a, "user"),
+        teamId: flag(a, "team"),
+        level: flag(a, "level") ?? "view",
+      }),
+    ),
+});
+add({
+  name: "project unshare",
+  usage: "project unshare <projectId> <grantId>",
+  ep: ["projects/[id]/grants/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/projects/${a.pos[0]}/grants?grantId=${a.pos[1]}`)),
+});
 add({
   name: "member ls",
   usage: "member ls",
@@ -734,22 +893,52 @@ add({
 });
 add({
   name: "doc comment",
-  usage: 'doc comment <pageId> --body "<내용>"   (@이름 멘션 시 알림)',
+  usage: 'doc comment <pageId> --body "<내용>" [--quote "<본문 문구>"]   (@이름 멘션 시 알림, --quote 는 그 문구에 다는 인라인 코멘트)',
   ep: ["pages/[id]/comments/route.ts"],
-  run: async (a) => out(await api("POST", `/api/pages/${a.pos[0]}/comments`, { body: flag(a, "body") })),
+  run: async (a) => {
+    const quote = flag(a, "quote");
+    let anchor: { quote: string; prefix: string; suffix: string } | undefined;
+    if (quote) {
+      // 앵커의 앞뒤 문맥은 **원문에서** 떠야 한다 — 같은 문구가 여러 번 나올 때
+      // 어느 쪽인지 가리는 유일한 단서다.
+      const page = (await api("GET", `/api/pages/${a.pos[0]}`)) as { markdown?: string };
+      const md = page.markdown ?? "";
+      const at = md.indexOf(quote);
+      if (at < 0) throw new Error(`본문에서 그 문구를 찾을 수 없습니다: ${quote}`);
+      anchor = { quote, prefix: md.slice(Math.max(0, at - 32), at), suffix: md.slice(at + quote.length, at + quote.length + 32) };
+    }
+    out(await api("POST", `/api/pages/${a.pos[0]}/comments`, { body: flag(a, "body"), anchor }));
+  },
+});
+add({
+  name: "doc comment resolve",
+  usage: "doc comment resolve <pageId> <commentId> [--undo]   (인라인 코멘트 해결/되돌리기)",
+  ep: ["pages/[id]/comments/route.ts"],
+  run: async (a) =>
+    out(
+      await api("PATCH", `/api/pages/${a.pos[0]}/comments?commentId=${a.pos[1]}`, { resolved: !bool(a, "undo") }),
+    ),
 });
 add({
   name: "task block",
-  usage: "task block <rowId> --by <선행rowId> [--board <id>]   (의존관계 — '선행 태스크' relation 속성에 추가)",
-  ep: ["databases/[id]/route.ts", "databases/[id]/properties/route.ts", "rows/[id]/route.ts"],
+  usage: "task block <rowId> --by <선행rowId> [--board <id>]   (의존관계 — '선행 태스크' relation 속성에 추가. --board 없으면 rowId 소속 보드 자동 탐색)",
+  ep: ["pages/route.ts", "databases/[id]/route.ts", "databases/[id]/properties/route.ts", "rows/[id]/route.ts"],
   run: async (a) => {
     const rowId = a.pos[0];
     const by = flag(a, "by");
     if (!by) throw new Error("--by <선행rowId> 가 필요합니다.");
-    const b = await loadBoard(flag(a, "board"));
+    // 기본 보드에 relation 속성을 만들고 남의 행에 그 propId 를 박던 경로를 막는다
+    const boardFlag = flag(a, "board");
+    const b = boardFlag ? await loadBoard(boardFlag) : await findBoardOfRow(rowId);
     let rel = b.properties.find((pp) => pp.type === "relation" && /선행|blocked|depends/i.test(pp.name));
     if (!rel) {
-      const created = (await api("POST", `/api/databases/${b.page.id}/properties`, { name: "선행 태스크", type: "relation" })) as { property: PropLite };
+      // 자기 보드를 가리키는 relation — '선행 태스크' 는 같은 보드의 다른 행이다.
+      // (C2 이전엔 config 없이 만들려다 400 으로 죽었다.)
+      const created = (await api("POST", `/api/databases/${b.page.id}/properties`, {
+        name: "선행 태스크",
+        type: "relation",
+        config: { targetDatabaseId: b.page.id },
+      })) as { property: PropLite };
       rel = created.property;
     }
     const row = b.rows.find((r) => r.id === rowId);
@@ -809,6 +998,172 @@ add({
   run: async (a) => out(await api("POST", "/api/slack/test", { channel: flag(a, "channel") })),
 });
 add({
+  name: "view ls",
+  usage: "view ls <boardId>   (보드의 뷰 목록 — 저장된 정렬·필터 포함)",
+  ep: ["databases/[id]/views/route.ts"],
+  run: async (a) => out(await api("GET", `/api/databases/${a.pos[0]}/views`)),
+});
+add({
+  name: "view add",
+  usage: "view add <boardId> <이름> [--type <table|kanban|gallery|list|calendar|timeline>]",
+  ep: ["databases/[id]/views/route.ts"],
+  run: async (a) =>
+    out(await api("POST", `/api/databases/${a.pos[0]}/views`, { name: a.pos[1], type: flag(a, "type") })),
+});
+add({
+  name: "view set",
+  usage: "view set <boardId> <viewId> [--name <n>] [--type <table|kanban|gallery|list|calendar|timeline>] [--sort <propId:asc|desc>] [--group <propId>] [--date <propId>] [--end <propId>]",
+  ep: ["databases/[id]/views/[viewId]/route.ts"],
+  run: async (a) => {
+    const sortFlag = flag(a, "sort");
+    let config: Record<string, unknown> | undefined;
+    if (sortFlag !== undefined) {
+      // "none" 이면 정렬 해제
+      const [propId, dir] = sortFlag.split(":");
+      config = { sort: sortFlag === "none" || !propId ? null : { propId, dir: dir === "desc" ? "desc" : "asc" } };
+    }
+    const group = flag(a, "group");
+    if (group !== undefined) config = { ...(config ?? {}), groupBy: group === "none" ? null : group };
+    // 달력·타임라인이 쓸 날짜 속성(격차 C1). 미지정이면 첫 date 속성을 자동으로 쓴다.
+    const dateProp = flag(a, "date");
+    if (dateProp !== undefined) config = { ...(config ?? {}), dateProp: dateProp === "none" ? null : dateProp };
+    const endProp = flag(a, "end");
+    if (endProp !== undefined) config = { ...(config ?? {}), endProp: endProp === "none" ? null : endProp };
+    out(
+      await api("PATCH", `/api/databases/${a.pos[0]}/views/${a.pos[1]}`, {
+        name: flag(a, "name"),
+        type: flag(a, "type"),
+        config,
+      }),
+    );
+  },
+});
+add({
+  name: "view rm",
+  usage: "view rm <boardId> <viewId>   (마지막 뷰는 삭제 불가)",
+  ep: ["databases/[id]/views/[viewId]/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/databases/${a.pos[0]}/views/${a.pos[1]}`)),
+});
+add({
+  name: "export",
+  usage:
+    "export [--out <경로>] [--no-attachments]   (워크스페이스 전체를 zip 으로. 기본 ./teamspace-export-<날짜>.zip, 첨부 포함)",
+  ep: ["export/route.ts"],
+  run: async (a) => {
+    const fs = await import("node:fs");
+    const qs = bool(a, "no-attachments") ? "?attachments=0" : "";
+    const res = await fetch(`${BASE}/api/export${qs}`, { headers: TOKEN ? { "x-ws-token": TOKEN } : {} });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`GET /api/export → ${res.status}: ${msg.slice(0, 200)}`);
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    const dest = flag(a, "out") ?? `teamspace-export-${stamp}.zip`;
+    fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+    out({ file: dest, bytes: fs.statSync(dest).size });
+  },
+});
+add({
+  name: "import",
+  usage:
+    "import <zip경로> [--project <id>] [--dry-run] [--create-projects] [--skip-existing]   (우리 export·노션 export·마크다운 폴더 zip → 문서 + 보드(CSV))",
+  ep: ["import/route.ts"],
+  run: async (a) => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = a.pos[0];
+    if (!src) throw new Error("zip 경로가 필요합니다. 예: pnpm ws import ./vault.zip --dry-run");
+    const buf = fs.readFileSync(src);
+    const form = new FormData();
+    form.set("file", new Blob([new Uint8Array(buf)]), path.basename(src));
+    const projectId = flag(a, "project");
+    if (projectId) form.set("projectId", projectId);
+    if (bool(a, "create-projects")) form.set("createProjects", "1");
+    if (bool(a, "skip-existing")) form.set("skipExisting", "1");
+    const dryRun = bool(a, "dry-run");
+    const res = await fetch(`${BASE}/api/import${dryRun ? "?dryRun=1" : ""}`, {
+      method: "POST",
+      headers: TOKEN ? { "x-ws-token": TOKEN } : {},
+      body: form,
+    });
+    const payload = (await res.json().catch(() => ({}))) as {
+      format?: string;
+      counts?: Record<string, number>;
+      documents?: { title: string; project: string | null; duplicate?: boolean; pageId?: string | null; attachments?: number }[];
+      folders?: { path: string; name: string; projectName: string | null; reusesDoc?: boolean; reusesBoard?: boolean }[];
+      boards?: {
+        title: string;
+        project?: string | null;
+        projectName?: string | null;
+        rows: number;
+        columns: { name: string; type: string; options: number }[];
+        linkedDocs?: number;
+        duplicate?: boolean;
+        skipped?: boolean;
+        pageId?: string | null;
+      }[];
+      attachments?: { path: string; bytes?: number; url?: string }[];
+      skipped?: { path: string; reason: string }[];
+      warnings?: string[];
+      projects?: { name: string; projectId: string | null; willCreate: boolean }[];
+    };
+    // upload 와 같은 이유로 api() 를 우회한다(multipart) — 실패를 exit 1 로 전파할 것.
+    if (!res.ok) throw new Error(`POST /api/import → ${res.status}: ${JSON.stringify(payload)}`);
+    out(`형식: ${payload.format}${dryRun ? "  (드라이런 — 아무것도 만들지 않았습니다)" : ""}`);
+    for (const w of payload.warnings ?? []) out(`⚠ ${w}`);
+    for (const p of payload.projects ?? []) {
+      out(`프로젝트  ${p.name} → ${p.projectId ?? (p.willCreate ? "(새로 만듦)" : "미분류")}`);
+    }
+    for (const d of payload.documents ?? []) {
+      out(
+        `문서  ${d.title}${d.project ? `  [${d.project}]` : ""}${d.attachments ? `  📎${d.attachments}` : ""}${d.duplicate ? "  (같은 제목 있음)" : ""}${d.pageId ? `  ${d.pageId}` : ""}`,
+      );
+    }
+    for (const f of payload.folders ?? []) {
+      const reuse = f.reusesBoard ? "  (같은 이름 보드를 부모로)" : f.reusesDoc ? "  (같은 이름 문서를 부모로)" : "";
+      out(`폴더  ${f.projectName ? `[${f.projectName}] ` : ""}${f.path}${reuse}`);
+    }
+    for (const b of payload.boards ?? []) {
+      const proj = b.project ?? b.projectName;
+      out(
+        `보드  ${b.title}${proj ? `  [${proj}]` : ""}  행 ${b.rows}${b.linkedDocs ? `  본문연결 ${b.linkedDocs}` : ""}${b.duplicate ? "  (같은 제목 있음)" : ""}${b.skipped ? "  (건너뜀)" : ""}${b.pageId ? `  ${b.pageId}` : ""}`,
+      );
+      out(`      열: ${b.columns.map((c) => `${c.name}(${c.type}${c.options ? `·${c.options}` : ""})`).join(", ")}`);
+    }
+    for (const a of payload.attachments ?? []) out(`첨부  ${a.path}${a.url ? ` → ${a.url}` : ""}`);
+    for (const s of payload.skipped ?? []) out(`건너뜀  ${s.path} — ${s.reason}`);
+    out(payload.counts ?? {});
+  },
+});
+add({
+  name: "similar",
+  usage: "similar <pageId|--q 질의> [--limit n]   (벡터 유사도 — 격차 G2. 신경망 임베딩이 아니라 TF-IDF 코사인)",
+  ep: ["search/similar/route.ts"],
+  run: async (a) => {
+    const q = flag(a, "q");
+    const qs = q ? `q=${encodeURIComponent(q)}` : `pageId=${a.pos[0]}`;
+    const r = (await api("GET", `/api/search/similar?${qs}&limit=${flag(a, "limit") ?? 5}`)) as {
+      mode: string; method: string; indexed: number;
+      results: { id: string; title: string; project: string | null; score: number }[];
+    };
+    out(`${r.mode} · ${r.method} · 색인 ${r.indexed}건`);
+    for (const x of r.results) out(`${x.score.toFixed(3)}\t${x.title}${x.project ? `  [${x.project}]` : ""}\t${x.id}`);
+    if (r.results.length === 0) out("(비슷한 문서를 찾지 못했습니다)");
+  },
+});
+add({
+  name: "presence",
+  usage: "presence <pageId>   (지금 이 페이지를 보고 있는 사람 — 격차 D4)",
+  ep: ["presence/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/presence?pageId=${a.pos[0]}`)) as {
+      viewers: { userId: string; name: string; editing: boolean }[];
+    };
+    if (r.viewers.length === 0) out("(아무도 없습니다)");
+    for (const v of r.viewers) out(`${v.editing ? "✎ 편집 중" : "· 보는 중"}\t${v.name}\t${v.userId}`);
+  },
+});
+add({
   name: "upload",
   usage: "upload <파일경로>   (→ {url, markdown})",
   ep: ["upload/route.ts"],
@@ -819,7 +1174,40 @@ add({
     const form = new FormData();
     form.set("file", new Blob([new Uint8Array(buf)]), path.basename(a.pos[0]));
     const res = await fetch(`${BASE}/api/upload`, { method: "POST", headers: TOKEN ? { "x-ws-token": TOKEN } : {}, body: form });
-    out(await res.json());
+    // api() 헬퍼를 우회하는 유일한 명령이라 실패해도 exit 0 이었다 — 다른 모든 명령은
+    // res.ok 검사 후 throw → exit 1 이다. 스크립트가 업로드 실패를 못 알아챘다(D22).
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`POST /api/upload → ${res.status}: ${JSON.stringify(payload)}`);
+    out(payload);
+  },
+});
+add({
+  name: "upload get",
+  usage: "upload get <url|<ws>/<파일명>> [--out <경로>]   (첨부 내려받기 — 서빙 라우트 확인용)",
+  ep: ["uploads/[...path]/route.ts"],
+  run: async (a) => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const arg = a.pos[0];
+    if (!arg) throw new Error("URL 또는 <워크스페이스id>/<파일명> 이 필요합니다.");
+    // /uploads/<ws>/<f> 든 /api/uploads/<ws>/<f> 든 절대 URL 이든 같은 자리로 보낸다.
+    const rel = arg.replace(/^https?:\/\/[^/]+/, "").replace(/^\/?(api\/)?uploads\//, "");
+    const res = await fetch(`${BASE}/api/uploads/${rel}`, { headers: TOKEN ? { "x-ws-token": TOKEN } : {} });
+    if (!res.ok) throw new Error(`GET /api/uploads/${rel} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const dest = flag(a, "out");
+    if (dest) {
+      fs.writeFileSync(dest, buf);
+      out({ file: dest, bytes: buf.length, type: res.headers.get("content-type") });
+    } else {
+      out({
+        bytes: buf.length,
+        type: res.headers.get("content-type"),
+        disposition: res.headers.get("content-disposition"),
+        cache: res.headers.get("cache-control"),
+        name: path.basename(rel),
+      });
+    }
   },
 });
 add({
@@ -949,9 +1337,16 @@ add({
 // 유틸 (검색 / 린트 / 그래프)
 add({
   name: "search",
-  usage: 'search <q>',
+  usage: 'search <q> [--project <id|__none__>] [--kind <doc,board,decision>] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit <n>]',
   ep: ["search/route.ts"],
-  run: async (a) => out(await api("GET", `/api/search?q=${encodeURIComponent(a.pos[0] ?? "")}`)),
+  run: async (a) => {
+    const p = new URLSearchParams({ q: a.pos[0] ?? "" });
+    for (const [flagName, key] of [["project", "projectId"], ["kind", "kind"], ["from", "from"], ["to", "to"], ["limit", "limit"]] as const) {
+      const v = flag(a, flagName);
+      if (v !== undefined) p.set(key, v);
+    }
+    out(await api("GET", `/api/search?${p.toString()}`));
+  },
 });
 add({
   name: "ask",
@@ -1056,7 +1451,7 @@ add({
 });
 add({
   name: "notif-rule add",
-  usage: "notif-rule add <event(task_created|task_status|task_assigned|task_due)> <channel> [--project <projectId>]",
+  usage: "notif-rule add <event(task_created|task_status|task_assigned|task_due|comment_added|doc_saved)> <channel> [--project <projectId>]",
   ep: ["notif-rules/route.ts"],
   run: async (a) => out(await api("POST", "/api/notif-rules", { event: a.pos[0], targetId: a.pos[1], projectId: flag(a, "project") })),
 });

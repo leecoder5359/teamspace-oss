@@ -30,12 +30,15 @@ function config(): { base: string; token: string } {
 
 const { base, token } = config();
 
-async function api(method: string, path: string, body?: unknown): Promise<unknown> {
+async function api(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<unknown> {
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
       "x-ws-token": token,
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      // 종전엔 task_add 설명이 '재시도 안전'을 광고하면서 헤더를 보내지 않았다 —
+      // 모델이 그 설명을 믿고 재시도하면 태스크가 조용히 두 개 쌓였다(전수조사 D9).
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -64,7 +67,7 @@ server.registerTool(
     description: "워크스페이스 컨텍스트 스냅샷(팀 레슨·열린 태스크·문서·결정·리스크·용어). cwd 를 주면 프로젝트 스코프.",
     inputSchema: { cwd: z.string().optional() },
   },
-  async ({ cwd }) => jsonResult(await api("GET", `/api/context?format=md${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ""}`)),
+  async ({ cwd }) => jsonResult(await api("GET", `/api/context?format=json${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ""}`)),
 );
 
 server.registerTool(
@@ -116,10 +119,16 @@ server.registerTool(
 server.registerTool(
   "task_add",
   {
-    description: "보드에 태스크(행) 생성. props 는 propId→값. Idempotency-Key 로 재시도 안전.",
-    inputSchema: { boardId: z.string(), props: z.record(z.string(), z.unknown()) },
+    description:
+      "보드에 태스크(행) 생성. props 는 propId→값. 재시도할 때는 같은 idempotencyKey 를 다시 보내면 이중 생성되지 않는다(키를 안 보내면 매번 새로 생성된다).",
+    inputSchema: {
+      boardId: z.string(),
+      props: z.record(z.string(), z.unknown()),
+      idempotencyKey: z.string().optional(),
+    },
   },
-  async ({ boardId, props }) => jsonResult(await api("POST", `/api/databases/${boardId}/rows`, { props })),
+  async ({ boardId, props, idempotencyKey }) =>
+    jsonResult(await api("POST", `/api/databases/${boardId}/rows`, { props }, idempotencyKey)),
 );
 
 server.registerTool(

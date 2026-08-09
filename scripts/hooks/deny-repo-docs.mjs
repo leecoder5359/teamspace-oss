@@ -50,13 +50,22 @@ export function decide(filePath) {
   const base = filePath.split("/").pop() ?? "";
   if (ALLOWED_BASENAMES.has(base)) return { deny: false };
   if (ALLOW_PATTERNS.some((re) => re.test(filePath))) return { deny: false };
-  const hit = DENY_PATTERNS.find((p) => p.re.test(filePath));
+  // 여기까지 왔으면 허용목록에 없는 파일이다.
+  //
+  // 종전엔 DENY_PATTERNS 6개에 걸릴 때만 막고 나머지는 통과시켰다(기본 허용).
+  // 그래서 AGENTS.md 가 "레포/디스크에 md 생성 금지 … 엔진 수준에서 차단"이라고
+  // 적어 둔 것과 달리 REPORT.md·notes/회의록.md·~/Desktop/설계.md 는 무경고로
+  // 지나갔다(전수조사 D11). 이제 md/mdx 는 기본 차단이고, 허용은 위의
+  // ALLOWED_BASENAMES·ALLOW_PATTERNS 로만 열린다.
+  const hit =
+    DENY_PATTERNS.find((p) => p.re.test(filePath)) ??
+    (/\.(md|mdx)$/i.test(filePath) ? { what: "마크다운 문서" } : null);
   if (!hit) return { deny: false };
   return {
     deny: true,
     reason:
       `📄 ${hit.what}(${base}) 를 레포에 쓰는 것은 금지되어 있습니다 — 문서는 TeamSpace doc 으로만 저장합니다(AGENTS.md 규칙). ` +
-      `대신: teamspace 레포에서 pnpm ws doc new "<제목>" --project <projectId> 로 문서를 만들고 ` +
+      `대신: cd ~/dev/ljun/teamspace && pnpm ws doc new "<제목>" --project <projectId> 로 문서를 만들고 ` +
       `PUT /api/pages/<id> {markdown} 으로 본문을 저장하세요(teamspace 스킬 참조). ` +
       `정말 레포 파일이 필요한 예외라면 사용자에게 확인을 받으세요.`,
   };

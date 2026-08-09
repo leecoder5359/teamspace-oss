@@ -2,7 +2,7 @@ import "dotenv/config";
 import { dispatchDue } from "@/lib/dispatch";
 import { notifyTasksDue } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
-import { dispatchLlmJobs } from "@/lib/llmjob";
+import { dispatchLlmJobs, purgeOldLlmJobs, JOB_RETENTION_DAYS } from "@/lib/llmjob";
 
 /**
  * 예약/비동기 작업 워커(컨테이너 엔트리포인트).
@@ -15,6 +15,9 @@ import { dispatchLlmJobs } from "@/lib/llmjob";
 const INTERVAL = Math.max(5000, Number(process.env.WORKER_INTERVAL_MS) || 60_000);
 
 let stopping = false;
+/** 정리는 매 tick 이 아니라 한 시간에 한 번(지울 게 거의 없는 쿼리를 60초마다 돌릴 이유가 없다). */
+let lastPurge = 0;
+const PURGE_EVERY_MS = 3600_000;
 
 function log(msg: string): void {
   console.log(`[worker ${new Date().toISOString()}] ${msg}`);
@@ -39,6 +42,12 @@ async function tick(): Promise<void> {
     // 마감 알림(W5 task_due): 일일 1회 중복 방지는 notifyTasksDue 내부에서 처리
     const d = await notifyTasksDue();
     if (d.notified > 0) log(`task_due notified ${d.notified}`);
+    // 끝난 LLM 잡 정리(피드백허브 후속) — payload 에 사장님 원문이 들어 있어 영구보관 금지
+    if (Date.now() - lastPurge > PURGE_EVERY_MS) {
+      lastPurge = Date.now();
+      const purged = await purgeOldLlmJobs();
+      if (purged > 0) log(`llm jobs purged: ${purged} (${JOB_RETENTION_DAYS}일 경과)`);
+    }
   } catch (e) {
     log(`tick error: ${e instanceof Error ? e.message : String(e)}`);
   }

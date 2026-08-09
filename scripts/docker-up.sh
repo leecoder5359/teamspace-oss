@@ -1,33 +1,21 @@
 #!/bin/bash
-# 부팅(로그인) 시 Docker 데몬을 보장하고 TeamSpace 인프라 컨테이너(postgres/redis)를 띄운다.
-# macOS: LaunchAgent com.teamspace.docker 가 RunAtLoad 로 1회 실행 (Docker Desktop 자동 기동 포함).
-# 그 외 OS: Docker Desktop 자동 기동은 건너뛰고, 데몬이 이미 떠 있다고 가정한다.
+# 부팅(로그인) 시 Docker Desktop을 띄우고 TeamSpace 인프라 컨테이너(postgres/redis)를 보장한다.
+# LaunchAgent com.teamspace.docker 가 RunAtLoad 로 1회 실행.
+# ⚠️ 그 plist 는 이 레포에 없다(scripts/launchd/ 에는 web·worker·backup·health 만) —
+#    deploy.sh 도 설치하지 않으므로 수동으로 만든 기기에서만 동작한다(전수조사 D21).
 # 재부팅 후 Docker 데몬 부재 → DB ECONNREFUSED → 웹 500 재발 방지용.
 set -u
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_DIR="/Users/ljun/dev/ljun/teamspace"
+DOCKER_BIN="/usr/local/bin/docker"
 TIMEOUT_SECS=300
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
-# docker CLI 탐색 (launchd 는 PATH 가 최소라 command -v 실패 시 흔한 설치 경로 fallback)
-DOCKER_BIN="$(command -v docker || true)"
-if [ -z "$DOCKER_BIN" ]; then
-  for c in /usr/local/bin/docker /opt/homebrew/bin/docker; do
-    [ -x "$c" ] && DOCKER_BIN="$c" && break
-  done
-fi
-[ -n "$DOCKER_BIN" ] || { log "✗ docker CLI 를 찾을 수 없습니다 — Docker 설치 후 다시 실행하세요"; exit 1; }
-
 log "docker-up 시작"
 
-# 1) Docker 데몬 기동 — macOS 전용(Docker Desktop). 그 외 OS 는 안내만 하고 스킵.
-if [ "$(uname)" = "Darwin" ]; then
-  # -g: 백그라운드, 이미 떠 있으면 no-op
-  open -g -a Docker || { log "✗ Docker.app 실행 실패"; exit 1; }
-else
-  log "macOS 가 아니므로 Docker Desktop 자동 기동을 건너뜁니다 — Docker 데몬(systemd 등)이 이미 실행 중이어야 합니다"
-fi
+# 1) Docker Desktop 기동 (-g: 백그라운드, 이미 떠 있으면 no-op)
+open -g -a Docker || { log "✗ Docker.app 실행 실패"; exit 1; }
 
 # 2) 데몬 준비 대기 (최대 ${TIMEOUT_SECS}초)
 elapsed=0

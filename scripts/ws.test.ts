@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { MANIFEST } from "./ws";
+import { MANIFEST, RESOURCE_CONTRACTS } from "./ws";
 
 /**
  * 패리티 테스트: ws CLI 의 모든 명령이 선언한 엔드포인트(ep)가 실제
@@ -89,5 +89,55 @@ describe("역방향 패리티: 라우트 → CLI 커버리지", () => {
         `${rel} 를 다루는 pnpm ws 명령이 없습니다 — 명령을 추가하거나(권장) 비CLI 성격이면 REVERSE_WHITELIST 에 사유와 함께 등록하세요.`,
       ).toBe(true);
     });
+  }
+});
+
+/**
+ * 필드·메서드 패리티 (2026-08-07 신설).
+ *
+ * 배경: 기존 패리티는 '명령 ↔ 라우트 파일 존재'만 봤다. 그래서 라우트에
+ * PATCH 가 아예 없거나(glossary·entity·onboarding·changelog) 필드를 일부만
+ * 받아도(qa·risk·dod) 통과했고, set 계열 7개가 405/400 으로 죽어 있었는데
+ * 테스트는 초록이었다.
+ *
+ * 여기서는 CLI 가 실제로 보내는 것(RESOURCE_CONTRACTS)을 기준으로
+ *   ① 목록/생성 라우트에 GET·POST 가 있는지
+ *   ② 수정 라우트에 PATCH 가 있는지
+ *   ③ CLI 가 보내는 body 키를 라우트 소스가 언급하는지
+ * 를 본다.
+ *
+ * ③ 은 소스 문자열 검사라 타입 수준 보장은 아니다 — '필드가 통째로 빠진'
+ * 드리프트를 잡는 것이 목적이고, 그게 실제로 일어난 사고였다.
+ */
+describe("ws CLI ↔ 라우트 메서드·필드 패리티", () => {
+  const read = (rel: string) => readFileSync(resolve(API_ROOT, rel), "utf8");
+
+  for (const c of RESOURCE_CONTRACTS) {
+    const listRoute = `${c.path}/route.ts`;
+    const idRoute = `${c.path}/[id]/route.ts`;
+
+    it(`'${c.group} ls/add' → ${listRoute} 에 GET·POST 가 있다`, () => {
+      const src = read(listRoute);
+      expect(src).toMatch(/export async function GET/);
+      expect(src).toMatch(/export async function POST/);
+    });
+
+    it(`'${c.group} set' → ${idRoute} 에 PATCH 가 있다`, () => {
+      expect(existsSync(resolve(API_ROOT, idRoute))).toBe(true);
+      expect(read(idRoute)).toMatch(/export async function PATCH/);
+    });
+
+    it(`'${c.group} rm' → ${idRoute} 에 DELETE 가 있다`, () => {
+      expect(read(idRoute)).toMatch(/export async function DELETE/);
+    });
+
+    for (const key of c.bodyKeys) {
+      it(`'${c.group} add' 가 보내는 '${key}' 를 ${listRoute} 가 읽는다`, () => {
+        expect(read(listRoute)).toContain(key);
+      });
+      it(`'${c.group} set' 이 보내는 '${key}' 를 ${idRoute} 가 읽는다`, () => {
+        expect(read(idRoute)).toContain(key);
+      });
+    }
   }
 });

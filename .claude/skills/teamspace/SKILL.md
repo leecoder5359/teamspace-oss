@@ -20,7 +20,7 @@ pnpm ws decision add "DB는 SQLite로" --status accepted
 pnpm ws approval add "배포 승인?" --body "main 머지" --kind deploy --high
 ```
 
-명령 그룹: `board · task · doc · project · decision · risk · qa · glossary · changelog · entity · onboarding · dod · approval · remind · member · team · token(에이전트 토큰) · ws(info/rename) · search · lint · graph · llm(classify)`. 각 명령은 내부적으로 아래 라우트를 호출한다 — CLI가 못 덮는 케이스나 디버깅 때만 raw API를 직접 쓴다. `scripts/ws.test.ts` 가 모든 명령↔라우트 존재를 패리티 검증한다.
+명령 그룹: `board · task · doc · project · decision · risk · qa · glossary · changelog · entity · onboarding · dod · approval · remind · member · team · token(에이전트 토큰) · ws(info/rename) · search · lint · graph · llm(classify)`. 각 명령은 내부적으로 아래 라우트를 호출한다 — CLI가 못 덮는 케이스나 디버깅 때만 raw API를 직접 쓴다. `scripts/ws.test.ts` 가 패리티를 검증한다 — 명령↔라우트 존재뿐 아니라 **HTTP 메서드(GET/POST/PATCH/DELETE)와 CLI 가 보내는 body 키가 라우트에 실재하는지**까지 본다(2026-08-07 강화. 그 전엔 존재만 봐서 set 계열 7개가 405/400 으로 죽어 있는 걸 못 잡았다).
 
 ## 핵심 규칙 (CLI든 raw API든 공통)
 
@@ -28,11 +28,12 @@ pnpm ws approval add "배포 승인?" --body "main 머지" --kind deploy --high
 - 모든 라우트는 `requireCtx(minRole?)`(lib/workspace.ts)로 컨텍스트+RBAC 해석: ① 세션(매 요청 멤버십 검증, removed 멤버 즉시 차단) ② `x-ws-token`=**에이전트 토큰**(`wst_…`, 워크스페이스·역할 스코프) ③ 없으면 401. (레거시 공유 `AUTH_CLI_TOKEN`은 **제거됨** — env 에 다시 넣으면 되살아나지만 넣지 말 것.) `scripts/authz-coverage.test.ts`가 전 라우트의 requireCtx 채택을 정적 강제한다(새 라우트 추가 시 필수).
 - 🔐 **fail-closed**(`middleware.ts`): UI는 미인증 시 `/login` 리다이렉트. `/api/*`는 세션 또는 `x-ws-token` 헤더 없으면 **항상 401**(과거의 "토큰 미설정 시 개방"은 제거, 데모용 `AUTH_OPEN_API=true`만 예외). `pnpm ws`는 `WS_TOKEN` env > `~/.claude/teamspace.json`(에이전트 토큰) 순으로 인증. 자체인증 경로(`/api/auth`·`/api/ingest`·`/api/slack/interactions`)는 제외.
 - 🎭 **RBAC**: `viewer`(읽기) < `editor`(콘텐츠 쓰기) < `admin`(멤버·팀·워크스페이스 이름·슬랙·알림 규칙·에이전트 토큰). viewer 토큰으로 쓰기 호출하면 403.
+- 🔒 **페이지·프로젝트 권한(D3)**: 역할만으로 끝나지 않는다 — 멤버여도 **못 보는 페이지가 있다**. 아래 "공유 범위" 절 참고. 에이전트 토큰은 보통 `editor` 라, 비공개 페이지에 대해 `pnpm ws doc rm` 같은 명령이 **404** 를 받는 것이 정상이다(권한 없음이 아니라 '없는 것처럼' 보이는 설계).
 - 🤖 **에이전트 토큰**(`/api/agent-tokens`, admin): `pnpm ws token add <name> [--role]` → `wst_…` 원문 1회 노출(저장 필수). 발급 시 에이전트가 시스템 User+멤버로 생성되어 작성자 기록·멤버 목록에 실명 표시. `token ls`/`token revoke <id>`(회수 시 멤버십도 removed). 설정 화면 › 에이전트 토큰 섹션에서도 발급/회수 가능. 에이전트마다 자기 토큰을 쓴다(공유 토큰 없음).
 - 🚪 **로그인 접근 게이트**(`auth.ts` signIn 콜백 + `lib/accessControl.ts`): Google 로그인 자체를 두 경로로 제한 — **(a) 초대**: `/api/members`로 초대된(invited/active) 이메일, 또는 **(b) 도메인**: 이메일 도메인이 `AUTH_ALLOWED_DOMAINS`(콤마/공백 구분, `@` 선택) 에 포함. 둘 중 하나라도 만족하면 허용, 아니면 거부 → `/login?error=AccessDenied`(로그인 화면에 안내 배너). `AUTH_ALLOWED_DOMAINS` 미설정 시 (a) 초대 전용 모드. **주의: 게이트는 항상 활성** — 기존 active 멤버는 통과하나, 멤버도 허용 도메인도 아닌 계정은 차단된다(운영 도메인을 `AUTH_ALLOWED_DOMAINS`에 넣어 자기잠금 방지).
 - 빌드 게이트: `pnpm exec tsc --noEmit && pnpm lint && pnpm test`.
 - 백업: `pnpm backup` (pg_dump + docs/ tar → `~/Backups/teamspace/`, 최근 14개 로테이션). launchd `com.teamspace.backup`이 매일 03:30 자동 실행.
-- 🚀 **배포(맥미니 상시)**: `pnpm deploy:local` = prod 빌드 + launchd 4종(web:3002·worker·backup·health) 설치·재기동. `GET /api/health`(무인증) = `{ok,db,worker}` — health 서비스가 5분마다 확인·자가복구. **3002는 프로덕션**(tailscale funnel로 `https://<your-host>` 공개) — 개발 서버는 `pnpm exec next dev -p 3003`. 코드 변경 반영은 재배포 필요. 로그: `~/Library/Logs/teamspace/`.
+- 🚀 **배포(맥미니 상시)**: `pnpm deploy:local` = prod 빌드 + launchd 4종(web:3002·worker·backup·health) 설치·재기동. `GET /api/health`(무인증) = `{ok,db,worker}` — health 서비스가 5분마다 확인·자가복구. **3002는 프로덕션**(tailscale funnel로 https://teamspace.example.com 공개) — 개발 서버는 `pnpm exec next dev -p 3003`. 코드 변경 반영은 재배포 필요. 로그: `~/Library/Logs/teamspace/`.
 
 ## 태스크 보드 (raw API)
 
@@ -58,7 +59,13 @@ pnpm ws approval add "배포 승인?" --body "main 머지" --kind deploy --high
 7. **체크리스트**(행별): `GET/POST /api/rows/<rowId>/checklist` `{ text }` · `PATCH/DELETE /api/rows/<rowId>/checklist/<itemId>` `{ done?, text? }`.
 8. **댓글**(행별): `GET/POST /api/rows/<rowId>/comments` `{ body }`(작성자=현재 사용자). 태스크 상세 드로어의 체크리스트/댓글 탭이 이걸 사용.
 
-> **속성/옵션 API**(W5): `POST /api/databases/<id>/properties {name,type,config?}` · `PATCH .../properties/<propId> {name?, addOption:{name,color?}, renameOption:{id,name}}` · `DELETE`. CLI: `board prop add|opt|rm`. 뷰 변경 API는 아직 없음. · 칸반: `/p/<boardId>?view=kanban`, 테이블: `?view=table`.
+> **relation 속성(격차 C2)**: `POST /api/databases/<id>/properties {name, type:"relation", config:{targetDatabaseId}}` — **대상 보드 필수**(같은 보드를 가리켜도 된다: '선행 태스크'). 값은 대상 보드의 **행 id 배열**이고, 행 생성·수정 시 대상 보드에 실재하는 id 인지 검증해 아니면 **400 + unknownRowIds**(조용히 버리지 않는다). 화면에서는 제목 칩으로 보이고, 제목을 못 찾으면 `(삭제된 행)` 으로 남긴다. CLI: `board prop add <boardId> <name> --type relation --target <보드id>`. (C2 이전엔 타입 선언만 있고 생성이 차단돼 있어 **`pnpm ws task block` 이 400 으로 죽어 있었다** — 지금은 동작한다.) multiselect 는 여전히 생성 차단(미구현).
+>
+> **속성/옵션 API**(W5): `POST /api/databases/<id>/properties {name,type,config?}` · `PATCH .../properties/<propId> {name?, addOption:{name,color?}, renameOption:{id,name}}` · `DELETE`. CLI: `board prop add|opt|rm`. **뷰 API**(2026-08-08 신설): `GET/POST /api/databases/<id>/views` `{name, type(table|kanban|gallery|list|calendar|timeline — 뒤 4종은 격차 C1 에서 추가), config?}` · `PATCH/DELETE .../views/<viewId>`. `config` 는 `{sort:{propId,dir}|null, filter:{conj:'and'|'or',rules:[{propId,op,value}]}|null, groupBy, meta[]}` 이고(`op` = eq/ne/contains/notContains/empty/notEmpty/gt/lt/checked/unchecked — 속성 타입별 허용 목록은 `lib/dbFilter.OPS_BY_KIND`)(`meta` = 행 메타 가상 열: `createdAt`·`updatedAt`·`createdBy`·`updatedBy`)(`dateProp`·`endProp` = 달력·타임라인 기준 날짜 속성, 미지정이면 첫 date 속성) **넘긴 키만 병합**된다(정렬만 바꿔도 groupBy 가 살아남는다). 마지막 뷰는 삭제 불가(400). CLI: `view ls|add|set|rm` — `view set <boardId> <viewId> --sort <propId:asc|desc|none>`. · 칸반: `/p/<boardId>?view=kanban`, 테이블: `?view=table`.
+>
+> **집계·서브아이템·의존성(격차 C6)**: ① **열 집계** — 표 아래 줄에서 열마다 함수를 고르면 뷰 `config.agg`(`{propId: fn}`)에 저장되고 칸반 컬럼 머리에도 첫 집계가 표시된다. 함수는 타입별로 다르다(숫자=합계/평균/최소/최대, 체크박스=체크수/비율, 날짜=가장 이른/늦은, 공통=행수/채워짐/비어있음/고유값). 순수 로직 `lib/aggregate.ts` — **평균은 값이 있는 것만 나누고**(빈칸을 0으로 세면 조용히 낮아진다), **값이 없으면 0 이 아니라 `—`**('합이 0'과 구분). `agg` 는 서버가 **열 단위로 병합**한다(통째로 갈아끼우면 두 열을 연달아 바꿀 때 응답 순서가 뒤바뀌며 한쪽이 사라진다 — 실제로 재현됨). ② **서브아이템** — `PATCH /api/rows/<id> {parentRowId}`. 같은 보드여야 하고 **자기 자신·자기 하위는 400**(순환 금지). 표에서 들여쓰기+접기로 보이고, 정렬을 켜면 계층 대신 평평하게 나온다. 순수 로직 `lib/subitems.ts`(부모가 목록에서 빠지면 자식을 **최상위로 올린다** — 필터 때문에 행이 사라지면 안 된다). ③ **의존성** — `선행 태스크` relation(→C2)의 선행 행이 아직 완료가 아니면 행 앞에 `⛔n`. 완료 판정은 상태 옵션 **이름**으로 한다(옵션 id 는 보드마다 다르다).
+>
+> **뷰 6종(격차 C1)**: `table`(인라인 편집) · `kanban`(드래그 이동) · `gallery`(카드 그리드) · `list`(한 줄 요약) · `calendar`(월 격자 — 날짜 속성 기준) · `timeline`(기간 막대 — 시작/종료 날짜). 뒤 4종은 **읽기 중심**이고 편집은 행을 열어서 한다. 달력·타임라인은 날짜 속성이 없으면 그 사실을 화면에 알리고, **날짜가 없어 못 놓은 행 수를 항상 표시**한다(조용히 빠지면 '행이 사라졌다'로 읽힌다). 배치 계산은 순수 함수 `lib/viewLayout.ts`(월 격자·날짜 버킷·막대 좌표) — **시간대 변환을 하지 않는다**(문자열 날짜를 그대로 비교). CLI: `view add <boardId> <이름> --type calendar`, `view set … --date <propId> --end <propId>`.
 
 ## 문서 (file-first)
 
@@ -74,6 +81,62 @@ CLI: `pnpm ws doc new|save|cat|rm|rename|mv|backlinks`. raw API:
 - 보드 화면 헤더의 프로젝트 셀렉트, 사이드바의 폴더/문서 드래그·이름변경·삭제가 모두 위 PATCH/DELETE 사용.
 - ⚠️ 정리/삭제는 가능하면 soft-delete(`Page.deletedAt`), `.md` 파일 보존.
 
+## 공유 범위 — 페이지·프로젝트 권한 (격차 D3)
+
+워크스페이스 3역할 위에 **페이지·프로젝트 단위 접근**이 얹혀 있다. 판정 로직은 순수 함수 `lib/pageAccess.ts`, 라우트가 쓰는 게이트는 `lib/pageGuard.ts`.
+
+- **모델**: 페이지는 기본 `inherit`(위를 따름). `restricted` 로 잠그면 그 페이지와 **자손 전체**가 잠긴다. 프로젝트를 잠그면 그 프로젝트의 페이지 전체가 잠긴다.
+- **더 구체적인 쪽이 이긴다**: 자손의 부여 > 조상의 잠금 · 페이지 > 프로젝트 · 사용자 부여 > 팀 부여.
+- **워크스페이스 역할이 천장**이다. viewer 에게 `edit` 를 부여해도 보기까지 — 부여가 역할 승격 경로가 되면 RBAC 이 뚫린다.
+- **확정 정책 2가지**(2026-08-09): ① **admin 은 우회한다**(잠금 방지 — 이 앱에 '관리자도 못 보는 비밀'은 둘 수 없고, 공유 패널이 그 사실을 표시한다). ② **편집할 수 있으면 공유 범위도 정한다**.
+- **404 vs 403**: 볼 수 없으면 **404**(존재 자체를 숨긴다). 볼 수는 있는데 못 고치면 403.
+- **자기 잠금 방지**: 페이지·프로젝트를 `restricted` 로 바꾸면 **잠근 사람에게 edit 부여가 자동으로 남는다**(작성자·admin 제외). 이게 없으면 editor 가 자기가 건 잠금을 자기가 못 푼다 — 실제로 팀 메인 보드로 겪었고 admin 이 풀어 줘야 했다.
+- **화면 표시**: `GET /api/pages` 가 페이지마다 `restricted`(조상·프로젝트 상속 포함)와 `restrictedSelf`(잠금이 이 페이지에서 시작됨)를 함께 준다(`lib/pageAccess.effectiveRestricted`). 사이드바 트리는 **시작점에만** 자물쇠를 그리고(자손마다 붙이면 트리가 자물쇠로 뒤덮여 안 읽힌다), 평평한 문서 목록은 **상속된 것도** 표시한다(계층으로 유추할 수 없으므로).
+- **알림도 권한을 본다**: 비공개(자기·조상·프로젝트 중 하나라도 restricted) 페이지·보드는 슬랙 채널 알림(`task_*`·`doc_saved`·`comment_added`)을 **발화하지 않는다** — 태스크 제목·코멘트 본문은 그 자체가 내용이라 채널 한 줄로 잠금이 무너진다. 판정은 `isRestrictedPage()`(뷰어 없는 자리용: "볼 수 있나"가 아니라 "아무나 봐도 되나").
+- **막히는 곳**: 단건(문서·보드·행·코멘트·체크리스트·히스토리·백링크·휴지통)뿐 아니라 **목록·집계 전부** — `/api/pages`·검색·개념검색·물어보기·그래프·점검·태스크·내보내기·**`/api/context`(세션 자동 주입)**·`/p/[id]` 서버 렌더까지. `scripts/page-access-coverage.test.ts` 가 Page/DbRow 를 만지는 라우트에 게이트가 있는지 **정적으로 강제**한다(면제는 사유와 함께 등록).
+
+API·CLI:
+
+| 하는 일 | API | CLI |
+|---|---|---|
+| 범위·부여 조회 | `GET /api/pages/<id>/grants` | `pnpm ws page shares <pageId>` |
+| 잠금 전환 | `PATCH .../grants {visibility}` | `pnpm ws page restrict <pageId> <on\|off>` |
+| 부여 | `POST .../grants {userId\|teamId, level}` | `pnpm ws page share <pageId> --user <id>\|--team <id> [--level view\|edit]` |
+| 회수 | `DELETE .../grants?grantId=` | `pnpm ws page unshare <pageId> <grantId>` |
+
+프로젝트도 같은 모양(`/api/projects/<id>/grants`, `pnpm ws project shares|restrict|share|unshare`). 사람에게 부여하면 인앱 알림이 가고, 모든 변경은 활동 로그에 남는다. UI 는 문서·보드 하단 "공유" 패널(잠겨 있으면 열지 않아도 `· 비공개` 배지).
+
+## 내보내기 / 가져오기 (격차 E1·E2 — 데이터 반출입)
+
+> **UI: 설정 › 데이터 반출입**(`components/ws/DataTransfer.tsx`). 내보내기는 첨부 포함 여부만 고르고 내려받고, 가져오기는 **드라이런을 건너뛸 수 없다** — 파일을 고르면 미리보기(형식·문서 수·**보드와 열 타입**·중복·건너뛴 파일·경고)를 먼저 보여주고 그걸 본 뒤에만 실행 버튼이 열린다. 되돌릴 수 없는 벌크 생성이라 확인 없이 실행할 수 있는 자리를 아예 두지 않았다.
+
+둘 다 **editor** 권한이고 활동 로그(`내보냄`·`가져옴`)를 남긴다. admin 을 걸지 않는 이유: editor 는 어차피 개별 API 로 같은 데이터를 읽고 쓸 수 있으니 여기만 막으면 **회수 경로만 사라지고** 실질 보호는 없다. 통제는 역할이 아니라 기록으로 건다.
+
+- **내보내기**: `GET /api/export` → zip. `docs/<프로젝트>/<제목>.md`(문서 본문) · `boards/<보드>.csv` · `attachments/<파일>`(문서가 참조하는 첨부) · `workspace.json`(구조·메타 + **문서 id↔파일 대응표 `documents[]`**, **보드 대응표 `boards[]` = `{id,title,project,file,properties[{name,type,options?}]}`**, 첨부 대응표 `attachments[]`) · `README.md`. CLI: `pnpm ws export [--out <경로>] [--no-attachments]`.
+  - **보드 색인의 `properties`** 가 왕복의 핵이다. CSV 는 타입을 잃어버려서(무엇이 날짜였고 무엇이 select 였는지 알 수 없다) 색인 없이는 되살릴 수 없다 — 행이 한 개인 보드의 select 는 추론으로 절대 못 맞힌다.
+  - **첨부(E4)**: 본문의 `/uploads/<ws>/<파일>` 링크는 `../../attachments/<파일>` **상대경로로 바뀌어** 담긴다 — 그래야 서버 없이 옵시디언·VS Code 에서 그림이 보인다. 어느 문서도 참조하지 않는 업로드는 담지 않는다(전체 첨부 백업은 `pnpm backup` 담당). 디스크에서 사라진 첨부는 `workspace.json` 의 `attachmentsMissing` 에 남는다. 첨부를 빼려면 `?attachments=0`. 휴지통 문서는 언제나 빠진다.
+- **가져오기**: `POST /api/import` (multipart `file`=zip, 최대 50MB·문서 2000건). 폼 필드 `projectId`(전부 이 프로젝트로 강제) · `createProjects=1`(zip 의 폴더 이름과 같은 프로젝트가 없으면 생성 — 기본은 **만들지 않고 미분류**) · `skipExisting=1`(같은 프로젝트에 같은 제목이 있으면 건너뜀). CLI: `pnpm ws import <zip경로> [--project <id>] [--dry-run] [--create-projects] [--skip-existing]`.
+  - **`?dryRun=1` 을 먼저 쓴다.** 수백 건을 만드는 되돌릴 수 없는 작업이라, 생길 문서·프로젝트·건너뛴 파일·중복(`duplicate`)을 실행과 **같은 계산**(`lib/importPlan`)으로 먼저 보여준다.
+  - 받는 형식 셋(`format` 으로 응답): `teamspace`(우리 export — `workspace.json` 색인으로 제목·프로젝트를 정확히 복원) · `notion`(파일·폴더명의 32자리 해시를 뗀다) · `markdown`(첫 폴더=프로젝트). 공통 루트 폴더 한 겹은 벗겨내고 경고로 알린다.
+  - 제목 우선순위: 색인 > 프론트매터 `title` > 첫 `# h1` > 파일명. 프론트매터는 **본문에 그대로 남는다**(PageEditor 가 보존하므로 떼어낼 이유가 없다). 같은 프로젝트 안에서 겹치면 ` (2)`.
+  - **첨부(E4)**: 본문이 가리키는 목적지 중 **zip 안에 실제로 있는 파일**을 첨부로 보고 `public/uploads/<ws>/` 로 복원한 뒤 링크를 새 URL 로 갈아끼운다. `attachments/` 라는 이름을 특별대우하지 않으므로 노션처럼 md 옆에 그림이 놓인 형태도 같은 규칙으로 걸린다. 아무도 참조하지 않는 파일은 이유와 함께 `skipped[]`. 파일명은 `<내용해시8>-<이름>`(`/api/upload` 와 같은 규칙)이라 같은 그림을 몇 번 가져와도 디스크 사본이 늘지 않는다.
+  - **문서 계층(E2 후속)**: zip 의 폴더 구조를 그대로 살린다. 프로젝트와 파일 사이의 폴더가 **자식을 가진 doc 페이지**로 만들어지고 `parentId` 로 이어진다(응답 `counts.folders`·`foldersCreated`). 폴더 자리에 같은 이름의 문서가 있으면(노션의 `스펙.md` + `스펙/`) **빈 폴더를 만들지 않고 그 문서를 부모로 재사용**한다 — 안 그러면 문서가 둘로 갈라진다. 문서를 먼저 다 만들고 마지막에 부모를 잇는 순서라 생성 순서 문제가 없다.
+  - **보드(CSV) (E2 후속)**: `*.csv` 는 **보드**가 된다(`kind:"database"` 페이지 + 속성 + 행 + `표`/`보드` 뷰). 응답: `counts.boards`·`boardRows`·`boardsCreated`·`boardRowsCreated`, 목록은 `boards[]`(제목·프로젝트·열·행 수·`linkedDocs`). 한 번에 보드 행 5000건, CSV 한 개당 2000행까지.
+    - **열 타입**: `workspace.json` 의 `boards[].properties` 가 있으면 그걸 그대로 쓰고(우리 export 왕복), 없으면 값을 보고 추론한다 — checkbox(`Yes/No`·`true/false`·`예/아니오`) → number(`1,200`·`-1.5`; `1/0` 은 숫자다) → date → select → text. **첫 열은 항상 text**(제목 열이 select 가 되면 행마다 옵션이 늘어난다). 확신이 없으면 text 로 남긴다 — text 는 원문을 보관하므로 잃는 게 없다.
+    - **읽지 않는 날짜**: `08/09/2026`(월·일 순서를 알 수 없다) · 노션 날짜 범위(`A → B`). 그 열은 통째로 text 가 된다. 읽는 것: ISO · `2026/8/9` · `August 9, 2026`(시각 붙어도 됨) · `2026년 8월 9일`.
+    - **multiselect·person·relation 은 만들지 않는다**(text 로 낮추고 경고). 노션의 다중 선택(`"버그, 프론트"`)도 콤마를 보고 text 로 남긴다 — 한 덩어리 옵션으로 만들면 뜻이 망가진다.
+    - **노션 데이터베이스**: `Tasks <hash>.csv`(보이던 뷰) + `Tasks <hash>_all.csv`(전체 행)가 함께 오면 **`_all` 만** 쓴다(다른 쪽은 `skipped[]`). 같은 이름 폴더의 행 문서(`Tasks <hash>/행.md`)는 그 행의 본문(`DbRow.contentPageId`)이 되고, 빈 폴더를 만들지 않고 **보드를 부모로** 쓴다. 제목이 같은 행이 둘이면 먼저 나온 행만 문서를 가져간다(`contentPageId` 가 unique).
+    - 순수 로직은 `lib/csvBoard.ts`(CSV 파싱·타입 추론·값 변환·`boardRowProps`). select 값은 옵션 **id** 로 저장되고, 옵션 id 를 못 찾으면 이름을 넣지 않고 비운다.
+  - 만들지 않는 것: 숨김 파일·`__MACOSX`·미참조 첨부·빈 CSV — 전부 `skipped[]` 에 이유와 함께 남는다.
+  - **큰 zip**: `/api/import` 는 **미들웨어 matcher 에서 빠져 있다**(`middleware.ts`). 엣지 미들웨어가 요청 본문을 버퍼링하면서 ~10MB 넘는 multipart 를 깨뜨렸기 때문이다(8MB 통과·10MB 실패 → `Failed to parse body as FormData`). 라우트 첫 줄의 `requireCtx("editor")` 가 본문을 읽기 전에 막으므로 인증은 그대로고, `scripts/authz-coverage.test.ts` 가 "matcher 에서 뺀 /api 경로는 requireCtx 를 쓴다" 를 정적으로 강제한다. 크기는 `content-length` 로 먼저(413), `file.size` 로 다시 본다. **17MB 짜리 우리 워크스페이스 전체 export 왕복을 확인했다**(보드 5개·행 1164건).
+  - 순수 로직은 `lib/importPlan.ts`(정규화·형식판별) + `lib/unzip.ts`(zip 읽기 — `lib/zip.ts` 작성기의 짝. CRC 검증·엔트리수·해제총량 상한으로 신뢰 못 할 zip 을 막는다) + `lib/assets.ts`(링크 추출·상대경로 해석·치환·업로드 파일명 — 내보내기·가져오기·업로드 셋이 공유).
+- **첨부 서빙**: `GET /api/uploads/<ws>/<파일명>` (`app/api/uploads/[...path]/route.ts`, OSS 후속). 저장 위치는 **레포 밖** — `DATA_DIR/uploads`(`lib/dataDir`: env `TEAMSPACE_DATA_DIR`, 기본 `<cwd>/data`; `.gitignore` 등재). 데이터 루트는 문서·본문 저장소와 **같은 한 곳**에서 정한다 — 첨부만 따로 env 를 읽으면 옮길 때 한쪽만 옮겨진다. 본문에 저장된 링크는 `/uploads/<ws>/<파일>` 그대로 두고 `next.config.ts` 의 **beforeFiles** rewrite 가 이 라우트로 보낸다(afterFiles 면 `public/uploads/` 의 기존 파일이 정적 서빙으로 먼저 나가 인증을 지나친다). CLI: `pnpm ws upload get <url|<ws>/<파일명>> [--out <경로>]`.
+  - 왜 라우트로 옮겼나: ① `public/` 정적 서빙은 **인증이 없어서** URL 만 알면 남의 워크스페이스 첨부도 받을 수 있었다(문서에 자물쇠를 달아 두고 그 문서의 그림은 공개였다). ② `public/` 을 빌드 산출물로 다루는 배포에서는 **런타임에 쓴 파일의 서빙이 보장되지 않는다**.
+  - 게이트: `requireCtx("viewer")` + **다른 워크스페이스는 404**(403 이 아니다 — 존재도 알리지 않는다) + 경로 가드(`lib/uploadPaths.safeUploadSegments`: 정확히 두 칸·탈출·구분자·제어문자·숨김파일 거절, `uploadFilePath` 로 한 겹 더).
+  - 타입: `html`·`js`·`xhtml` 은 **절대 그 타입으로 내보내지 않는다**(같은 출처 저장형 XSS) — 목록에 없는 확장자는 전부 `octet-stream` + `attachment`. 그림·PDF·미디어만 `inline`. `nosniff` + CSP(`svg` 는 `sandbox` 까지, png·pdf 는 내장 뷰어를 죽이지 않도록 스크립트·객체만 차단). 파일명이 내용 해시라 `private, max-age=1y, immutable`.
+  - **이미 올라간 파일은 옮기지 않는다.** 읽기는 새 위치 → `public/uploads` 순서로 폴백한다(서빙·내보내기 둘 다). 백업(`pnpm backup`)은 두 위치를 각각 `uploads.tar`·`uploads-legacy.tar` 로 담는다.
+- **백업**: `pnpm backup` = Postgres 덤프 + `docs.tar.gz` + **`uploads.tar`(첨부, E4 에서 추가)**. 그 전엔 DB 는 매일 백업되는데 그 DB 가 가리키는 첨부 파일은 아니어서, 디스크를 잃으면 행은 살아 있고 그림만 사라졌다.
+
 ## 프로젝트 / 멤버 / 워크스페이스
 
 - 프로젝트: `GET/POST /api/projects` `{ name, short?, color?(blue/orange/purple/green/red/gray), description?, leadId?, repoUrl?, repoPath?, repoBranch?, docsDir? }` · `PATCH/DELETE /api/projects/<id>`.
@@ -84,6 +147,8 @@ CLI: `pnpm ws doc new|save|cat|rm|rename|mv|backlinks`. raw API:
 
 ## 문서 허브 surface (모두 같은 패턴: GET 목록 / POST 생성 / [id] PATCH·DELETE)
 
+> PATCH 는 **부분 수정**이다 — 넘긴 필드만 바뀐다(`undefined`=건드리지 않음, 빈 문자열=비움). `projectId`에 빈 문자열을 주면 프로젝트 해제, 없는 프로젝트면 400.
+
 | 종류 | 엔드포인트 | 핵심 필드 | 목록 키 |
 |---|---|---|---|
 | 결정 | `/api/decisions` | title, context?, decision?, status(proposed/accepted/superseded), projectId? | decisions |
@@ -92,7 +157,7 @@ CLI: `pnpm ws doc new|save|cat|rm|rename|mv|backlinks`. raw API:
 | 용어집 | `/api/glossary` | term, definition, sourcePageId?(provenance) | terms |
 | 변경이력 | `/api/changelog` | version?, title, body? | entries |
 | 데이터모델 | `/api/entities` | name, description?, fields?, sourcePageId?(provenance) | entities |
-| DoD | `/api/dod` | text / `[id]` PATCH `{done}` 토글 | items |
+| DoD | `/api/dod` | text · `[id]` PATCH `{done?, text?}` (done 토글 + 문구 수정) | items |
 | 온보딩 | `/api/onboarding` | title, body? | steps |
 
 - 필터: `/api/decisions·risks·qa` 는 `?projectId=<id>` 지원. `/api/schedules` 는 `?databasePageId=<id>`.
@@ -101,14 +166,37 @@ CLI: `pnpm ws doc new|save|cat|rm|rename|mv|backlinks`. raw API:
   - 엔티티: `POST /api/entities/extract {pageId}` → `proposals:[{name,description,fields,status,existingId?,existingDescription?}]`. 수락 `POST /api/entities {name,description?,fields?,sourcePageId}`. `pnpm ws entity extract <pageId>`. 데이터모델 화면 "문서에서 추출".
 - **provenance 태깅**(주장 신뢰도, 키리스): `POST /api/provenance {pageId}` → 로컬 LLM 으로 문서의 핵심 주장을 **추출/추론/모호**로 분류 → `{ ok, claims:[{claim,tag,note}], counts:{추출,추론,모호} }`. 순수 로직 `lib/provenance.ts`(buildProvenancePrompt·parseProvenance·countTags). `pnpm ws provenance <pageId>`. LLM 미설정 시 503. 문서 리더의 "신뢰도 분석" 패널.
 - **웹 클리퍼**(키리스 자동 분류·요약): `POST /api/clip {url, title?, text, html?}` → 로컬 LLM 으로 본문 요약 + 기존 프로젝트 자동 분류 → 출처 포함 doc 페이지 생성(분류된 projectId 배정) → `{ ok, pageId, projectId, projectName, summary, mode("classified"|"plain") }`. LLM 없으면 원문만 저장(plain). 순수 로직 `lib/clip.ts`(buildClassifyPrompt·parseClassification). `pnpm ws clip <url> --text "<본문>" [--title <t>]`. 브라우저 진입점은 북마클릿(`/clip` 페이지로 수집 데이터 전달, 동일 출처 POST).
-- 부가: `GET /api/graph`(위키 그래프) · `GET /api/lint`(깨진 링크·고아) · `GET /api/search?q=`.
+- 부가: `GET /api/graph`(위키 그래프) · `GET /api/lint`(깨진 링크·고아).
+- **검색**: `GET /api/search?q=&projectId=&kind=doc,board,decision&from=&to=&limit=` — 랭킹(제목 정확일치 > 앞부분 > 포함 > 본문 다수 > 본문 1회 + 최근 수정 약가산)은 `lib/searchRank.ts`(순수). 응답 `{q, indexed, total, results[], docs[], decisions[]}` — `results` 가 통합 랭킹, `docs/decisions` 는 기존 화면 호환용. **`indexed:false` = 질의가 3글자 미만이라 트라이그램 인덱스를 못 탔다**(순차 스캔). 인덱스는 `pg_trgm` GIN(마이그 `20260808140000`). `projectId=__none__` 은 미분류만. CLI: `ws search <q> [--project|--kind|--from|--to|--limit]`.
 - **비동기 LLM 잡**(범용 큐, editor 이상): `POST /api/llm/classify {kind, payload, callbackUrl, callbackSecret?}` → 즉시 `202 {jobId}`, 실제 처리는 워커(`dispatchLlmJobs`, `lib/llmjob.ts`)가 맡아 완료 후 `callbackUrl` 로 `{jobId,kind,ref,ok,result}` POST(Bearer `callbackSecret`, 있으면). 현재 지원 kind: `feedback_classify`(`payload:{ref,body,agendas:[{id,title,summary?}]}`). `pnpm ws llm classify --body <텍스트> --callback <url>`(디버그용 최소 명령 — callback 필수, 결과가 원문 포함으로 그 URL에 POST되므로 신뢰할 수 있는 수신처만).
+  - **콜백 URL 은 SSRF 게이트를 지난다**(`lib/callbackUrl.ts`, 피드백허브 후속). 서버가 남이 준 주소로 요청을 보내는 기능이라 검사가 `^https?://` 하나였던 것을 고쳤다. 막는 것: http(s) 아닌 스킴 · `user:pw@` 자격증명 · 제어문자 · 루프백·사설망·링크로컬(169.254 메타데이터)·CGNAT(=tailscale 100.64/10)·IPv6 사설 · `.local`/`.internal`/`localhost` 계열 · **8진수·16진수·정수로 위장한 IP**(`http://2130706433/` = 127.0.0.1). **검사는 접수(라우트)와 발송(워커) 양쪽**에서 한다 — 한쪽만 막으면 이미 쌓인 행이 나가거나 부른 쪽이 거절을 모른다. 안 하는 것: **DNS 해석**(공격자 도메인이 사설 IP 를 가리키는 rebinding 은 allowlist 를 설정해야 닫힌다).
+  - 환경변수 2개(`lib/llmjob.callbackPolicy`): `LLM_CALLBACK_ALLOWED_HOSTS`(콤마 구분 호스트. 하위 도메인 포함 허용. **비면 "내부 차단만"** 이라 기존 공개 콜백은 그대로 동작한다. 실제 수신처는 `callback.example.com` 하나다) · `LLM_CALLBACK_ALLOW_PRIVATE=true`(로컬 개발에서 자기 서버로 콜백받을 때만).
+  - **콜백이 실패해도 `result` 는 저장한다.** 전엔 `result: ok ? … : undefined` 라 파싱까지 끝난 분류를 버렸고, 재시도마다 같은 프롬프트로 LLM 을 다시 불렀다(콜백 쪽 장애 = 같은 분류를 3번 과금). 이제 `result` 가 있으면 LLM 을 건너뛰고 재전송만 한다. 콜백 게이트에 걸린 잡은 재시도해도 달라질 게 없으니 attempts 를 태우지 않고 즉시 `failed`.
+  - **보관 30일**: 워커가 한 시간에 한 번 `purgeOldLlmJobs()` 로 `done|failed` + `updatedAt` 30일 경과 행을 지운다(`JOB_RETENTION_DAYS`). payload 에 사장님 원문이 들어 있어 영구보관할 이유가 없다.
+
+## 모바일 (격차 F2)
+
+기존 `@media` 는 사이드바를 드로어로 바꾸는 **구조**만 다뤘다(그래서 폭 넘침은 원래 없었다). F2 에서 채운 건 **손으로 쓸 수 있는가**: 탭 타겟 40px+(사이드바 35→40, 햄버거 44), **입력 글자 16px**(그 미만이면 iOS 사파리가 포커스 시 화면을 확대해 버린다), 안전영역(노치·홈 인디케이터), 표·칸반 관성 스크롤+스냅, 표 첫 열 고정, 드로어 전체 폭, 폰에서 밀도 컨트롤 숨김. 터치 판정은 폭이 아니라 `(hover: none) and (pointer: coarse)` 로도 본다(호버로만 보이던 버튼은 터치에서 영영 안 보인다).
+
+⚠️ `.ws-main > :first-child` 같은 **일반 선택자로 위쪽 여백을 주지 말 것** — 각 화면이 이미 햄버거를 피할 여백(`.ws-db { padding: 60px … }`)을 갖고 있어서, 덮으면 제목이 햄버거 밑으로 들어간다(실제로 겪음). 검증은 같은 출처 iframe 을 390px 로 띄워서 한다(창 리사이즈가 안 먹는 환경이 있고, iframe 은 자체 뷰포트라 미디어쿼리가 정상 적용된다).
+
+## PWA·오프라인 (격차 F1)
+
+- `app/manifest.ts` → `/manifest.webmanifest`(설치형, `start_url=/dashboard` — 루트는 첫 페이지로 넘기는 경유지라 설치 아이콘이 남의 문서로 들어가면 안 된다) · 아이콘 `public/icons/*`(192·512·maskable·apple-touch).
+- 서비스 워커 소스는 `app/sw.js/worker.js`, 서빙은 `app/sw.js/route.ts`(버전 주입). **`public/` 에 두면 안 된다** — 정적 파일이 같은 경로의 라우트를 가려 버전이 안 박힌 원본이 서빙된다(실제로 겪음).
+- **워크스페이스 데이터는 절대 캐시하지 않는다.** `/api/*` 는 워커가 손대지 않는다 — 낡은 태스크 상태는 없느니만 못하다. 캐시는 ① 불변 정적 자산 ② `/offline` 안내뿐이고, 화면(HTML)은 네트워크 우선.
+- **킬 스위치**: 주소에 `?sw=off` → 등록 해제 + 캐시 삭제 + **그 선택을 기억**(localStorage `ws-sw`), `?sw=on` 으로 복귀. 기억하지 않으면 다음 방문에 곧바로 재등록돼 탈출구가 되지 못한다(검증 중 확인).
+- 미들웨어 matcher 에서 `sw.js`·`manifest.webmanifest`·`icons`·`offline` 을 제외한다 — 워크스페이스 데이터가 없고, 로그인 리다이렉트가 걸리면 워커 등록이 MIME 오류로 실패한다.
+
+## 키보드
+
+- **커맨드 팔레트: `Cmd/Ctrl+K`** — 문서·보드로 이동하거나 화면(검색·대시보드·프로젝트·설정 등)을 연다. `↑↓` 이동 · `⏎` 열기 · `esc` 닫기 · `Ctrl+N/P` 도 이동. 매칭·랭킹은 `lib/palette.ts`(순수): 연속 부분문자열이 1순위, 흩어진 글자(subsequence)가 2순위, 순서가 어긋나면 안 잡는다. 후보는 팔레트를 열 때 `/api/pages` 를 한 번만 받아 클라이언트에서 거른다.
 
 ## MCP 서버 (W8 — 네이티브 접점)
 
-- **이 레포의 `.mcp.json`이 `teamspace` MCP 서버를 자동 등록** — context_get·task_list/claim/add/update·board_get·doc_list/read/save/create/comment·lesson_list/add·decision_add·inbox_list·activity_list·search 툴 제공(`scripts/mcp-server.ts`). 다른 레포/머신: `claude mcp add teamspace -- pnpm --dir <레포경로> exec tsx scripts/mcp-server.ts`. 인증은 `~/.claude/teamspace.json`.
+- **이 레포의 `.mcp.json`이 `teamspace` MCP 서버를 자동 등록** — **18개 툴** 제공(`scripts/mcp-server.ts`): `context_get` · `task_list/claim/update/add` · `board_get` · `doc_list/read/save/create/comment` · `lesson_list/add` · `decision_add` · **`propose`** · `inbox_list` · `activity_list` · `search`. (종전 이 목록에 `propose` 가 빠져 있었다 — `scripts/mcp-server.test.ts` 가 이제 도구↔라우트 패리티를 검증한다). 다른 레포/머신: `claude mcp add teamspace -- pnpm --dir <레포경로> exec tsx scripts/mcp-server.ts`. 인증은 `~/.claude/teamspace.json`.
 - MCP 툴이 있으면 그걸 우선 사용, 없으면 이 스킬의 CLI/raw API 로.
-- **멱등성(W8)**: rows·pages·schedules·approvals·comments POST 는 `Idempotency-Key` 헤더 지원 — 재시도 시 같은 키를 보내면 이중 생성 없이 저장된 응답 반환.
+- **멱등성**: `Idempotency-Key` 헤더를 지원하는 POST 는 정확히 이 7개다 — `databases/<id>/rows` · `pages` · `pages/<id>/comments` · `rows/<id>/comments` · `schedules` · `approvals` · `proposals`. 재시도 시 같은 키를 보내면 이중 생성 없이 저장된 응답을 돌려준다. (열거가 모호해 행 댓글이 빠진 걸 아무도 몰랐다 — 2026-08-07 지원 추가 + 목록 정정)
 - **이벤트 푸시(W8)**: `GET /api/events` SSE(브라우저 쿠키 전용) — UI 자동 갱신이 이벤트 기반. 에이전트는 폴링/MCP 유지.
 - **토큰 체인(W8)**: ws CLI·훅·MCP 모두 `WS_TOKEN` > `~/.claude/teamspace.json`. 레거시 공유 토큰은 폐기 완료 — 항상 에이전트 토큰(wst_)만 쓴다. 새 에이전트/머신은 `pnpm ws token add <이름>` 발급 후 teamspace.json 에 저장.
 
@@ -121,16 +209,18 @@ CLI: `pnpm ws doc new|save|cat|rm|rename|mv|backlinks`. raw API:
 - **라우트룰(cwd→프로젝트)**: `GET /api/route-rules {cwdPrefix, projectId?, priority?}`(인증만) · `POST`(**editor** — 설치기 재실행이 페어링 발급 editor 토큰으로 호출하므로 admin→editor 완화) · `DELETE /api/route-rules/<id>`(admin 유지). CLI: `pnpm ws route-rule add|ls|rm`.
 - AI 연결 화면(`/aiconnect`)이 이 스냅샷 미리보기·복사·`.md` 내보내기 + 연결 방법(이 스킬·`pnpm ws`·읽기 API·file-first `docs/*.md`)을 보여준다. 세션 탐색기(M4 `/api/sessions`·`/api/ingest`)는 보조.
 - **Vault Q&A**: `GET /api/ask?q=<질문>` → 문서·결정 본문에서 근거 패시지를 찾아 답한다. `{ question, answer, mode("llm"|"extractive"|"empty"), sources:[{id,title,kind(doc|decision),passage,heading}] }`. 랭킹 순수로직 `lib/ask.ts`(tokenize·scorePassage·rankSources), 합성 `lib/llm.ts`. UI: 검색 화면의 "물어보기" 토글. `pnpm ws ask "<질문>"`.
+  - **벡터 유사도(격차 G2)**: `GET /api/search/similar?pageId=<id>` (이 문서와 비슷한 문서) 또는 `?q=<질의>`. 순수 로직 `lib/vector.ts`(TF-IDF + 코사인, 한글은 2글자 n-gram 보조, 제목 가중 3배). **신경망 임베딩이 아니다** — 응답의 `method: "tfidf-cosine"` 이 그 사실을 밝힌다. 글자가 안 겹치는 동의어("환불"↔"리펀드")는 못 잇고 그건 아래 개념검색이 맡는다. 대신 **질의어 없이 문서 자체로 이웃을 찾는 것**이 여기서만 된다. 색인은 요청마다 만든다(수백 건 규모에선 수십 ms, 대신 방금 고친 문서가 바로 반영된다). D3 로 못 보는 문서는 색인에서 제외. UI: 문서 리더 하단 "비슷한 문서". CLI: `pnpm ws similar <pageId>` / `--q "<질의>"`. *진짜 임베딩은 외부 임베딩 API 키가 필요해 보류 — `vectorize()` 만 갈아끼우면 되도록 갈라 뒀다.*
   - **개념 검색**(임베딩 없이 키리스): `GET /api/search/concept?q=` → 로컬 LLM(`lib/llm.complete`)으로 검색어를 동의어·연관 개념으로 확장한 뒤 합집합 토큰으로 본문 검색·랭킹 → `{ query, expanded[], terms[], mode("expanded"|"plain"), results:[{id,title,kind,passage,heading}] }`. LLM 없으면 원 토큰만(plain)으로 graceful. 순수 로직 `lib/semsearch.ts`(parseExpansion·mergeTerms). `pnpm ws concept "<검색어>"`. (진짜 벡터 임베딩 B4 는 외부 임베딩 API 필요 — 이건 그 키리스 대안.)
-  - **LLM 프로바이더**(`ASK_LLM_PROVIDER`=api|cli|off, 기본 자동): `api`=`ANTHROPIC_API_KEY`로 Anthropic API(모델 `ANTHROPIC_MODEL` 기본 sonnet-4-6). `cli`=**키 없이** 로컬 `claude` CLI 헤드리스(`-p`, 툴 비활성·1턴, 모델 `ASK_CLAUDE_MODEL` 기본 haiku-4-5, 타임아웃 `ASK_CLAUDE_TIMEOUT_MS` 기본 30s)로 기존 Claude Code 로그인 사용. 자동 결정: 키 있으면 api, 없으면 cli(바이너리 부재 시 추출형 폴백). 어느 경로든 실패하면 `mode=extractive` 발췌로 안전 폴백.
+  - **LLM 프로바이더**(`ASK_LLM_PROVIDER`=api|cli|off, 기본 자동): `api`=`ANTHROPIC_API_KEY`로 Anthropic API(모델 `ANTHROPIC_MODEL` 기본 sonnet-4-6). `cli`=**키 없이** 로컬 `claude` CLI 헤드리스(`-p`, 툴 비활성·1턴, 모델 `ASK_CLAUDE_MODEL` 기본 haiku-4-5, 타임아웃 `ASK_CLAUDE_TIMEOUT_MS` 기본 **120s**(lib/llm.ts:25 — 문서엔 30s 로 적혀 있었다))로 기존 Claude Code 로그인 사용. 자동 결정: 키 있으면 api, 없으면 cli(바이너리 부재 시 추출형 폴백). 어느 경로든 실패하면 `mode=extractive` 발췌로 안전 폴백.
 
 ## 협업 (W6): 인박스 · 활동 피드 · 코멘트 · 업로드
 
 - **알림 인박스**: `GET /api/notifications[?unread=1]` · `PATCH /api/notifications/<id> {read}` · `POST /api/notifications {readAll:true}`. 적재 시점: 태스크 배정(담당자 이름→멤버 매칭)·@멘션·승인 요청(admin들)·마감. UI `/inbox`(사이드바 미읽음 배지), CLI `inbox ls [--unread]`/`inbox read [id]`.
 - **활동 피드(경량 감사로그)**: 문서·태스크·결정·승인·업로드 행위가 Activity 로 기록. `GET /api/activity?limit=&type=&actor=`, CLI `activity ls`, 대시보드 "최근 활동" 패널(에이전트 실명 표시).
-- **문서 코멘트**: `GET/POST/DELETE(?commentId=) /api/pages/<id>/comments {body}` — 본문 `@이름` 은 멤버 매칭되어 인앱 알림 + comment_added 규칙 발화. 문서 리더 하단 코멘트 섹션, CLI `doc comment <pageId> --body`.
+- **문서 코멘트**: `GET/POST/DELETE(?commentId=) /api/pages/<id>/comments {body}` · **인라인 코멘트(격차 D2)**: POST 에 `anchor:{quote,prefix,suffix}` 를 실으면 그 문구에 달린다. **글자 오프셋을 저장하지 않는다** — 문서가 편집되면 전부 어긋나므로 인용문+앞뒤 문맥을 저장하고 조회할 때마다 현재 본문에서 다시 찾는다(`lib/anchor.ts`). GET 응답에 `inline`·`range`·`orphan` 이 붙고, **못 찾으면 엉뚱한 곳에 붙이지 않고 `orphan:true`**(억지로 붙이면 맞는 것처럼 보여서 더 나쁘다). 해결은 `PATCH .../comments?commentId= {resolved}` — 지우지 않고 접는다. UI: 문서 리더에서 문구를 드래그 선택하면 그 문장에 달린다. CLI: `doc comment <id> --body "…" --quote "<본문 문구>"`, `doc comment resolve <id> <commentId> [--undo]`. — 본문 `@이름` 은 멤버 매칭되어 인앱 알림 + comment_added 규칙 발화. 문서 리더 하단 코멘트 섹션, CLI `doc comment <pageId> --body`.
 - **파일 업로드**: `POST /api/upload` (multipart `file`, 20MB) → `{url, markdown}` — public/uploads/<ws>/ 로컬 저장, 반환 마크다운을 문서에 붙여 사용.
 - **자동 갱신**: 보드·문서 목록·대시보드·인박스는 30초 폴링+창 포커스 시 refetch(`lib/useAutoRefresh`). 푸시(SSE)는 W8.
+- **프레즌스(격차 D4)**: `POST /api/presence {pageId, editing?}`(하트비트 15초) · `GET /api/presence?pageId=` → `{viewers:[{userId,name,editing}]}`(자기 자신 제외, TTL 30초). **DB 에 쓰지 않는다** — 웹 프로세스 메모리에 두고 TTL·상한으로 정리한다(하트비트를 영구 저장할 이유가 없고 재시작되면 다시 모인다). *전제: 웹 인스턴스가 하나다(맥미니 launchd). 여러 개로 늘리면 공유 저장소로 옮겨야 한다.* 숨은 탭은 하트비트를 쉬고(배경 탭까지 '보는 중'이면 거짓말), 탭으로 돌아오면 즉시 갱신한다. 못 보는 페이지에는 존재를 알릴 수 없다(D3 연동). UI: 문서·보드 상단 아바타 + "N 편집 중". CLI: `pnpm ws presence <pageId>`.
 - **의존관계(최소)**: `pnpm ws task block <rowId> --by <선행rowId>` — "선행 태스크"(relation) 속성을 자동 생성해 rowId 배열로 기록(컨벤션).
 
 ## 승인 / 리마인더 / 슬랙 / 세션
@@ -141,16 +231,16 @@ CLI: `pnpm ws doc new|save|cat|rm|rename|mv|backlinks`. raw API:
 - 슬랙: `GET/PATCH/DELETE /api/slack`, `POST /api/slack/connect {token}`, `POST /api/slack/test`. 토큰은 `AUTH_SLACK_BOT_TOKEN` env 우선, 없으면 DB. 슬랙 인터랙션 콜백: `POST /api/slack/interactions`.
 - 발송 내역: `GET /api/slack/log?kind=&limit=` → `{ logs[], total, failed, sentToday }`. `postMessage`/`sendApproval` 발송 시 `NotifLog`에 자동 기록(kind: manual/approval/reminder/test/notification). 슬랙 화면 '알림 발송 내역' 섹션·대시보드 '오늘 보낸 알림'에서 사용.
 - 채널 목록: `GET /api/slack/channels` → `{ ok, channels:[{id,name}], error? }`(공개 채널, `channels:read` 스코프 필요). 슬랙 화면 채널 입력의 피커(datalist)·`pnpm ws slack channels`.
-- 자동 알림 규칙: `GET/POST /api/notif-rules` `{ event(task_created/task_status/task_assigned/task_due), targetId(채널), projectId?(프로젝트 스코프, 없으면 전역) }` · `PATCH /api/notif-rules/<id> {enabled}` · `DELETE`. **4개 이벤트 전부 실발화**(W5): 생성(rows POST)·상태 변경(rows PATCH)·담당자 변경(PATCH·claim)·마감(워커 일일 스캔, `due_marker`로 하루 1회 중복 방지). dm 타깃은 미지원(400). **매칭 우선순위: 프로젝트 규칙 우선, 없으면 전역**. CLI: `pnpm ws notif-rule add <event> <channel> [--project <projectId>]`. 슬랙 화면 '자동 알림 규칙' 섹션.
+- 자동 알림 규칙: `GET/POST /api/notif-rules` `{ event(task_created/task_status/task_assigned/task_due/comment_added/doc_saved), targetId(채널), projectId?(프로젝트 스코프, 없으면 전역) }` · `PATCH /api/notif-rules/<id> {enabled}` · `DELETE`. **6개 이벤트 전부 실발화**: 생성(rows POST)·상태 변경(rows PATCH)·담당자 변경(PATCH·claim)·마감(워커 일일 스캔, `due_marker`로 하루 1회 중복 방지)·댓글(pages/[id]/comments POST)·문서 저장(pages/[id] PUT). 뒤 둘은 발화 코드가 있었는데 규칙 생성 화이트리스트에서 빠져 있어 무동작이었다(2026-08-07 수정). dm 타깃은 미지원(400). **매칭 우선순위: 프로젝트 규칙 우선, 없으면 전역**. CLI: `pnpm ws notif-rule add <event> <channel> [--project <projectId>]`. 슬랙 화면 '자동 알림 규칙' 섹션.
 - 세션(M4): `POST /api/ingest`(HMAC 또는 **에이전트 토큰**) → `GET /api/sessions`, `/api/sessions/<id>`. items 의 `externalRef` 는 중복 적재 스킵(멱등). **active 세션이 24h 무동기면 워커가 ended 처리**(W8). 세션 종료 훅이 팀 프로젝트 cwd 에 한해 요약 메타(첫 프롬프트 1줄·관찰 수)만 적재 — 관찰 원문은 로컬(agentmemory)에만.
-- 슬랙 컨펌 발송/수신 스크립트: `scripts/slack-confirm.ts`(`#workspace-confirm`).
+- 슬랙 컨펌 발송/수신 스크립트: `scripts/slack-confirm.ts` — **approvals API 래퍼**(버튼 카드 발송, 기본 채널 `#workspace-confirm` C000WORKSPACE). `--wait` 로 status 폴링(exit: approved=0/additional=2/rejected=3/timeout=124), `--check <approvalId>` 로 상태 조회. 인증은 `pnpm ws` 와 같은 토큰 체인.
 
 ## 새 머신 부트스트랩(curl|sh)
 
 새 맥/서버에 에이전트 환경을 세팅할 때 한 줄로 페어링→토큰 발급→route-rule 등록까지 끝낸다.
 
 ```bash
-curl -fsSL https://<your-host>/setup.sh | sh -s -- https://<your-host>
+curl -fsSL https://teamspace.example.com/setup.sh | sh
 ```
 
 플로우:
@@ -167,6 +257,13 @@ curl -fsSL https://<your-host>/setup.sh | sh -s -- https://<your-host>
 | `POST /api/pair/approve` | 브라우저 로그인 세션 | 페어링 코드 승인(사용자가 `/setup/pair?code=` 에서 클릭) |
 | `GET /api/pair/[code]` | 페어링 코드 자체인증 | 설치 스크립트가 폴링해 토큰 수령 |
 | `POST /api/pair/[code]/route-rule` | 페어링 코드 자체인증(만료 전) | 최초 설치 시 cwd→프로젝트 매핑 등록 |
+
+**동시성·재승인 (설치기 후속, 2026-08-09)**
+
+- 코드 모양(32 hex)의 진실 원천은 `lib/pairing.ts` 의 `isPairingCode`/`PAIRING_CODE_RE` 하나다(코드를 만드는 곳은 서버가 아니라 `scripts/setup/setup.sh` 의 `od -An -N16`). 라우트·승인 페이지가 각자 정규식을 인라인하면 `lib/pairing.test.ts` 의 정적 스캔이 잡는다.
+- **토큰 인도는 조건부 update 한 방**이다(`tokenDeliveredAt IS NULL` + 미만료 + 같은 토큰). 1행을 고쳤을 때만 토큰을 주므로 동시 폴링 둘이 같은 토큰을 받을 수 없다. 못 잡았을 때: 다른 폴이 받아갔으면 `410 delivered`, TTL 지났으면 `410 expired`, **재승인이 끼어들어 토큰이 갈렸으면 `202 pending`**(CLI 가 다음 폴에서 새 토큰을 받게 — 여기서 410 을 주면 설치가 헛되게 죽는다).
+- **승인은 code 단위 advisory lock(`pg_advisory_xact_lock`)으로 직렬화**하고 조회·회수·발급·결속을 한 트랜잭션에서 한다. 전에는 구 토큰 조회가 트랜잭션 밖이라 같은 code 동시 승인 시 **진 쪽의 유효 토큰이 아무 페어링에도 묶이지 않고 남았다**(회수 화면조차 없는 고아 토큰). ⚠ 이 잠금은 `$executeRaw` 로 호출해야 한다 — `$queryRaw` 는 반환 타입이 `void` 라 "Failed to deserialize column of type 'void'" 로 죽는다(가짜 tx 를 쓰는 단위 테스트로는 안 걸린다).
+- **재승인 시 구 멤버십도 `status:"removed"`** 로 내린다(`/api/agent-tokens/<id>` DELETE 와 같은 처리). 토큰만 회수하면 같은 머신을 반복 페어링할수록 **쓸 수 없는 토큰을 가진 팀원**이 멤버 목록·담당자 드롭다운에 쌓였다.
 | `GET /setup.sh`(`/api/setup/script`) | 없음(공개 정적) | curl 설치기 스크립트 서빙 |
 | `GET /setup/hooks/[name]`(`/api/setup/hooks/[name]`) | 없음(화이트리스트된 name만 공개 정적) | 전역 훅 파일 서빙 |
 

@@ -5,7 +5,36 @@
  */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SCRIPT_NAME = "teamspace-session-end.mjs";
+
+/**
+ * 전역 사본(~/.claude/hooks)으로 실행됐고 cwd 프로젝트의 settings 에 같은
+ * 스크립트가 등록돼 있으면 양보한다 — 프로젝트 훅이 정본, 전역은 등록 없는
+ * 레포 전용 안전망. 파싱이 깨진 settings 는 Claude Code 가 통째로 무시해
+ * 프로젝트 훅도 돌지 않으므로 양보하지 않는다(중복 기록이 누락보다 낫다).
+ */
+function shouldYieldToProjectHook(cwd) {
+  try {
+    const selfPath = fileURLToPath(import.meta.url);
+    if (!selfPath.startsWith(join(homedir(), ".claude", "hooks") + sep)) return false;
+    for (const rel of [join(".claude", "settings.json"), join(".claude", "settings.local.json")]) {
+      let raw;
+      try {
+        raw = readFileSync(join(cwd, rel), "utf8");
+        JSON.parse(raw);
+      } catch {
+        continue; /* 없거나 깨짐 → 이 파일로는 양보 근거 없음 */
+      }
+      if (raw.includes(SCRIPT_NAME)) return true;
+    }
+  } catch {
+    /* 판정 실패 → 양보하지 않음 */
+  }
+  return false;
+}
 
 function config() {
   let file = {};
@@ -33,6 +62,7 @@ async function main() {
     return;
   }
   if (!input.session_id) return;
+  if (shouldYieldToProjectHook(input.cwd || process.cwd())) return;
 
   // D8(W8): 팀 프로젝트 cwd(라우트룰 매칭)일 때만 agentmemory 요약 "메타"를 함께 적재.
   // 관찰 원문은 개인정보·시크릿 위험(감사 mem-6/12)으로 팀 서버에 보내지 않는다.

@@ -4,8 +4,8 @@ import { decide } from "./deny-repo-docs.mjs";
 // PreToolUse 훅 판정 로직: 레포에 md 문서를 쓰는 시도를 차단(문서는 TeamSpace doc으로만).
 describe("decide", () => {
   it("docs/ 아래 md 쓰기를 차단한다", () => {
-    expect(decide("/Users/alice/dev/teamspace/docs/새-스펙.md").deny).toBe(true);
-    expect(decide("/Users/alice/dev/sample-app/docs/기능/명세.md").deny).toBe(true);
+    expect(decide("/Users/ljun/dev/ljun/teamspace/docs/새-스펙.md").deny).toBe(true);
+    expect(decide("/Users/ljun/dev/ljun/dangol-note/docs/기능/명세.md").deny).toBe(true);
     expect(decide("docs/relative.md").deny).toBe(true);
   });
 
@@ -34,7 +34,7 @@ describe("decide", () => {
 
   it(".claude/ 아래(스킬·메모리·설정)는 항상 허용한다", () => {
     expect(decide("/repo/.claude/skills/foo/SKILL.md").deny).toBe(false);
-    expect(decide("/Users/alice/.claude/projects/x/memory/note.md").deny).toBe(false);
+    expect(decide("/Users/ljun/.claude/projects/x/memory/note.md").deny).toBe(false);
   });
 
   it("임시 디렉토리·node_modules는 허용한다", () => {
@@ -59,5 +59,42 @@ describe("decide", () => {
     expect(d.deny).toBe(true);
     expect(d.reason).toContain("TeamSpace");
     expect(d.reason).toContain("pnpm ws doc");
+  });
+});
+
+/* ───────── 전수조사 D11: 기본 허용 → 기본 차단으로 뒤집은 것의 회귀 가드 ─────────
+   AGENTS.md 는 "레포/디스크에 md 생성 금지 … 엔진 수준에서 차단"이라고 적어 두었는데
+   실제로는 6개 패턴 deny-list(기본 허용)라 REPORT.md·notes/회의록.md 가 그냥 통과했다. */
+
+describe("deny-repo-docs — md 는 기본 차단", () => {
+  it("허용목록 밖의 md 는 위치와 무관하게 막는다", () => {
+    for (const f of ["REPORT.md", "notes/회의록.md", "/Users/x/Desktop/설계.md", "src/a.mdx"]) {
+      expect(decide(f).deny, f).toBe(true);
+    }
+  });
+
+  it("저장소 메타문서·.claude·스크래치패드는 계속 통과한다", () => {
+    for (const f of [
+      "README.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".claude/skills/teamspace/SKILL.md",
+      "/private/tmp/claude-501/x/scratchpad/메모.md",
+    ]) {
+      expect(decide(f).deny, f).toBe(false);
+    }
+  });
+
+  it("md 가 아닌 파일은 건드리지 않는다", () => {
+    for (const f of ["lib/foo.ts", "app/page.tsx", "prisma/schema.prisma"]) {
+      expect(decide(f).deny, f).toBe(false);
+    }
+  });
+
+  it("안내 명령에 WS_TOKEN 접두어가 없다 — 있으면 에이전트 토큰을 가려 401 이 난다", () => {
+    const r = decide("docs/설계.md");
+    expect(r.deny).toBe(true);
+    expect(r.reason).not.toContain("WS_TOKEN=");
+    expect(r.reason).toContain("pnpm ws doc new");
   });
 });

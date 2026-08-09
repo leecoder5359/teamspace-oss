@@ -52,10 +52,6 @@ services:
       # compose 네트워크 내부에서 postgres 서비스로 접속(.env 의 localhost:5433 대신).
       DATABASE_URL: postgres://teamspace:teamspace@postgres:5432/teamspace
       WORKER_INTERVAL_MS: "60000"
-      # 데이터 루트(docs/content/uploads)를 호스트 ./data 와 공유
-      TEAMSPACE_DATA_DIR: /data
-    volumes:
-      - ./data:/data
     depends_on:
       postgres:
         condition: service_healthy
