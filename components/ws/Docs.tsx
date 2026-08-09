@@ -33,6 +33,8 @@ type DocItem = {
   icon: string | null;
   projectId: string | null;
   updatedAt: string;
+  /** D3 후속: 모두에게 열려 있지 않다(조상·프로젝트 상속 포함) */
+  restricted?: boolean;
 };
 type ProjectLite = { id: string; name: string; boardPageId: string | null };
 
@@ -72,8 +74,14 @@ function DocRow({ doc, onOpen }: { doc: DocItem; onOpen: (d: DocItem) => void })
         <Icon name="doc" size={19} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div title={doc.title} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {doc.title || "제목 없음"}
+        <div title={doc.title} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden" }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title || "제목 없음"}</span>
+          {/* 목록은 평평해서 계층으로 유추할 수 없다 — 상속된 잠금도 표시한다 */}
+          {doc.restricted && (
+            <span title="비공개 — 부여받은 사람만 볼 수 있습니다" style={{ display: "inline-flex", color: "#E0900F", flexShrink: 0 }}>
+              <Icon name="lock" size={12} />
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{fmtEditedShort(doc.updatedAt)}</div>
       </div>
@@ -152,6 +160,78 @@ function DocsList({
   );
 }
 
+/* ---------- 임베드(트랜스클루전) ----------
+   ![[문서]] 를 실제 본문으로 펼친다. 순환참조 가드가 핵심 —
+   A 가 B 를, B 가 A 를 임베드하면 렌더가 무한히 내려간다. */
+function EmbedCard({
+  target,
+  resolve,
+  chain,
+}: {
+  target: string;
+  resolve: (t: string) => string | null;
+  chain: string[];
+}) {
+  const href = resolve(target);
+  const id = href?.replace("/p/", "") ?? null;
+  const [md, setMd] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const cyclic = id != null && chain.includes(id);
+
+  useEffect(() => {
+    if (!id || cyclic) return;
+    let alive = true;
+    fetch(`/api/pages/${id}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { markdown?: string } | null) => {
+        if (!alive) return;
+        if (d) setMd(d.markdown ?? "");
+        else setErr("불러오지 못했습니다");
+      })
+      .catch(() => alive && setErr("불러오지 못했습니다"));
+    return () => {
+      alive = false;
+    };
+  }, [id, cyclic]);
+
+  const box: React.CSSProperties = {
+    border: "1px solid var(--border-subtle)",
+    borderLeft: "3px solid var(--color-primary)",
+    borderRadius: "0 10px 10px 0",
+    padding: "10px 14px",
+    margin: "10px 0",
+    background: "var(--surface-sunken)",
+  };
+
+  return (
+    <div style={box}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>임베드</span>
+        {href ? (
+          <a href={href} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-primary)", textDecoration: "none" }}>
+            {target}
+          </a>
+        ) : (
+          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{target} — 연결된 문서 없음</span>
+        )}
+      </div>
+      {cyclic ? (
+        <div className="ws-empty-hint">순환 임베드라 여기서 멈춥니다.</div>
+      ) : err ? (
+        <div className="ws-empty-hint">{err}</div>
+      ) : id && md === null ? (
+        <div className="ws-empty-hint">불러오는 중…</div>
+      ) : id ? (
+        <MarkdownPreview
+          markdown={md ?? ""}
+          resolveLink={resolve}
+          renderEmbed={(t) => <EmbedCard target={t} resolve={resolve} chain={[...chain, id]} />}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /* ---------- 문서 리더 ---------- */
 function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[]; onBack: () => void; onOpen: (d: DocItem) => void }) {
   const router = useRouter();
@@ -163,9 +243,25 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
   const [histOpen, setHistOpen] = useState(false);
   const [revs, setRevs] = useState<{ rev: number; title: string; authorName: string | null; createdAt: string }[] | null>(null);
   const [restoring, setRestoring] = useState(false);
-  const [comments, setComments] = useState<{ id: string; body: string; authorName: string; authorIsAgent: boolean; createdAt: string }[] | null>(null);
+  const [comments, setComments] = useState<
+    {
+      id: string;
+      body: string;
+      authorName: string;
+      authorIsAgent: boolean;
+      createdAt: string;
+      // 인라인 코멘트(격차 D2)
+      inline?: boolean;
+      orphan?: boolean;
+      anchorQuote?: string | null;
+      resolvedAt?: string | null;
+    }[] | null
+  >(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [posting, setPosting] = useState(false);
+  /** 본문에서 선택한 문구 — 있으면 다음 코멘트가 그 문구에 달린다(D2). */
+  const [selection, setSelection] = useState<{ quote: string; prefix: string; suffix: string } | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   const loadComments = useCallback(async () => {
     const r = await fetch(`/api/pages/${doc.id}/comments`, { cache: "no-store" });
@@ -180,10 +276,11 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
       const r = await fetch(`/api/pages/${doc.id}/comments`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body: text }),
+        body: JSON.stringify({ body: text, anchor: selection }),
       });
       if (r.ok) {
         setCommentDraft("");
+        setSelection(null);
         await loadComments();
       }
     } finally {
@@ -234,6 +331,22 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
       return id ? `/p/${id}` : null;
     };
   }, [docs]);
+
+  // 미해결 [[제목]] 클릭 → 그 제목으로 문서를 만들고 바로 연다.
+  // 옵시디언의 "링크 먼저 박고 나중에 채우는" 흐름 — 종전엔 점선 표시에서 끝났다.
+  async function createLinkedDoc(t: string) {
+    const r = await fetch("/api/pages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: t, kind: "doc" }),
+    });
+    if (!r.ok) return;
+    const d = (await r.json()) as { page?: { id?: string } };
+    if (d.page?.id) {
+      window.dispatchEvent(new CustomEvent("pages:changed"));
+      router.push(`/p/${d.page.id}`);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -321,7 +434,39 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
           {loading ? (
             <div className="ws-empty-hint">불러오는 중…</div>
           ) : preview ? (
-            <MarkdownPreview markdown={md} resolveLink={resolveLink} />
+            <div
+              onMouseUp={() => {
+                /* 인라인 코멘트(D2): 읽기 화면에서 문구를 고르면 그 문구에 코멘트를 단다.
+                   렌더된 DOM 의 좌표가 아니라 **원문 마크다운에서의 문구**로 앵커를 만든다 —
+                   렌더 결과는 뷰마다 다르지만 원문은 하나다. */
+                const sel = window.getSelection();
+                const quote = sel?.toString() ?? "";
+                if (!quote.trim()) {
+                  setSelection(null);
+                  return;
+                }
+                const at = md.indexOf(quote.trim());
+                if (at < 0) {
+                  // 렌더 결과에만 있는 문구(위키링크 표기 등)는 원문에서 못 찾는다.
+                  setSelection(null);
+                  return;
+                }
+                const q = quote.trim();
+                setSelection({
+                  quote: q,
+                  prefix: md.slice(Math.max(0, at - 32), at),
+                  suffix: md.slice(at + q.length, at + q.length + 32),
+                });
+              }}
+            >
+            <MarkdownPreview
+              markdown={md}
+              resolveLink={resolveLink}
+              onTagClick={(t) => router.push(`/search?q=${encodeURIComponent("#" + t)}`)}
+              onCreateLink={(t) => void createLinkedDoc(t)}
+              renderEmbed={(t) => <EmbedCard target={t} resolve={resolveLink} chain={[doc.id]} />}
+            />
+            </div>
           ) : (
             <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: 1.7, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "16px 18px", margin: 0 }}>
               {md || "(빈 문서)"}
@@ -331,28 +476,82 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
           {/* 코멘트 (W6) */}
           <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
-              <Icon name="comment" size={14} /> 코멘트 {comments ? comments.length : ""}
+              <Icon name="comment" size={14} /> 코멘트 {comments ? comments.filter((c) => showResolved || !c.resolvedAt).length : ""}
+              {comments && comments.some((c) => c.resolvedAt) && (
+                <button
+                  className="ws-btn-soft"
+                  style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11.5 }}
+                  onClick={() => setShowResolved((v) => !v)}
+                >
+                  해결된 것 {showResolved ? "숨기기" : `보기 (${comments.filter((c) => c.resolvedAt).length})`}
+                </button>
+              )}
             </div>
             {comments === null ? (
               <div className="ws-empty-hint">불러오는 중…</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {comments.map((c) => (
-                  <div key={c.id} style={{ padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}>
+                {comments
+                  .filter((c) => showResolved || !c.resolvedAt)
+                  .map((c) => (
+                  <div key={c.id} style={{ padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", opacity: c.resolvedAt ? 0.6 : 1 }}>
+                    {/* 인라인 코멘트(D2): 무엇에 달린 말인지 인용문으로 보여준다 */}
+                    {c.inline && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          marginBottom: 5,
+                          paddingLeft: 8,
+                          borderLeft: `3px solid ${c.orphan ? "var(--text-disabled)" : "var(--color-primary)"}`,
+                          color: c.orphan ? "var(--text-disabled)" : "var(--text-muted)",
+                        }}
+                      >
+                        “{c.anchorQuote}”
+                        {c.orphan && <span style={{ marginLeft: 6 }}>— 본문에서 이 문구를 더는 찾을 수 없습니다</span>}
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 3 }}>
                       <b style={{ color: "var(--text-strong)" }}>{c.authorName}</b>
                       {c.authorIsAgent && <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>에이전트</span>}
                       {" · "}{new Date(c.createdAt).toLocaleString("ko-KR")}
+                      {c.resolvedAt && <span style={{ marginLeft: 6, color: "var(--color-primary)" }}>· 해결됨</span>}
+                      {c.inline && (
+                        <button
+                          className="ws-btn-soft"
+                          style={{ marginLeft: 8, padding: "1px 7px", fontSize: 11 }}
+                          onClick={async () => {
+                            await fetch(`/api/pages/${doc.id}/comments?commentId=${c.id}`, {
+                              method: "PATCH",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ resolved: !c.resolvedAt }),
+                            });
+                            await loadComments();
+                          }}
+                        >
+                          {c.resolvedAt ? "되돌리기" : "해결"}
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontSize: 13, color: "var(--text-body)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</div>
                   </div>
                 ))}
+                {selection && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 10px", borderRadius: 8, background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)" }}>
+                    <span style={{ color: "var(--text-muted)" }}>이 문구에 답니다:</span>
+                    <span style={{ flex: 1, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      “{selection.quote}”
+                    </span>
+                    <button className="ws-btn-soft" style={{ padding: "1px 7px", fontSize: 11 }} onClick={() => setSelection(null)}>
+                      해제
+                    </button>
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void postComment(); }}
-                    placeholder="코멘트 작성 — @이름 으로 멘션하면 알림이 갑니다"
+                    placeholder={selection ? "선택한 문구에 코멘트…" : "코멘트 작성 — 본문에서 문구를 선택하면 그 문장에 달립니다"}
                     style={{ flex: 1, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" }}
                   />
                   <button className="ws-btn-soft" onClick={() => void postComment()} disabled={posting || !commentDraft.trim()}>등록</button>
@@ -360,6 +559,9 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
               </div>
             )}
           </div>
+
+          {/* 비슷한 문서 (격차 G2) — 질의어 없이 문서 자체로 이웃을 찾는다 */}
+          <SimilarDocs pageId={doc.id} onOpen={(id) => { const t = docs.find((d) => d.id === id); if (t) onOpen(t); }} />
 
           {/* 백링크 */}
           {backlinks.length > 0 && (
@@ -684,3 +886,58 @@ export default function Docs() {
 const railLabel: CSSProperties = {
   fontSize: 11, fontWeight: 700, color: "var(--text-muted)", padding: "4px 10px 6px", textTransform: "uppercase", letterSpacing: "0.04em",
 };
+
+/* =====================================================================
+   비슷한 문서 (격차 G2).
+
+   **임베딩이 아니라 TF-IDF 코사인**이라 동의어는 못 잇는다 — 그건 개념검색이
+   맡는다. 여기서만 되는 건 "질의어 없이" 이웃을 찾는 것이다.
+   점수를 그대로 보여 준다: 0.1 과 0.9 를 같은 목록에 나란히 두면 사용자가
+   관련도를 오해한다.
+   ===================================================================== */
+function SimilarDocs({ pageId, onOpen }: { pageId: string; onOpen: (id: string) => void }) {
+  const [items, setItems] = useState<{ id: string; title: string; project: string | null; score: number }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const r = await fetch(`/api/search/similar?pageId=${pageId}&limit=5`, { cache: "no-store" }).catch(() => null);
+      if (!r?.ok || cancelled) return;
+      const d = (await r.json()) as { results?: { id: string; title: string; project: string | null; score: number }[] };
+      if (!cancelled) setItems(d.results ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pageId]);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
+        <Icon name="search" size={14} /> 비슷한 문서
+        <span style={{ fontWeight: 400, fontSize: 11.5, color: "var(--text-disabled)" }}>
+          낱말 빈도 기반 — 동의어는 검색의 &lsquo;개념 검색&rsquo;이 찾습니다
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {items.map((x) => (
+          <button
+            key={x.id}
+            onClick={() => onOpen(x.id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8, textAlign: "left", width: "100%",
+              padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)",
+              background: "var(--surface-card)", cursor: "pointer", fontSize: 13, color: "var(--text-body)",
+            }}
+          >
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.title}</span>
+            {x.project && <span style={{ fontSize: 11.5, color: "var(--text-disabled)" }}>{x.project}</span>}
+            <span style={{ fontSize: 11, color: "var(--text-disabled)", fontVariantNumeric: "tabular-nums" }}>{x.score.toFixed(2)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

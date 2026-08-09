@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage } from "@/lib/pageGuard";
 import { writeDoc } from "@/lib/docFiles";
 
 export const runtime = "nodejs";
@@ -11,6 +12,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const { id } = await ctx.params;
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
+  const gate = await requirePage(guard, id, "view");
+  if ("err" in gate) return gate.err;
 
   const page = await prisma.page.findUnique({ where: { id }, select: { workspaceId: true } });
   if (!page || page.workspaceId !== guard.workspaceId) {
@@ -50,6 +53,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const body = (await req.json().catch(() => ({}))) as { rev?: number };
   if (typeof body.rev !== "number") {
     return NextResponse.json({ error: "rev 가 필요합니다." }, { status: 400 });

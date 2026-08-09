@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractWikiTitles, computeBacklinks, computeGraph, computeLint, graphToCypher } from "@/lib/wikilink";
+import { extractWikiTitles, computeBacklinks, computeGraph, computeLint, graphToCypher, buildTitleIndex } from "@/lib/wikilink";
 
 describe("extractWikiTitles", () => {
   it("[[제목]] 들을 추출(트림·중복제거·순서유지)", () => {
@@ -80,5 +80,46 @@ describe("graphToCypher", () => {
   });
   it("간선 MATCH+CREATE LINKS_TO", () => {
     expect(cy).toContain("MATCH (a:Doc {id:'a'}), (b:Doc {id:'b'}) CREATE (a)-[:LINKS_TO]->(b);");
+  });
+});
+
+/* ───────── B6: 프론트매터 별칭이 링크 해석에 반영된다 ───────── */
+
+describe("buildTitleIndex — 별칭", () => {
+  const pages = [
+    { id: "loyo", title: "로요", markdown: "---\naliases: [LOYO, 단골노트]\n---\n\n본문" },
+    { id: "plan", title: "계획", markdown: "우리는 [[LOYO]] 와 [[단골노트]] 와 [[로요]] 를 쓴다" },
+  ];
+
+  it("별칭으로도 같은 문서를 가리킨다", () => {
+    const idx = buildTitleIndex(pages);
+    expect(idx.get("loyo")).toBe("loyo");
+    expect(idx.get("단골노트")).toBe("loyo");
+    expect(idx.get("로요")).toBe("loyo");
+  });
+
+  it("별칭 링크가 백링크로 잡힌다 — 세 표기가 한 소스로 합쳐진다", () => {
+    const back = computeBacklinks(pages);
+    expect(back["loyo"]).toEqual([{ id: "plan", title: "계획" }]);
+  });
+
+  it("별칭 링크는 깨진 링크가 아니다", () => {
+    expect(computeLint(pages).broken).toEqual([]);
+  });
+
+  it("실제 제목이 별칭보다 우선한다", () => {
+    const conflict = [
+      { id: "a", title: "공용", markdown: null },
+      { id: "b", title: "다른문서", markdown: "---\naliases: [공용]\n---\n" },
+    ];
+    expect(buildTitleIndex(conflict).get("공용")).toBe("a");
+  });
+
+  it("임베드 ![[문서]] 도 그래프 간선이 된다", () => {
+    const g = computeGraph([
+      { id: "x", title: "X", markdown: "![[Y]]" },
+      { id: "y", title: "Y", markdown: null },
+    ]);
+    expect(g.edges).toEqual([{ from: "x", to: "y" }]);
   });
 });

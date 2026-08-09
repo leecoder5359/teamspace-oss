@@ -1,5 +1,7 @@
 /* 위키링크 파싱/백링크 — file-first 문서의 [[제목]] 양방향 링크. 순수 함수. */
 
+import { extractFrontmatter } from "./md/parse";
+
 export const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 
 /** [[제목]] / [[제목|표시]] 에서 제목부만 추출. 트림·중복제거·순서유지. */
@@ -24,15 +26,40 @@ export function normalizeTitle(t: string): string {
 export type PageLite = { id: string; title: string; markdown: string | null };
 
 /**
- * 타깃 페이지 id → 그 페이지를 가리키는 소스 페이지들.
- * 제목 매칭은 대소문자 무시. 자기참조 제외. 소스는 id로 중복제거.
+ * 제목·별칭 → 페이지 id 색인.
+ *
+ * 별칭이 필요한 이유: 같은 대상을 "로요"/"LOYO"/"단골노트" 로 부르면 종전엔
+ * 각각 다른(대개 미해결) 링크가 됐다. 프론트매터 `aliases` 를 색인에 함께
+ * 넣어 한 노드로 수렴시킨다.
+ *
+ * 충돌 규칙: 실제 제목이 항상 이긴다. 별칭끼리 겹치면 먼저 등록된 쪽을 둔다
+ * (조용히 덮어쓰면 어느 문서로 가는지 예측할 수 없어진다).
  */
-export function computeBacklinks(pages: PageLite[]): Record<string, { id: string; title: string }[]> {
+export function buildTitleIndex(pages: PageLite[]): Map<string, string> {
   const idByTitle = new Map<string, string>();
   for (const p of pages) {
     const key = normalizeTitle(p.title);
     if (!idByTitle.has(key)) idByTitle.set(key, p.id);
   }
+  for (const p of pages) {
+    const fm = extractFrontmatter(p.markdown ?? "").frontmatter;
+    const raw = fm?.aliases;
+    if (!raw) continue;
+    const aliases = Array.isArray(raw) ? raw : [raw];
+    for (const a of aliases) {
+      const key = normalizeTitle(String(a));
+      if (key && !idByTitle.has(key)) idByTitle.set(key, p.id);
+    }
+  }
+  return idByTitle;
+}
+
+/**
+ * 타깃 페이지 id → 그 페이지를 가리키는 소스 페이지들.
+ * 제목 매칭은 대소문자 무시. 자기참조 제외. 소스는 id로 중복제거.
+ */
+export function computeBacklinks(pages: PageLite[]): Record<string, { id: string; title: string }[]> {
+  const idByTitle = buildTitleIndex(pages);
 
   const back: Record<string, { id: string; title: string }[]> = {};
   const seen: Record<string, Set<string>> = {};
@@ -56,11 +83,7 @@ export function computeGraph(pages: PageLite[]): {
   nodes: { id: string; title: string }[];
   edges: { from: string; to: string }[];
 } {
-  const idByTitle = new Map<string, string>();
-  for (const p of pages) {
-    const key = normalizeTitle(p.title);
-    if (!idByTitle.has(key)) idByTitle.set(key, p.id);
-  }
+  const idByTitle = buildTitleIndex(pages);
   const edges: { from: string; to: string }[] = [];
   const seen = new Set<string>();
   for (const p of pages) {
@@ -81,11 +104,7 @@ export function computeLint(pages: PageLite[]): {
   broken: { sourceId: string; sourceTitle: string; target: string }[];
   orphans: { id: string; title: string }[];
 } {
-  const idByTitle = new Map<string, string>();
-  for (const p of pages) {
-    const key = normalizeTitle(p.title);
-    if (!idByTitle.has(key)) idByTitle.set(key, p.id);
-  }
+  const idByTitle = buildTitleIndex(pages);
 
   const broken: { sourceId: string; sourceTitle: string; target: string }[] = [];
   for (const p of pages) {
