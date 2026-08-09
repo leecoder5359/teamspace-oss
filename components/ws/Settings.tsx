@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { Icon } from "./icons";
+import DataTransfer from "./DataTransfer";
 import type { IconName } from "./icons";
 
 /* =====================================================================
@@ -44,7 +45,13 @@ export default function Settings() {
 
   async function switchTo(id: string) {
     const res = await fetch("/api/workspaces/switch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workspaceId: id }) });
-    if (res.ok) window.location.reload();
+    if (res.ok) {
+      window.location.reload();
+      return;
+    }
+    // 종전엔 else 분기가 없어 버튼을 눌러도 아무 일이 안 일어났다(D4·D13)
+    const d = (await res.json().catch(() => ({}))) as { error?: string };
+    setMsg(d.error ?? "워크스페이스를 전환하지 못했습니다.");
   }
   async function createWs() {
     const n = newWs.trim();
@@ -52,7 +59,12 @@ export default function Settings() {
     setBusy(true);
     try {
       const res = await fetch("/api/workspaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: n }) });
-      if (res.ok) window.location.reload();
+      if (res.ok) {
+        window.location.reload();
+        return;
+      }
+      const d = (await res.json().catch(() => ({}))) as { error?: string };
+      setMsg(d.error ?? "워크스페이스를 만들지 못했습니다.");
     } finally {
       setBusy(false);
     }
@@ -161,6 +173,11 @@ export default function Settings() {
       <TrashSection />
 
       {/* 빠른 이동 */}
+      {/* 데이터 반출입(격차 E2 후속) — API·CLI 로만 있던 것을 화면으로 */}
+      <Section title="데이터 반출입">
+        <DataTransfer />
+      </Section>
+
       <Section title="연결 / 관리">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <NavCard href="/members" icon="users" label="멤버 관리" />
@@ -346,7 +363,7 @@ function AgentTokens() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void issue(); }}
-          placeholder="에이전트 이름 (예: office-claude)"
+          placeholder="에이전트 이름 (예: mac-mini-claude)"
           style={{ ...inputStyle, flex: 1 }}
         />
         <select value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle}>

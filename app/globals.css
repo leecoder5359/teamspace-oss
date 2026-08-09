@@ -520,3 +520,47 @@ body {
   opacity: 0.6;
   padding: 24px;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   콜아웃(BlockNote 커스텀 블록) — 본문을 상자 안으로 잇는다.
+
+   BlockNote 의 DOM 은 .bn-block > [.react-renderer(=커스텀 render 결과),
+   .bn-block-group(=children)] 이다. 즉 콜아웃 컴포넌트가 상자를 닫으면
+   본문(children)이 상자 밖으로 빠져나온다. 그래서 컴포넌트는 왼쪽 액센트
+   바만 그리고, 같은 바·배경을 여기서 children 쪽으로 이어 붙인다.
+   ───────────────────────────────────────────────────────────── */
+.bn-block:has(> .react-renderer [data-callout-kind]) > .bn-block-group {
+  margin-left: 0;
+  padding: 2px 12px 8px;
+  border-left: 3px solid var(--callout-color, var(--text-sub));
+  background: var(--surface-sunken);
+}
+/* children 안쪽 블록의 기본 들여쓰기 제거 — 상자 폭에 맞춘다 */
+.bn-block:has(> .react-renderer [data-callout-kind]) > .bn-block-group > .bn-block-outer {
+  margin-left: 0;
+}
+/* 종류별 액센트 — 컴포넌트 인라인 색과 같은 값 */
+.bn-block:has(> .react-renderer [data-callout-kind="NOTE"]),
+.bn-block:has(> .react-renderer [data-callout-kind="INFO"]) {
+  --callout-color: var(--color-primary);
+}
+.bn-block:has(> .react-renderer [data-callout-kind="TIP"]),
+.bn-block:has(> .react-renderer [data-callout-kind="SUCCESS"]) {
+  --callout-color: #0ca678;
+}
+.bn-block:has(> .react-renderer [data-callout-kind="WARNING"]),
+.bn-block:has(> .react-renderer [data-callout-kind="CAUTION"]) {
+  --callout-color: #e0900f;
+}
+.bn-block:has(> .react-renderer [data-callout-kind="DANGER"]),
+.bn-block:has(> .react-renderer [data-callout-kind="ERROR"]) {
+  --callout-color: #d14343;
+}
+
+
+/* 집계 줄(격차 C6) — 표 아래 고정 톤. 데이터 행과 구분되어야 한다. */
+.ws-table-foot td {
+  border-top: 1px solid var(--border-strong, var(--border-subtle));
+  background: var(--surface-sunken);
+  padding: 6px 10px;
+}

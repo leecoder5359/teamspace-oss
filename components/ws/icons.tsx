@@ -48,7 +48,8 @@ export type IconName =
   | "sidebar"
   | "database"
   | "circle"
-  | "arrowRight";
+  | "arrowRight"
+  | "lock";
 
 type Props = SVGProps<SVGSVGElement> & { name: IconName; size?: number };
 
@@ -221,6 +222,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
   moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />,
   circle: <circle cx="12" cy="12" r="8" />,
   arrowRight: <path d="M5 12h14m0 0-6-6m6 6-6 6" />,
+  // 공유 범위(D3) — 비공개 표시
+  lock: (
+    <>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 18, ...rest }: Props) {

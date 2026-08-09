@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import MarkdownPreview from "./MarkdownPreview";
+import { merge3, hasConflictMarkers } from "@/lib/merge3";
 import { Icon } from "./ws/icons";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error" | "conflict";
@@ -17,10 +18,12 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
   const [title, setTitle] = useState("");
   const [state, setState] = useState<SaveState>("loading");
   const [mode, setMode] = useState<EditorMode>("preview");
+  const [conflictNote, setConflictNote] = useState<string | null>(null);
   const loadedRef = useRef(false);
   const titleRef = useRef(""); // 디바운스 저장 시 stale closure 방지
   const markdownRef = useRef(""); // 디바운스 저장 시 stale closure 방지
   const revRef = useRef(0); // 낙관적 잠금(baseRev) — 서버 rev 추적
+  const baseMarkdownRef = useRef(""); // 열었을 때의 본문 — 3-way 병합 base(격차 D1)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 신뢰도 분석(provenance)
@@ -68,6 +71,7 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
       const md = data.markdown ?? "";
       setMarkdown(md);
       markdownRef.current = md;
+      baseMarkdownRef.current = md;
       setTitle(data.page.title);
       titleRef.current = data.page.title;
       loadedRef.current = true;
@@ -82,6 +86,12 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
 
   const save = async () => {
     if (!loadedRef.current) return;
+    // 충돌 마커가 남은 채로 저장하면 본문이 오염된다 — 정리 전엔 막는다
+    if (hasConflictMarkers(markdownRef.current)) {
+      setState("conflict");
+      setConflictNote("아직 <<<<<<< 충돌 마커가 남아 있습니다. 정리한 뒤 저장하세요.");
+      return;
+    }
     setState("saving");
     try {
       const res = await fetch(`/api/pages/${pageId}`, {
@@ -90,7 +100,20 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
         body: JSON.stringify({ markdown: markdownRef.current, title: titleRef.current, baseRev: revRef.current }),
       });
       if (res.status === 409) {
-        // 다른 곳(사람/에이전트)에서 먼저 저장됨 — 덮어쓰지 않고 알림 (감사 doc-2)
+        // 원문 모드도 같은 계약 — 새로고침을 강요해 내 글을 지우지 않는다(격차 D1).
+        // 여기선 텍스트 편집이라 병합 결과(충돌 마커 포함)를 그대로 실어주면 된다.
+        const d = (await res.json().catch(() => ({}))) as { currentMarkdown?: string; currentRev?: number };
+        const merged = merge3(baseMarkdownRef.current, markdownRef.current, d.currentMarkdown ?? "");
+        setMarkdown(merged.text);
+        markdownRef.current = merged.text;
+        baseMarkdownRef.current = merged.text;
+        revRef.current = d.currentRev ?? revRef.current;
+        setMode("edit");
+        setConflictNote(
+          merged.conflicts === 0
+            ? "다른 곳에서 먼저 저장돼 자동으로 합쳤습니다. 확인하고 저장하세요."
+            : `다른 곳에서 먼저 저장됐습니다. 겹치는 곳 ${merged.conflicts}군데를 <<<<<<< 마커로 표시했으니 정리한 뒤 저장하세요 — 어느 쪽도 지우지 않았습니다.`,
+        );
         setState("conflict");
         return;
       }
@@ -127,11 +150,7 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
         {state === "saving" && "저장 중…"}
         {state === "saved" && "저장됨 ✓"}
         {state === "error" && "저장 실패 ✗"}
-        {state === "conflict" && (
-          <span style={{ color: "#E0900F" }}>
-            다른 곳에서 먼저 수정됨 — <button onClick={() => window.location.reload()} style={{ textDecoration: "underline", cursor: "pointer", background: "none", border: 0, color: "inherit", padding: 0, font: "inherit" }}>새로고침</button>
-          </span>
-        )}
+        {state === "conflict" && <span style={{ color: "#E0900F" }}>{conflictNote ?? "다른 곳에서 먼저 수정됨"}</span>}
         {state === "loading" && "불러오는 중…"}
       </div>
 

@@ -98,11 +98,18 @@ export default function Slack() {
   }
 
   async function saveChannel() {
-    await fetch("/api/slack", {
+    // PATCH /api/slack 은 admin 전용이라 editor 는 403 인데, 종전엔 응답을 안 보고
+    // 무조건 "저장했습니다" 라고 말했다(전수조사 D4).
+    const res = await fetch("/api/slack", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultChannelId: channel.trim() || null }),
     });
+    if (!res.ok) {
+      const d = (await res.json().catch(() => ({}))) as { error?: string };
+      setMsg({ tone: "err", text: d.error ?? "기본 채널을 저장하지 못했습니다." });
+      return;
+    }
     setMsg({ tone: "ok", text: "기본 채널을 저장했습니다." });
   }
 
@@ -232,7 +239,7 @@ export default function Slack() {
 /* ── 자동 알림 규칙 (도메인 이벤트 → 슬랙) ── */
 type Project = { id: string; name: string };
 type Rule = { id: string; event: string; target: string; targetId: string; enabled: boolean; projectId: string | null };
-const EVENT_LABEL: Record<string, string> = { task_created: "태스크 생성", task_status: "상태 변경", task_assigned: "담당자 배정", task_due: "마감 임박" };
+const EVENT_LABEL: Record<string, string> = { task_created: "태스크 생성", task_status: "상태 변경", task_assigned: "담당자 배정", task_due: "마감 임박", comment_added: "댓글 작성", doc_saved: "문서 저장" };
 
 function NotifRules() {
   const [rules, setRules] = useState<Rule[] | null>(null);

@@ -264,7 +264,7 @@ export default function Projects({
                     <Icon name="folder" size={14} />
                   </span>
                   <input
-                    placeholder="로컬 경로 (예: ~/dev/sample-app)"
+                    placeholder="로컬 경로 (예: ~/dev/crewpool)"
                     value={form.repoPath}
                     onChange={(e) => setForm((f) => ({ ...f, repoPath: e.target.value }))}
                     aria-label="로컬 경로"

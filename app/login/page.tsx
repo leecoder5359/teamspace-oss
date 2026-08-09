@@ -99,7 +99,7 @@ export default function LoginPage() {
             color: "var(--text-strong)",
           }}
         >
-          TeamSpace
+          리코더팩토리
         </span>
         <span style={{ fontSize: 13, color: "var(--text-sub)" }}>팀 QA 워크스페이스</span>
       </div>
@@ -212,7 +212,7 @@ export default function LoginPage() {
             </label>
             <input
               type="text"
-              placeholder="예: 우리 팀"
+              placeholder="예: 리코더팩토리"
               style={{
                 width: "100%",
                 height: 42,

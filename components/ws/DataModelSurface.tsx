@@ -93,12 +93,26 @@ export default function DataModelSurface() {
   }
 
   async function accept(p: Proposal) {
+    // 용어집과 같은 수정 — 응답을 확인하고, existingId 가 있으면 새로 만들지 않고 갱신한다.
+    // (종전엔 실패해도 '추가됨' 배지가 붙었고 중복 엔티티가 쌓였다 — 전수조사 D18)
+    const res = p.existingId
+      ? await fetch(`/api/entities/${p.existingId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ description: p.description, fields: p.fields }),
+        })
+      : await fetch("/api/entities", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: p.name, description: p.description, fields: p.fields, sourcePageId: pageId }),
+        });
+    if (!res.ok) {
+      const d = (await res.json().catch(() => ({}))) as { error?: string };
+      setExtractErr(d.error ?? `'${p.name}' 를 반영하지 못했습니다.`);
+      return;
+    }
+    setExtractErr(null);
     setAccepted((prev) => new Set(prev).add(p.name));
-    await fetch("/api/entities", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: p.name, description: p.description, fields: p.fields, sourcePageId: pageId }),
-    });
     await load();
   }
 

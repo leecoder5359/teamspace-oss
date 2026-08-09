@@ -2,6 +2,11 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
+import dynamic from "next/dynamic";
+
+// 전역 단축키(Cmd/Ctrl+K)라 어느 화면에서든 살아 있어야 한다. window 를 쓰므로
+// 클라이언트 전용 로드 — 첫 페인트를 막지 않게 지연 로드한다.
+const CommandPalette = dynamic(() => import("./CommandPalette"), { ssr: false });
 import { Icon } from "./ws/icons";
 
 type Theme = "light" | "dark";
@@ -82,6 +87,8 @@ export default function AppShell({
       </Suspense>
 
       <main className="ws-main">{children}</main>
+
+      <CommandPalette />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 /* =========================================================================
    Saebit Design System — tokens + shell + primitives
-   디자인 소스(Saebit 워크스페이스 디자인)의 토큰/컴포넌트 CSS 포팅.
+   디자인 소스(Saebit "리코더팩토리 워크스페이스")의 토큰/컴포넌트 CSS 포팅.
    토큰은 DesignSync로 가져온 실제 Saebit 값(verbatim): 로열블루 #2F62FF,
    쿨그레이 중립색, 소프트 셰도우. 라이트/다크 양쪽. 본문 폰트는 Pretendard(CDN),
    display(Moneygraphy Rounded)는 미적용 시 Pretendard 폴백.
@@ -1449,3 +1449,110 @@ body {
 .ws-email-btn:hover { background:var(--surface-hover); }
 .ws-ghost-btn { background:transparent; color:var(--color-primary); border:1px dashed var(--border-default); }
 .ws-ghost-btn:hover { background:var(--color-primary-weak); border-color:var(--color-primary); }
+
+/* =====================================================================
+   모바일 마감 (격차 F2)
+   ---------------------------------------------------------------------
+   기존 @media 는 사이드바를 드로어로 바꾸는 '구조' 만 다뤘다(그것만으로도
+   레이아웃은 안 깨진다 — 문서 폭 넘침은 없었다). 여기서 다루는 건 **손가락으로
+   쓸 수 있는가** 다:
+
+   ① 탭 타겟 — 30~35px 짜리들을 40px 이상으로. 애플·구글 지침이 44/48px 이고,
+      그 아래는 "눌렀는데 옆이 눌리는" 경험이 된다.
+   ② iOS 자동 확대 — 폰트 16px 미만 입력에 포커스하면 사파리가 화면을 확대해
+      버린다. 되돌리려면 사용자가 직접 축소해야 해서 매번 짜증이 난다.
+      **모바일에서만** 입력 글자를 16px 로 올린다(데스크톱 밀도는 그대로).
+   ③ 노치·홈 인디케이터 — viewportFit=cover 를 켰으니(F1) 안전 영역을 직접 준다.
+   ④ 가로 스크롤이 필요한 것(표·칸반)은 **스크롤인 걸 보이게** 한다.
+   ===================================================================== */
+@media (max-width: 768px) {
+  /* ① 사이드바·탭·툴바 탭 타겟 */
+  .ws-nav-item,
+  .ws-tree-item,
+  .ws-db-tab,
+  .ws-seg-btn {
+    min-height: 40px;
+  }
+  .ws-btn-soft,
+  .ws-row-del {
+    min-height: 36px;
+  }
+  .ws-hamburger {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* ② iOS 포커스 확대 방지 — 16px 미만이면 사파리가 화면을 당긴다 */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .ws-cell-input {
+    font-size: 16px;
+  }
+
+  /* ③ 안전 영역(노치·홈 인디케이터) */
+  .ws-shell {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .ws-main {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .ws-hamburger {
+    top: calc(12px + env(safe-area-inset-top));
+    left: calc(12px + env(safe-area-inset-left));
+  }
+
+  /* 주의: 여기서 `.ws-main > :first-child` 에 padding-top 을 주지 말 것.
+     각 화면(.ws-db 등)이 이미 햄버거를 피할 만큼 위쪽 여백을 갖고 있는데,
+     일반 선택자로 덮으면 제목이 햄버거 밑으로 들어간다(실제로 겪음). */
+
+  /* ④ 가로 스크롤 대상: 관성 스크롤 + 스냅으로 '넘어가는 것'을 알린다 */
+  .ws-table-wrap,
+  .ws-kanban {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .ws-kanban {
+    scroll-snap-type: x proximity;
+  }
+  .ws-kanban-col {
+    scroll-snap-align: start;
+    min-width: 78vw;
+  }
+
+  /* 상세 드로어는 폰에서 전체 폭 — 460px 고정은 화면보다 넓다 */
+  .ws-drawer {
+    width: 100%;
+    border-left: none;
+  }
+
+  /* 보드 툴바: 밀도 조절은 폰에서 의미가 적다(줄 수만 잡아먹는다) */
+  .ws-db-toolbar .ws-seg[aria-label="밀도"] {
+    display: none;
+  }
+
+  /* 표 첫 열(제목)을 고정 — 가로로 밀 때 무슨 행인지 놓치지 않게 */
+  .ws-table thead th:first-child,
+  .ws-table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--surface-card);
+  }
+  .ws-table thead th:first-child {
+    z-index: 3;
+  }
+}
+
+/* 터치 기기 전반(태블릿 포함) — 폭이 아니라 입력 방식으로 판단한다 */
+@media (hover: none) and (pointer: coarse) {
+  .ws-row-del,
+  .ws-cell-input {
+    min-height: 34px;
+  }
+  /* 호버로만 드러나던 것들은 터치에서 영영 안 보인다 — 항상 보이게 */
+  .ws-row-del {
+    opacity: 1;
+  }
+}

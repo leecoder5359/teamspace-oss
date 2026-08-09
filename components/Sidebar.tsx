@@ -17,6 +17,10 @@ type FlatPage = {
   position: number;
   kind: "doc" | "database";
   projectId: string | null;
+  /** D3 후속: 이 페이지가 모두에게 열려 있지 않다(조상·프로젝트 상속 포함) */
+  restricted?: boolean;
+  /** 잠금이 이 페이지에서 시작됐나 — 자손마다 자물쇠를 겹쳐 그리지 않으려고 */
+  restrictedSelf?: boolean;
 };
 type PageNode = FlatPage & { children: PageNode[] };
 
@@ -302,8 +306,8 @@ export default function Sidebar({
   }, [flat, projects]);
 
   const collapseTitle = rail ? "사이드바 펼치기" : "사이드바 접기";
-  const userName = sessionUser ? sessionUser.name ?? sessionUser.email ?? "사용자" : "사용자";
-  const userEmail = sessionUser ? sessionUser.email ?? "" : "";
+  const userName = sessionUser ? sessionUser.name ?? sessionUser.email ?? "사용자" : "이호준";
+  const userEmail = sessionUser ? sessionUser.email ?? "" : "you@example.com";
   const userInitials = userName.slice(0, 2);
 
   // ── 렌더: 문서/폴더 노드(재귀) ──
@@ -353,6 +357,16 @@ export default function Sidebar({
           <span className="ws-tree-icon">
             {node.icon ?? (hasChildren ? "📁" : "📄")}
           </span>
+          {/* D3 후속: 비공개 표시. 잠금이 시작된 지점에만 그린다 —
+              자손마다 붙이면 트리가 자물쇠로 뒤덮여 오히려 안 읽힌다. */}
+          {node.restrictedSelf && (
+            <span
+              title="비공개 — 부여받은 사람만 볼 수 있습니다(하위 문서도 함께)"
+              style={{ display: "inline-flex", alignItems: "center", color: "#E0900F", marginRight: 2, flexShrink: 0 }}
+            >
+              <Icon name="lock" size={12} />
+            </span>
+          )}
           {isRenaming ? (
             <input
               className="ws-tree-rename"
@@ -411,7 +425,7 @@ export default function Sidebar({
             <Icon name="logo" size={18} />
           </span>
           <span className="ws-company-meta">
-            <span className="ws-company-name">TeamSpace</span>
+            <span className="ws-company-name">리코더팩토리</span>
             <span className="ws-company-sub">워크스페이스</span>
           </span>
           <span className="ws-company-caret">

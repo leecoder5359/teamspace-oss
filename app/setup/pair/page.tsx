@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ApproveButton } from "./ApproveButton";
+import { isPairingCode } from "@/lib/pairing";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ export default async function PairPage({
   if (!session?.user) {
     redirect(`/login?callbackUrl=${encodeURIComponent(`/setup/pair?code=${code ?? ""}`)}`);
   }
-  if (!code || !/^[0-9a-f]{32}$/.test(code)) {
+  if (!isPairingCode(code)) {
     return <main style={{ padding: 40 }}>유효하지 않은 페어링 링크입니다.</main>;
   }
   return (

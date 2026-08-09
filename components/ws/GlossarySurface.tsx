@@ -103,12 +103,28 @@ export default function GlossarySurface() {
   }
 
   async function accept(p: Proposal) {
+    // 종전엔 fetch 전에 '추가됨' 배지를 붙이고 응답을 안 봐서, 실패해도 성공처럼 보였다.
+    // 또 existingId 를 무시하고 늘 POST 해서 duplicate/conflict 제안을 수락하면 같은
+    // 용어가 하나 더 쌓였다 — API 도 프론트 타입도 existingId 를 갖고 있었는데
+    // 아무도 안 썼다(전수조사 D18). 이제 있으면 갱신, 없으면 생성한다.
+    const res = p.existingId
+      ? await fetch(`/api/glossary/${p.existingId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ definition: p.definition }),
+        })
+      : await fetch("/api/glossary", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ term: p.term, definition: p.definition, sourcePageId: pageId }),
+        });
+    if (!res.ok) {
+      const d = (await res.json().catch(() => ({}))) as { error?: string };
+      setExtractErr(d.error ?? `'${p.term}' 를 반영하지 못했습니다.`);
+      return;
+    }
+    setExtractErr(null);
     setAccepted((prev) => new Set(prev).add(p.term));
-    await fetch("/api/glossary", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ term: p.term, definition: p.definition, sourcePageId: pageId }),
-    });
     await load();
   }
 
