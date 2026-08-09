@@ -64,5 +64,24 @@ export default auth((req) => {
 
 export const config = {
   // public 정적 자산(/fonts/*)·_next·favicon 은 인증 미들웨어에서 제외(미인증 화면에서도 폰트 로드).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|fonts).*)"],
+  //
+  // PWA(격차 F1)도 여기서 뺀다 — sw.js·매니페스트·아이콘·오프라인 안내에는
+  // 워크스페이스 데이터가 한 글자도 없고, 로그인 리다이렉트가 걸리면
+  // 서비스 워커 등록이 MIME 오류로 실패하고 설치 배너도 안 뜬다.
+  //
+  // **`api/import` 는 미들웨어를 타지 않는다** — 인증을 느슨하게 하려는 게 아니라
+  // 엣지 미들웨어가 **요청 본문을 버퍼링하면서 ~10MB 를 넘는 multipart 를 깨뜨리기**
+  // 때문이다. 실측(2026-08-09): 8MB 통과 / 10MB·12MB·17MB 는 라우트에 닿기도 전에
+  // 본문이 잘려 `Failed to parse body as FormData` 로 죽었다. 라우트는 50MB 를
+  // 광고하는데 우리 워크스페이스 전체 export(17MB)조차 다시 못 넣는 상태였다 —
+  // 즉 '자기 백업을 자기가 못 읽는' 계약 위반이다.
+  //
+  // 안전은 그대로다: `/api/import` 의 첫 줄이 `requireCtx("editor")` 이고 그게
+  // **본문을 읽기 전에** 401/403 을 낸다(미인증 요청은 zip 을 한 바이트도 안 읽는다).
+  // 미들웨어의 역할은 어차피 fail-closed 선차단이고 실제 검증은 requireCtx 다.
+  // scripts/authz-coverage.test.ts 가 "matcher 에서 뺀 /api 경로는 requireCtx 를
+  // 쓴다" 를 정적으로 강제한다 — 이 예외가 조용히 무인증 구멍이 되지 않도록.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|fonts|icons|sw.js|manifest.webmanifest|offline|api/import).*)",
+  ],
 };

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { pairingState } from "@/lib/pairing";
+import { pairingState, isPairingCode } from "@/lib/pairing";
 
 export const runtime = "nodejs";
 
@@ -9,6 +9,8 @@ export const runtime = "nodejs";
 // route-rule 을 role 무관하게 upsert 한다(사용자 본인 머신의 경로 매핑).
 export async function POST(req: Request, ctx: { params: Promise<{ code: string }> }) {
   const { code } = await ctx.params;
+  // 모양이 아니면 DB 까지 갈 이유가 없다(계약은 lib/pairing 한 곳에만 둔다).
+  if (!isPairingCode(code)) return NextResponse.json({ error: "bad code" }, { status: 400 });
   const row = await prisma.pairing.findUnique({ where: { code } });
   if (!row) {
     return NextResponse.json({ error: "페어링을 찾을 수 없습니다." }, { status: 410 });

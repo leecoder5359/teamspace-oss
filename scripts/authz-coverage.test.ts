@@ -59,6 +59,28 @@ describe("authz coverage", () => {
     });
   }
 
+  /* 미들웨어 matcher 에서 뺀 /api 경로는 **라우트 자체 게이트가 유일한 방어선**이다.
+     (지금 하나뿐: api/import — 엣지 미들웨어가 10MB 넘는 본문을 깨뜨려서 뺐다.)
+     여기에 requireCtx 가 없으면 그 경로는 통째로 무인증이 되므로 정적으로 강제한다. */
+  it("미들웨어 matcher 에서 제외한 /api 경로는 requireCtx 로 스스로 막는다", () => {
+    const mw = readFileSync(join(__dirname, "..", "middleware.ts"), "utf8");
+    const matcher = /matcher:\s*\[([\s\S]*?)\]/.exec(mw)?.[1] ?? "";
+    const excluded = [...matcher.matchAll(/api\/([a-z0-9_\-/[\]]+)/gi)].map((m) => m[1]);
+    // 제외 목록이 사라지면(정규식이 안 맞으면) 이 테스트가 조용히 통과하지 않도록
+    expect(excluded).toContain("import");
+    for (const path of excluded) {
+      const candidates = routes.filter((r) => r === `${path}/route.ts` || r.startsWith(`${path}/`));
+      expect(candidates.length, `middleware matcher 가 /api/${path} 를 뺐는데 그런 라우트가 없습니다`).toBeGreaterThan(0);
+      for (const rel of candidates) {
+        const src = readFileSync(join(API_ROOT, rel), "utf8");
+        expect(
+          src.includes("requireCtx("),
+          `${rel} 은 미들웨어 밖(matcher 제외)인데 requireCtx 가 없습니다 — 무인증 구멍입니다.`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("화이트리스트 파일이 실제로 존재한다(오타 방지)", () => {
     for (const rel of WHITELIST) {
       expect(() => readFileSync(join(API_ROOT, rel), "utf8")).not.toThrow();

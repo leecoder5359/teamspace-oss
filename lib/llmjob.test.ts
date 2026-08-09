@@ -1,10 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
   buildFeedbackClassifyPrompt,
   parseFeedbackClassification,
   sanitizeMergeAgendaId,
   selectRetryableJobs,
+  callbackPolicy,
+  JOB_RETENTION_DAYS,
 } from "./llmjob";
+import { checkCallbackUrl } from "./callbackUrl";
 
 describe("buildFeedbackClassifyPrompt", () => {
   it("제출 본문과 기존 안건 목록을 프롬프트에 포함한다", () => {
@@ -69,5 +72,43 @@ describe("selectRetryableJobs", () => {
       { id: "c", status: "done", attempts: 0 },
     ];
     expect(selectRetryableJobs(jobs, 3).map((j) => j.id)).toEqual(["a"]);
+  });
+});
+
+describe("callbackPolicy — 라우트와 워커가 같은 정책을 본다 (피드백허브 후속)", () => {
+  const saved = { hosts: process.env.LLM_CALLBACK_ALLOWED_HOSTS, priv: process.env.LLM_CALLBACK_ALLOW_PRIVATE };
+  // process.env.X = undefined 는 문자열 "undefined" 를 넣는다 — 지우려면 delete 여야 한다.
+  afterEach(() => {
+    if (saved.hosts === undefined) delete process.env.LLM_CALLBACK_ALLOWED_HOSTS;
+    else process.env.LLM_CALLBACK_ALLOWED_HOSTS = saved.hosts;
+    if (saved.priv === undefined) delete process.env.LLM_CALLBACK_ALLOW_PRIVATE;
+    else process.env.LLM_CALLBACK_ALLOW_PRIVATE = saved.priv;
+  });
+
+  it("설정이 없으면 '내부만 차단' — 공개 콜백은 계속 동작한다(기존 연동을 깨지 않는다)", () => {
+    delete process.env.LLM_CALLBACK_ALLOWED_HOSTS;
+    delete process.env.LLM_CALLBACK_ALLOW_PRIVATE;
+    const p = callbackPolicy();
+    expect(p.allowHosts).toEqual([]);
+    expect(p.allowPrivate).toBe(false);
+    expect(checkCallbackUrl("https://callback.example.com/cb", p).ok).toBe(true);
+    expect(checkCallbackUrl("http://169.254.169.254/latest/meta-data/", p).ok).toBe(false);
+  });
+
+  it("allowlist 를 설정하면 그 호스트만", () => {
+    process.env.LLM_CALLBACK_ALLOWED_HOSTS = "callback.example.com, https://hooks.example.com/x";
+    const p = callbackPolicy();
+    expect(p.allowHosts).toEqual(["callback.example.com", "hooks.example.com"]);
+    expect(checkCallbackUrl("https://api.callback.example.com/cb", p).ok).toBe(true);
+    expect(checkCallbackUrl("https://evil.com/cb", p).ok).toBe(false);
+  });
+
+  it("ALLOW_PRIVATE=true 는 로컬 개발용 탈출구", () => {
+    process.env.LLM_CALLBACK_ALLOW_PRIVATE = "true";
+    expect(checkCallbackUrl("http://127.0.0.1:3002/cb", callbackPolicy()).ok).toBe(true);
+  });
+
+  it("보관 기간은 30일", () => {
+    expect(JOB_RETENTION_DAYS).toBe(30);
   });
 });

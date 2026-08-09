@@ -3,6 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { complete } from "@/lib/llm";
+import { checkCallbackUrl, parseHostAllowlist, type CallbackCheckOptions } from "@/lib/callbackUrl";
 
 export type FeedbackClassifyPayload = {
   ref: string;
@@ -100,11 +101,38 @@ export function selectRetryableJobs<T extends { status: string; attempts: number
 
 const MAX_ATTEMPTS = 3;
 
+/** done/failed 잡을 이만큼 지나면 지운다. payload 에 사장님 원문이 들어 있어 영구보관할 이유가 없다. */
+export const JOB_RETENTION_DAYS = 30;
+
+/**
+ * 콜백 정책(환경변수). 라우트와 워커가 **같은 정책**을 봐야 하므로 여기 하나로 둔다.
+ *
+ *   LLM_CALLBACK_ALLOWED_HOSTS  콤마 구분 호스트(비면 "내부 차단만")
+ *   LLM_CALLBACK_ALLOW_PRIVATE  "true" 면 사설·루프백 허용(로컬 개발 전용)
+ */
+export function callbackPolicy(): CallbackCheckOptions {
+  return {
+    allowHosts: parseHostAllowlist(process.env.LLM_CALLBACK_ALLOWED_HOSTS),
+    allowPrivate: process.env.LLM_CALLBACK_ALLOW_PRIVATE === "true",
+  };
+}
+
+/** 오래된 done/failed 잡 정리. 워커가 tick 마다 부른다(지울 게 없으면 0). */
+export async function purgeOldLlmJobs(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - JOB_RETENTION_DAYS * 24 * 3600 * 1000);
+  const r = await prisma.llmJob.deleteMany({
+    where: { status: { in: ["done", "failed"] }, updatedAt: { lt: cutoff } },
+  });
+  return r.count;
+}
+
 /** pending 잡을 LLM 으로 처리하고 callbackUrl 에 결과를 POST. 실패는 attempts 증가, MAX 초과 시 failed. */
 export async function dispatchLlmJobs(): Promise<{ checked: number; done: number; failed: number }> {
   const jobs = await prisma.llmJob.findMany({ where: { status: "pending" }, orderBy: { createdAt: "asc" }, take: 10 });
   const due = selectRetryableJobs(jobs, MAX_ATTEMPTS);
   let done = 0, failed = 0;
+
+  const policy = callbackPolicy();
 
   for (const job of due) {
     let ok = false;
@@ -112,11 +140,31 @@ export async function dispatchLlmJobs(): Promise<{ checked: number; done: number
     let error = "";
     try {
       const payload = job.payload as unknown as FeedbackClassifyPayload;
-      const raw = await complete(buildFeedbackClassifyPrompt(payload));
-      result = raw ? parseFeedbackClassification(raw) : null;
-      if (!result) error = raw ? "파싱 실패" : "LLM 응답 없음";
-      else {
-        result = sanitizeMergeAgendaId(result, payload.agendas);
+      /* 발송 직전에 다시 검사한다(SSRF 축소). 접수 때도 보지만, 정책이 바뀐 뒤에
+         남아 있는 행·다른 경로로 들어온 행이 그대로 나가면 안 된다. 여기서 걸리면
+         재시도해도 달라질 게 없으니 attempts 를 태우지 않고 바로 failed 로 둔다. */
+      const gate = checkCallbackUrl(job.callbackUrl, policy);
+      if (!gate.ok) {
+        await prisma.llmJob.update({
+          where: { id: job.id },
+          data: { status: "failed", lastError: `콜백 거부: ${gate.reason}` },
+        });
+        failed++;
+        continue;
+      }
+      /* 이미 result 가 있으면 LLM 을 다시 부르지 않는다. 전에는 콜백이 실패하면
+         파싱까지 끝난 결과를 버려서, 재시도마다 같은 프롬프트로 LLM 을 또 불렀다
+         (콜백 쪽 장애 = 같은 분류를 3번 과금). 남은 일은 재전송뿐이다. */
+      const cached = job.result as unknown as FeedbackClassification | null;
+      if (cached) {
+        result = cached;
+      } else {
+        const raw = await complete(buildFeedbackClassifyPrompt(payload));
+        result = raw ? parseFeedbackClassification(raw) : null;
+        if (!result) error = raw ? "파싱 실패" : "LLM 응답 없음";
+        else result = sanitizeMergeAgendaId(result, payload.agendas);
+      }
+      if (result) {
         const res = await fetch(job.callbackUrl, {
           method: "POST",
           headers: {
@@ -137,7 +185,8 @@ export async function dispatchLlmJobs(): Promise<{ checked: number; done: number
       data: {
         attempts: { increment: 1 },
         status: ok ? "done" : exhausted ? "failed" : "pending",
-        result: ok ? (result as object) : undefined,
+        // 콜백이 실패해도 **결과는 남긴다** — 재시도가 LLM 을 다시 부르지 않게.
+        result: result ? (result as object) : undefined,
         lastError: ok ? null : error,
       },
     });
