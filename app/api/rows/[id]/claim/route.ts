@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage } from "@/lib/pageGuard";
 import { findAssigneeProp, findStatusProp, optionIdByName } from "@/lib/taskProps";
 import { notifyTaskAssigned } from "@/lib/notify";
 import { recordActivity } from "@/lib/activity";
@@ -25,6 +26,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!row || row.database.workspaceId !== guard.workspaceId || row.database.deletedAt) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const gate = await requirePage(guard, row.databasePageId, "edit");
+  if ("err" in gate) return gate.err;
 
   const props = await prisma.dbProperty.findMany({
     where: { databasePageId: row.databasePageId },

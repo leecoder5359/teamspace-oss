@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage } from "@/lib/pageGuard";
+import type { Ctx } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
 // 행(태스크)이 현재 워크스페이스 소속인지 확인
-async function rowInWorkspace(rowId: string, workspaceId: string): Promise<boolean> {
+/**
+ * 행이 이 워크스페이스 것인지 + **그 행이 속한 보드에 접근할 수 있는지**(D3).
+ * 워크스페이스 확인만 하던 것을 게이트까지 넓혔다 — 체크리스트·댓글은 태스크 내용
+ * 그 자체라, 보드를 못 보는 사람에게 열려 있으면 보드를 잠근 의미가 없다.
+ */
+async function rowGate(guard: Ctx, rowId: string, min: "view" | "edit") {
   const row = await prisma.dbRow.findUnique({
     where: { id: rowId },
-    select: { database: { select: { workspaceId: true } } },
+    select: { databasePageId: true, database: { select: { workspaceId: true } } },
   });
-  return !!row && row.database.workspaceId === workspaceId;
+  if (!row || row.database.workspaceId !== guard.workspaceId) {
+    return { err: NextResponse.json({ error: "Not found" }, { status: 404 }) };
+  }
+  return requirePage(guard, row.databasePageId, min);
 }
 
 // GET /api/rows/[id]/checklist → 체크리스트 항목 목록
@@ -18,8 +28,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
-  const { workspaceId } = guard;
-  if (!(await rowInWorkspace(id, workspaceId))) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const gate = await rowGate(guard, id, "view");
+  if ("err" in gate) return gate.err;
   const items = await prisma.rowChecklistItem.findMany({
     where: { rowId: id },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -32,8 +42,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
-  const { workspaceId } = guard;
-  if (!(await rowInWorkspace(id, workspaceId))) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const gate = await rowGate(guard, id, "view");
+  if ("err" in gate) return gate.err;
   const body = (await req.json().catch(() => ({}))) as { text?: string };
   const text = body.text?.trim();
   if (!text) return NextResponse.json({ error: "내용을 입력해 주세요." }, { status: 400 });

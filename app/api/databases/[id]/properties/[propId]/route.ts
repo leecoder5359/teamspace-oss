@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage } from "@/lib/pageGuard";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string; p
   const { id, propId } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const prop = await loadProp(id, propId, guard.workspaceId);
   if (!prop) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -80,6 +83,8 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string;
   const { id, propId } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const prop = await loadProp(id, propId, guard.workspaceId);
   if (!prop) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await prisma.dbProperty.delete({ where: { id: propId } });
