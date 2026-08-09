@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import type { NotifEvent, NotifTarget } from "@/app/generated/prisma/enums";
 
 export const runtime = "nodejs";
 
-const EVENTS: NotifEvent[] = ["task_created", "task_status", "task_assigned", "task_due"];
+// NotifEvent enum 전체와 일치시킨다. 종전엔 task 4종만 허용해서, comment_added·doc_saved 는
+// 규칙을 만들 방법이 없었고 그래서 pages/[id]/comments:84·pages/[id]:149 의 fireNotif 가
+// 영구 무동작이었다 — SKILL.md 는 comment_added 발화를 약속하고 있었다(전수조사 D7).
+const EVENTS: NotifEvent[] = ["task_created", "task_status", "task_assigned", "task_due", "comment_added", "doc_saved"];
 
 // GET /api/notif-rules → 자동 알림 규칙 목록
 export async function GET() {
@@ -31,8 +35,11 @@ export async function POST(request: Request) {
   }
   const targetId = body.targetId?.trim();
   if (!targetId) return NextResponse.json({ error: "채널을 입력해 주세요." }, { status: 400 });
+  // 검증 없이 저장하면 selectRules 가 영원히 매칭하지 못해 '절대 발화하지 않는 규칙'이 된다(D5)
+  const ref = await resolveProjectRef(body.projectId, workspaceId);
+  if (!ref.ok) return ref.err;
   const rule = await prisma.notifRule.create({
-    data: { workspaceId, event: body.event, target: "channel", targetId, projectId: body.projectId?.trim() || null },
+    data: { workspaceId, event: body.event, target: "channel", targetId, projectId: ref.projectId },
   });
   return NextResponse.json({ rule });
 }

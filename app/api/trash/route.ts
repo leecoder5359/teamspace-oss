@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 
 export const runtime = "nodejs";
 
@@ -20,5 +21,7 @@ export async function GET() {
     },
     orderBy: { deletedAt: "desc" },
   });
-  return NextResponse.json({ pages });
+  // D3: 지운다고 안 보이던 게 보이게 되면 안 된다.
+  const idx = await loadAccess(guard);
+  return NextResponse.json({ pages: visibleOnly(idx, pages) });
 }

@@ -41,12 +41,12 @@ describe("buildProjectStats", () => {
         short: "iOS",
         color: "blue",
         description: "데모",
-        lead: { id: "u1", name: "김팀장", image: null },
+        lead: { id: "u1", name: "이호준", image: null },
         pages: [
           board([
-            { p_name: "A", p_status: "s_doing", p_assignee: "김팀장" },
+            { p_name: "A", p_status: "s_doing", p_assignee: "이호준" },
             { p_name: "B", p_status: "s_done", p_assignee: "김개발" },
-            { p_name: "C", p_status: "s_todo", p_assignee: "김팀장, 박디자인" },
+            { p_name: "C", p_status: "s_todo", p_assignee: "이호준, 박디자인" },
           ]),
           doc("d1"),
           doc("d2"),
@@ -69,7 +69,7 @@ describe("buildProjectStats", () => {
     expect(bucket("완료")).toBe(1);
 
     // 참여자(고유)
-    expect([...stat.participants].sort()).toEqual(["김개발", "김팀장", "박디자인"]);
+    expect([...stat.participants].sort()).toEqual(["김개발", "박디자인", "이호준"]);
   });
 
   it("counts overdue and due-soon only for open tasks, relative to today", () => {

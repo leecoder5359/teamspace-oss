@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { loadAccess, pageAccess } from "@/lib/pageGuard";
 import { findAssigneeProp } from "@/lib/taskProps";
 
 export const runtime = "nodejs";
@@ -18,16 +19,17 @@ export async function GET(request: Request) {
   const assigneeParam = url.searchParams.get("assignee");
   const assigneeFilter = assigneeParam === "me" ? guard.actor.name : assigneeParam;
 
-  const db = boardParam
-    ? await prisma.page.findFirst({
-        where: { id: boardParam, kind: "database", workspaceId, deletedAt: null },
-        select: { id: true },
-      })
-    : await prisma.page.findFirst({
-        where: { kind: "database", workspaceId, deletedAt: null },
-        orderBy: { createdAt: "asc" },
-        select: { id: true },
-      });
+  // D3: 지정 보드는 게이트를 통과해야 하고, 미지정일 때 고르는 '첫 보드' 도
+  // **내가 볼 수 있는 것 중** 첫 번째여야 한다(안 그러면 남의 보드가 기본값이 된다).
+  const idx = await loadAccess(guard);
+  const candidates = await prisma.page.findMany({
+    where: boardParam
+      ? { id: boardParam, kind: "database", workspaceId, deletedAt: null }
+      : { kind: "database", workspaceId, deletedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const db = candidates.find((c) => pageAccess(idx, c.id) !== "none") ?? null;
   if (!db) return NextResponse.json({ tasks: [], databaseId: null });
 
   const [props, rows] = await Promise.all([

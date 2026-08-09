@@ -129,6 +129,11 @@ export async function sendApproval(
   args: { title: string; body: string; channel?: string; kind?: ApprovalKindStr; highRisk?: boolean; createdBy?: string; projectId?: string },
 ): Promise<{ id: string; sent: boolean; error?: string }> {
   const KINDS: ApprovalKindStr[] = ["general", "status", "triage", "doc", "project", "deploy"];
+  // 이 워크스페이스 소속인 것만 인정한다. 종전엔 넘어온 값을 그대로 저장해
+  // 없는 프로젝트 id 가 남았고(Approval.projectId 는 FK 도 없다) 조용히 무의미했다.
+  const validProjectId = args.projectId
+    ? (await prisma.project.findFirst({ where: { id: args.projectId, workspaceId }, select: { id: true } }))?.id ?? null
+    : null;
   const approval = await prisma.approval.create({
     data: {
       workspaceId,
@@ -137,7 +142,9 @@ export async function sendApproval(
       kind: KINDS.includes(args.kind as ApprovalKindStr) ? (args.kind as ApprovalKindStr) : "general",
       highRisk: !!args.highRisk,
       ...(args.createdBy != null ? { createdBy: args.createdBy } : {}),
-      ...(args.projectId != null ? { projectId: args.projectId } : {}),
+      // projectId 는 호출부에서 넘어온 그대로였다 — 없는/남의 프로젝트여도 그대로
+      // 저장돼 조용히 무의미한 값이 남았다(D5 클러스터). 소속을 확인한 것만 넣는다.
+      ...(validProjectId != null ? { projectId: validProjectId } : {}),
     },
   });
 

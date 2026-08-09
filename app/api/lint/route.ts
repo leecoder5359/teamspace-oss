@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { computeLint } from "@/lib/wikilink";
 
 export const runtime = "nodejs";
@@ -14,5 +15,7 @@ export async function GET() {
     where: { workspaceId, kind: "doc", deletedAt: null },
     select: { id: true, title: true, markdown: true },
   });
-  return NextResponse.json(computeLint(pages));
+  // D3: 그래프·점검도 제목과 링크 관계를 드러낸다 — 볼 수 있는 것만 넣는다.
+  const idx = await loadAccess(guard);
+  return NextResponse.json(computeLint(visibleOnly(idx, pages)));
 }

@@ -36,10 +36,18 @@ export async function createReminder(
   });
 }
 
+/**
+ * 활성 리마인더 목록.
+ *
+ * 종전엔 `kind: "once"` 만 조회해서, 반복 리마인더(`remind add --every`, kind=cron)는
+ * 만들 수는 있는데 목록에 절대 나오지 않았고 따라서 취소할 방법도 없었다(전수조사 D16).
+ * 두 종류를 함께 돌려준다 — once 는 spec 이 ISO 라 시간순, cron 은 "daily:HH:MM" 이라
+ * 문자열 정렬이 곧 시각순이므로 kind 로 묶은 뒤 spec 으로 정렬한다.
+ */
 export async function listReminders(workspaceId: string, databasePageId?: string) {
   const all = await prisma.schedule.findMany({
-    where: { workspaceId, kind: "once", status: "active" },
-    orderBy: { spec: "asc" },
+    where: { workspaceId, kind: { in: ["once", "cron"] }, status: "active" },
+    orderBy: [{ kind: "asc" }, { spec: "asc" }],
   });
   if (!databasePageId) return all;
   return all.filter((s) => {

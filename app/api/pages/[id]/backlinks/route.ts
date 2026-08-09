@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage, visibleOnly } from "@/lib/pageGuard";
 import { computeBacklinks } from "@/lib/wikilink";
 
 export const runtime = "nodejs";
@@ -10,11 +11,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
+  const gate = await requirePage(guard, id, "view");
+  if ("err" in gate) return gate.err;
   const { workspaceId } = guard;
   const pages = await prisma.page.findMany({
     where: { workspaceId, kind: "doc", deletedAt: null },
     select: { id: true, title: true, markdown: true },
   });
   const back = computeBacklinks(pages);
-  return NextResponse.json({ backlinks: back[id] ?? [] });
+  // 못 보는 문서가 이 문서를 참조한다는 사실 자체가 제목 누출이다.
+  return NextResponse.json({ backlinks: visibleOnly(gate.idx, back[id] ?? []) });
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -28,11 +29,10 @@ export async function POST(request: Request) {
   };
   const title = b.title?.trim();
   if (!title) return NextResponse.json({ error: "제목을 입력해 주세요." }, { status: 400 });
-  let projectId: string | null = null;
-  if (b.projectId) {
-    const p = await prisma.project.findFirst({ where: { id: b.projectId, workspaceId }, select: { id: true } });
-    projectId = p?.id ?? null;
-  }
+  // 없는/남의 프로젝트는 조용히 null 로 버리지 않고 400 으로 알린다(D5)
+  const ref = await resolveProjectRef(b.projectId, workspaceId);
+  if (!ref.ok) return ref.err;
+  const projectId = ref.projectId;
   const created = await prisma.qaScenario.create({
     data: {
       workspaceId, projectId, title,

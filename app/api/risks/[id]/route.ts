@@ -4,6 +4,7 @@ import { requireCtx } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 const ST = ["open", "mitigated", "closed"] as const;
+const SEV = ["low", "medium", "high"] as const;
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -12,9 +13,35 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { workspaceId } = guard;
   const found = await prisma.risk.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const b = (await req.json().catch(() => ({}))) as { status?: string };
-  if (!(ST as readonly string[]).includes(b.status ?? "")) return NextResponse.json({ error: "invalid" }, { status: 400 });
-  await prisma.risk.update({ where: { id }, data: { status: b.status as "open" | "mitigated" | "closed" } });
+  const b = (await req.json().catch(() => ({}))) as {
+    title?: string; description?: string; severity?: string; status?: string; projectId?: string;
+  };
+  if (b.status !== undefined && !(ST as readonly string[]).includes(b.status)) {
+    return NextResponse.json({ error: "invalid" }, { status: 400 });
+  }
+  if (b.severity !== undefined && !(SEV as readonly string[]).includes(b.severity)) {
+    return NextResponse.json({ error: "invalid severity" }, { status: 400 });
+  }
+  if (b.title !== undefined && !b.title.trim()) return NextResponse.json({ error: "제목을 입력해 주세요." }, { status: 400 });
+  let projectPatch: { projectId: string | null } | Record<string, never> = {};
+  if (b.projectId !== undefined) {
+    if (!b.projectId.trim()) projectPatch = { projectId: null };
+    else {
+      const proj = await prisma.project.findFirst({ where: { id: b.projectId, workspaceId }, select: { id: true } });
+      if (!proj) return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 400 });
+      projectPatch = { projectId: proj.id };
+    }
+  }
+  await prisma.risk.update({
+    where: { id },
+    data: {
+      ...(b.title !== undefined ? { title: b.title.trim() } : {}),
+      ...(b.description !== undefined ? { description: b.description.trim() || null } : {}),
+      ...(b.severity !== undefined ? { severity: b.severity as "low" | "medium" | "high" } : {}),
+      ...(b.status !== undefined ? { status: b.status as "open" | "mitigated" | "closed" } : {}),
+      ...projectPatch,
+    },
+  });
   return NextResponse.json({ ok: true });
 }
 

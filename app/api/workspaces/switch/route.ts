@@ -6,7 +6,11 @@ export const runtime = "nodejs";
 
 // POST /api/workspaces/switch → 활성 워크스페이스 전환(멤버십 검증 후 쿠키 설정)
 export async function POST(request: Request) {
-  const guard = await requireCtx("editor");
+  // requireCtx 의 role 은 **전환 대상이 아니라 현재 활성 워크스페이스**의 것이다.
+  // "editor" 를 요구하면 A 에서 viewer 인 사람은 B 에서 admin 이어도 B 로 못 간다 —
+  // 전환은 현재 워크스페이스에 대한 쓰기가 아니므로 로그인만 요구하고,
+  // 실제 판정은 아래 대상 워크스페이스 멤버십으로 한다(전수조사 D13).
+  const guard = await requireCtx();
   if ("err" in guard) return guard.err;
   const { userId } = guard;
   const body = (await request.json().catch(() => ({}))) as { workspaceId?: string };

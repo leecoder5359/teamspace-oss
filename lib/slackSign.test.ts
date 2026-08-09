@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createHmac } from "node:crypto";
 import { verifySlackSignature } from "@/lib/slackSign";
 
-const SECRET = "8f742231b10e8888abcd99yyyzzz85a5"; // 슬랙 공식 문서의 예제 signing secret — gitleaks:allow
+const SECRET = "8f742231b10e8888abcd99yyyzzz85a5";
 
 // 슬랙 문서 알고리즘으로 정답 서명을 독립 계산.
 function sign(ts: number, body: string): string {

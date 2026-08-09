@@ -25,16 +25,24 @@ export const personConfigSchema = z.object({
 });
 export type PersonConfig = z.infer<typeof personConfigSchema>;
 
+// relation: 어느 보드를 가리키는지. 값은 그 보드의 행 id 배열이다(격차 C2).
+// 같은 보드를 가리켜도 된다 — "선행 태스크" 같은 자기참조가 실제 용례다.
+export const relationConfigSchema = z.object({
+  targetDatabaseId: z.string().min(1),
+});
+export type RelationConfig = z.infer<typeof relationConfigSchema>;
+
 const CONFIG_VALIDATORS = {
   multiselect: multiselectConfigSchema,
   person: personConfigSchema,
+  relation: relationConfigSchema,
 } as const;
 
 export type ValidatedPropType = keyof typeof CONFIG_VALIDATORS;
 
 /**
  * 주어진 속성 타입에 대해 config 를 검증한다.
- * 검증기가 없는 타입(text/number/date/select/checkbox/relation)은 입력을 그대로 통과시킨다.
+ * 검증기가 없는 타입(text/number/date/select/checkbox)은 입력을 그대로 통과시킨다.
  * 비파괴적: 검증 실패 시 throw 하므로 호출부에서 safeParse 또는 try/catch 로 다룰 것.
  */
 export function parseDbPropertyConfig(type: string, config: unknown): unknown {

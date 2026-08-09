@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage } from "@/lib/pageGuard";
 import { complete } from "@/lib/llm";
 import { buildProvenancePrompt, parseProvenance, countTags } from "@/lib/provenance";
 
@@ -15,6 +16,11 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { pageId?: string };
   const pageId = body.pageId?.trim();
   if (!pageId) return NextResponse.json({ error: "pageId가 필요합니다." }, { status: 400 });
+  // D3: 못 보는 문서를 LLM 파이프라인에 넣어 요약·추출로 우회 열람할 수 없다.
+  if (pageId) {
+    const gate = await requirePage(guard, pageId, "view");
+    if ("err" in gate) return gate.err;
+  }
 
   const page = await prisma.page.findFirst({
     where: { id: pageId, workspaceId, kind: "doc", deletedAt: null },

@@ -4,7 +4,7 @@ import { buildApprovalCard, buildResolvedCard, decisionSummary, KIND_META, forma
 describe("buildApprovalCard", () => {
   const full = buildApprovalCard({
     id: "ap_1", title: "프로덕션 배포", body: "main→prod", kind: "deploy", highRisk: true,
-    requesterName: "김팀장", projectName: "iOS앱", createdAt: new Date("2026-07-01T05:30:00Z"),
+    requesterName: "이호준", projectName: "iOS앱", createdAt: new Date("2026-07-01T05:30:00Z"),
   });
 
   it("highRisk=빨강 액센트 + 고위험 배지", () => {
@@ -16,7 +16,7 @@ describe("buildApprovalCard", () => {
     const s = JSON.stringify(full.attachments[0].blocks);
     expect(s).toContain("🚀 프로덕션 배포");
     expect(s).toContain("main→prod");
-    expect(s).toContain("김팀장");
+    expect(s).toContain("이호준");
     expect(s).toContain("iOS앱");
     expect(s).toContain("2026-07-01 14:30");
   });
@@ -68,12 +68,12 @@ describe("buildResolvedCard", () => {
   it("approved=초록 + 결과 라인(응답자·시각)", () => {
     const c = buildResolvedCard(
       { title: "배포", body: "b", kind: "deploy" },
-      { status: "approved", responder: "김팀장", at: new Date("2026-07-01T05:32:00Z") },
+      { status: "approved", responder: "이호준", at: new Date("2026-07-01T05:32:00Z") },
     );
     expect(c.attachments[0].color).toBe("#12B886");
     const s = JSON.stringify(c.attachments[0].blocks);
     expect(s).toContain("승인됨");
-    expect(s).toContain("김팀장");
+    expect(s).toContain("이호준");
     expect(s).toContain("14:32");
   });
   it("rejected=빨강 + 사유, additional=회색", () => {

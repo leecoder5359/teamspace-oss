@@ -11,8 +11,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { workspaceId } = guard;
   const found = await prisma.dodItem.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const b = (await req.json().catch(() => ({}))) as { done?: boolean };
-  await prisma.dodItem.update({ where: { id }, data: { done: !!b.done } });
+  const b = (await req.json().catch(() => ({}))) as { done?: boolean; text?: string };
+  if (b.text !== undefined && !b.text.trim()) return NextResponse.json({ error: "항목을 입력해 주세요." }, { status: 400 });
+  // done 은 주어졌을 때만 건드린다 — 종전엔 text 만 고쳐도 done 이 false 로 밀렸다.
+  await prisma.dodItem.update({
+    where: { id },
+    data: {
+      ...(b.done !== undefined ? { done: !!b.done } : {}),
+      ...(b.text !== undefined ? { text: b.text.trim() } : {}),
+    },
+  });
   return NextResponse.json({ ok: true });
 }
 

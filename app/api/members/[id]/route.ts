@@ -26,8 +26,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ error: "유효하지 않은 역할입니다." }, { status: 400 });
     }
     // 마지막 관리자 강등 방지
+    //
+    // status:"active" 가 필수다. 제거는 소프트(아래 DELETE 가 status="removed" 로 두고
+    // role 은 admin 그대로 남긴다)라, 관리자를 한 번이라도 제거한 워크스페이스에는
+    // 유령 admin 행이 남는다. 그걸 세면 활성 관리자가 1명뿐인데도 2명으로 보여
+    // 마지막 관리자 강등이 통과하고, 그 순간 admin 전용 라우트가 전부 잠긴다
+    // (자동 가입은 editor 라 자가복구 경로가 없다 — lib/workspace.ts:86-89).
+    // 15줄 아래 DELETE 와 approvals 라우트는 이미 active 로 세고 있었다.
     if (member.role === "admin" && body.role !== "admin") {
-      const adminCount = await prisma.workspaceMember.count({ where: { workspaceId, role: "admin" } });
+      const adminCount = await prisma.workspaceMember.count({
+        where: { workspaceId, role: "admin", status: "active" },
+      });
       if (adminCount <= 1) {
         return NextResponse.json({ error: "마지막 관리자의 역할은 변경할 수 없습니다." }, { status: 400 });
       }

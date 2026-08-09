@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage } from "@/lib/pageGuard";
 import { recordActivity } from "@/lib/activity";
 import { resolveDocPath } from "@/lib/docFiles";
 import { deleteContent } from "@/lib/content";
@@ -13,6 +14,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  // D3: 복원·영구삭제도 그 페이지를 편집할 수 있어야 한다.
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
 
   const page = await prisma.page.findUnique({
     where: { id },
@@ -50,6 +54,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  // D3: 복원·영구삭제도 그 페이지를 편집할 수 있어야 한다.
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
 
   const page = await prisma.page.findUnique({ where: { id }, include: { children: true } });
   if (!page || page.workspaceId !== guard.workspaceId || !page.deletedAt) {

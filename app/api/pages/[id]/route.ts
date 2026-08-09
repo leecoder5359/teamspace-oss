@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { requirePage, isRestrictedPage } from "@/lib/pageGuard";
 import { checkBaseRev } from "@/lib/concurrency";
 import { recordActivity } from "@/lib/activity";
 import { fireNotif } from "@/lib/notify";
@@ -40,6 +41,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
+  // D3: 볼 수 없는 페이지는 '없는' 것이다(404).
+  const gate = await requirePage(guard, id, "view");
+  if ("err" in gate) return gate.err;
   const page = await prisma.page.findUnique({ where: { id } });
   if (!page || page.workspaceId !== guard.workspaceId || page.deletedAt) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -72,6 +76,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const body = (await req.json().catch(() => ({}))) as {
     markdown?: string;
     title?: string;
@@ -146,7 +152,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   ]);
 
   recordActivity(guard, "updated", "doc", title, id);
-  void fireNotif(guard.workspaceId, "doc_saved", `📝 ${guard.actor.name} 문서 저장: ${title}`, page.projectId);
+  // D3 후속: 비공개 문서의 제목을 채널로 뿌리지 않는다(제목 자체가 내용이다).
+  void isRestrictedPage(id).then((restricted) => {
+    if (!restricted) void fireNotif(guard.workspaceId, "doc_saved", `📝 ${guard.actor.name} 문서 저장: ${title}`, page.projectId);
+  });
   return NextResponse.json({ ok: true, rev: nextRev });
 }
 
@@ -158,6 +167,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const page = await prisma.page.findUnique({ where: { id }, select: { id: true, workspaceId: true } });
   if (!page || page.workspaceId !== workspaceId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -244,6 +255,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
+  const gate = await requirePage(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const recursive = new URL(req.url).searchParams.get("recursive") === "1";
 
   const page = await prisma.page.findUnique({ where: { id }, include: { children: true } });

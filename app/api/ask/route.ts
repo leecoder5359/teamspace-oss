@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { tokenize, rankSources, buildExtractiveAnswer, type SourceDoc } from "@/lib/ask";
 import { synthesizeAnswer } from "@/lib/llm";
 
@@ -45,8 +46,10 @@ export async function GET(request: Request) {
     }),
   ]);
 
+  // D3: 답변 합성에 못 보는 문서가 섞이면 본문이 그대로 흘러나온다.
+  const idx = await loadAccess(guard);
   const candidates: SourceDoc[] = [
-    ...docs.map((d) => ({ id: d.id, title: d.title, kind: "doc" as const, body: d.markdown ?? "" })),
+    ...visibleOnly(idx, docs).map((d) => ({ id: d.id, title: d.title, kind: "doc" as const, body: d.markdown ?? "" })),
     ...decisions.map((d) => ({
       id: d.id,
       title: d.title,

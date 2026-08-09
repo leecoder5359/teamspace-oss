@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { recordActivity } from "@/lib/activity";
 
@@ -39,11 +40,10 @@ export async function POST(request: Request) {
   const title = body.title?.trim();
   if (!title) return NextResponse.json({ error: "제목을 입력해 주세요." }, { status: 400 });
 
-  let projectId: string | null = null;
-  if (body.projectId) {
-    const p = await prisma.project.findFirst({ where: { id: body.projectId, workspaceId }, select: { id: true } });
-    projectId = p?.id ?? null;
-  }
+  // 없는/남의 프로젝트는 조용히 null 로 버리지 않고 400 으로 알린다(D5)
+  const ref = await resolveProjectRef(body.projectId, workspaceId);
+  if (!ref.ok) return ref.err;
+  const projectId = ref.projectId;
   const status: Status = STATUSES.includes(body.status as Status) ? (body.status as Status) : "accepted";
 
   const created = await prisma.decision.create({

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveMemberRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
+import { loadAccess, projectAccess } from "@/lib/pageGuard";
 import { getProjectsWithStats } from "@/lib/projects";
 
 const COLORS = ["blue", "orange", "purple", "green", "red", "gray"];
@@ -11,7 +13,9 @@ export async function GET() {
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
   const projects = await getProjectsWithStats(workspaceId);
-  return NextResponse.json({ projects });
+  // D3: 잠긴 프로젝트는 목록에서도 빠진다(이름·지표 자체가 정보다).
+  const idx = await loadAccess(guard);
+  return NextResponse.json({ projects: projects.filter((p) => projectAccess(idx, p.id) !== "none") });
 }
 
 // POST /api/projects → 프로젝트 생성
@@ -38,14 +42,10 @@ export async function POST(request: Request) {
 
   const color = body.color && COLORS.includes(body.color) ? body.color : "blue";
 
-  // leadId가 주어지면 해당 워크스페이스 멤버인지 확인
-  let leadId: string | null = null;
-  if (body.leadId) {
-    const member = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: body.leadId } },
-    });
-    if (member) leadId = body.leadId;
-  }
+  // 멤버가 아니면 조용히 버리지 않고 400 — 리드를 지정했다고 믿는 호출자를 속이지 않는다(D5)
+  const lead = await resolveMemberRef(body.leadId, workspaceId, "프로젝트 리드");
+  if (!lead.ok) return lead.err;
+  const leadId = lead.userId;
 
   const last = await prisma.project.findFirst({
     where: { workspaceId },

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveMemberRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
+import { requireProject } from "@/lib/pageGuard";
 
 const COLORS = ["blue", "orange", "purple", "green", "red", "gray"];
 
@@ -9,6 +11,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  // D3: 잠긴 프로젝트는 부여받은 사람만 고치거나 지운다.
+  const gate = await requireProject(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const { workspaceId } = guard;
 
   const project = await prisma.project.findUnique({ where: { id } });
@@ -42,14 +47,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (body.repoBranch !== undefined) data.repoBranch = body.repoBranch?.trim() || null;
   if (body.docsDir !== undefined) data.docsDir = body.docsDir?.trim() || null;
   if (body.leadId !== undefined) {
-    if (body.leadId === null) {
-      data.leadId = null;
-    } else {
-      const member = await prisma.workspaceMember.findUnique({
-        where: { workspaceId_userId: { workspaceId, userId: body.leadId } },
-      });
-      data.leadId = member ? body.leadId : null;
-    }
+    // 종전엔 멤버가 아니면 data.leadId = null 로 **기존 리드까지 지웠다** — 잘못된 값을
+    // 보낸 벌로 멀쩡한 데이터를 날리는 셈이라 가장 나쁜 형태였다(D5).
+    const lead = await resolveMemberRef(body.leadId, workspaceId, "프로젝트 리드");
+    if (!lead.ok) return lead.err;
+    data.leadId = lead.userId;
   }
 
   const updated = await prisma.project.update({ where: { id }, data });
@@ -61,6 +63,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
+  // D3: 잠긴 프로젝트는 부여받은 사람만 고치거나 지운다.
+  const gate = await requireProject(guard, id, "edit");
+  if ("err" in gate) return gate.err;
   const { workspaceId } = guard;
 
   const project = await prisma.project.findUnique({ where: { id } });

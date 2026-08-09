@@ -27,7 +27,9 @@ export async function GET() {
 
 // POST /api/workspaces → 새 워크스페이스 생성(생성자=admin) + 활성 전환
 export async function POST(request: Request) {
-  const guard = await requireCtx("editor");
+  // 새 워크스페이스 생성도 현재 워크스페이스의 role 과 무관하다 — 생성자는 어차피
+  // 새 워크스페이스의 admin 이 된다. viewer 라고 막을 이유가 없다(D13).
+  const guard = await requireCtx();
   if ("err" in guard) return guard.err;
   const { userId } = guard;
   const body = (await request.json().catch(() => ({}))) as { name?: string };

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { findAssigneeProp, findDateProp, findStatusProp } from "@/lib/taskProps";
 import { requireCtx } from "@/lib/workspace";
+import { loadAccess, pageAccess, visibleOnly } from "@/lib/pageGuard";
 import { resolveRouteByCwd } from "@/lib/ingest";
 
 export const runtime = "nodejs";
@@ -38,22 +40,41 @@ export async function GET(request: Request) {
 
   const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
 
-  // 보드(첫 database) 열린 태스크
-  const db = await prisma.page.findFirst({
-    where: { kind: "database", workspaceId, deletedAt: null },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
+  // 보드 열린 태스크.
+  //
+  // 종전엔 projectId 조건 없이 '워크스페이스 첫 database' 를 무조건 집었다. 그런데
+  // 아래 출력 헤더(:88-90)는 'cwd→<프로젝트> 스코프'라고 찍으므로, 다른 프로젝트의
+  // 태스크가 그 프로젝트 것인 양 세션에 주입됐다(전수조사 D8). 프로젝트가 정해졌으면
+  // 그 프로젝트 보드를 쓰고, 없을 때만 첫 보드로 물러난다.
+  // D3: 세션 컨텍스트는 에이전트에게 **자동 주입**된다 — 여기서 새면 사용자가
+  // 요청하지도 않은 문서 제목·태스크가 프롬프트에 실려 나간다. 가장 조용한 누출 경로다.
+  const access = await loadAccess(guard);
+  const visibleBoard = async (where: object) =>
+    (await prisma.page.findMany({ where, orderBy: { createdAt: "asc" }, select: { id: true } })).find(
+      (b) => pageAccess(access, b.id) !== "none",
+    ) ?? null;
+  const db =
+    (projectId ? await visibleBoard({ kind: "database", workspaceId, projectId, deletedAt: null }) : null) ??
+    (await visibleBoard({ kind: "database", workspaceId, deletedAt: null }));
   const tasks: { title: string; status: string | null; due: string | null; assignee: string | null }[] = [];
   if (db) {
     const [props, rows] = await Promise.all([
       prisma.dbProperty.findMany({ where: { databasePageId: db.id }, orderBy: { position: "asc" } }),
       prisma.dbRow.findMany({ where: { databasePageId: db.id }, orderBy: { position: "asc" } }),
     ]);
+    // 속성 해석은 공용 헬퍼로 — 자체 구현이 lib/taskProps 와 갈라져 있었고,
+    // 특히 담당자를 text 로만 찾아 person 타입 보드에서 항상 빈 값이었다(D8).
+    // claim 라우트와 같은 형태로 좁혀서 넘긴다(Prisma JsonValue → PropLite.config)
+    const propsLite = props.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type as string,
+      config: p.config as { options?: { id: string; name: string }[] },
+    }));
     const titleProp = props.find((p) => p.type === "text") ?? props[0] ?? null;
-    const statusProp = props.find((p) => p.type === "select" && /status|상태/i.test(p.name)) ?? props.find((p) => p.type === "select") ?? null;
-    const dateProp = props.find((p) => p.type === "date") ?? null;
-    const asgnProp = props.find((p) => p.type === "text" && /담당|assignee/i.test(p.name)) ?? null;
+    const statusProp = findStatusProp(propsLite);
+    const dateProp = findDateProp(propsLite);
+    const asgnProp = findAssigneeProp(propsLite);
     const statusOpts: Opt[] = statusProp ? (((statusProp.config as { options?: Opt[] })?.options) ?? []) : [];
     const doneName = statusOpts[statusOpts.length - 1]?.name;
     for (const r of rows) {
@@ -71,7 +92,7 @@ export async function GET(request: Request) {
 
   const projFilter = projectId ? { projectId } : {};
   const [docs, decisions, risks, glossary, lessons] = await Promise.all([
-    prisma.page.findMany({ where: { kind: "doc", workspaceId, deletedAt: null, ...projFilter }, orderBy: { updatedAt: "desc" }, select: { title: true, updatedAt: true }, take: 50 }),
+    prisma.page.findMany({ where: { kind: "doc", workspaceId, deletedAt: null, ...projFilter }, orderBy: { updatedAt: "desc" }, select: { id: true, title: true, updatedAt: true }, take: 50 }),
     prisma.decision.findMany({ where: { workspaceId, status: "accepted", ...projFilter }, orderBy: { decidedAt: "desc" }, select: { title: true, decision: true }, take: 30 }),
     prisma.risk.findMany({ where: { workspaceId, status: "open", ...projFilter }, orderBy: { createdAt: "desc" }, select: { title: true, severity: true }, take: 30 }),
     prisma.glossaryTerm.findMany({ where: { workspaceId }, orderBy: { term: "asc" }, select: { term: true, definition: true }, take: 100 }),
@@ -102,9 +123,10 @@ export async function GET(request: Request) {
   }
   L.push("");
 
-  L.push(`## 문서 (${docs.length})`);
-  if (docs.length === 0) L.push("- (없음)");
-  for (const d of docs) L.push(`- ${d.title}`);
+  const visibleDocs = visibleOnly(access, docs);
+  L.push(`## 문서 (${visibleDocs.length})`);
+  if (visibleDocs.length === 0) L.push("- (없음)");
+  for (const d of visibleDocs) L.push(`- ${d.title}`);
   L.push("");
 
   L.push(`## 결정 — 승인됨 (${decisions.length})`);
@@ -123,7 +145,7 @@ export async function GET(request: Request) {
   L.push("");
 
   const markdown = L.join("\n");
-  const counts = { lessons: lessons.length, tasks: tasks.length, docs: docs.length, decisions: decisions.length, risks: risks.length, glossary: glossary.length };
+  const counts = { lessons: lessons.length, tasks: tasks.length, docs: visibleDocs.length, decisions: decisions.length, risks: risks.length, glossary: glossary.length };
 
   if (fmt === "json") return NextResponse.json({ markdown, counts });
   return new NextResponse(markdown, { headers: { "content-type": "text/markdown; charset=utf-8" } });

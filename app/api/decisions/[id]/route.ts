@@ -21,7 +21,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     context?: string;
     decision?: string;
     status?: string;
+    projectId?: string;
   };
+  // 종전엔 projectId 를 아예 읽지 않아 --project 가 조용히 무시됐다(400 도 아니고 무반응).
+  let projectPatch: { projectId: string | null } | Record<string, never> = {};
+  if (body.projectId !== undefined) {
+    if (!body.projectId.trim()) projectPatch = { projectId: null };
+    else {
+      const proj = await prisma.project.findFirst({ where: { id: body.projectId, workspaceId }, select: { id: true } });
+      if (!proj) return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 400 });
+      projectPatch = { projectId: proj.id };
+    }
+  }
   await prisma.decision.update({
     where: { id },
     data: {
@@ -29,6 +40,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       ...(body.context !== undefined ? { context: body.context.trim() || null } : {}),
       ...(body.decision !== undefined ? { decision: body.decision.trim() || null } : {}),
       ...(STATUSES.includes(body.status as Status) ? { status: body.status as Status } : {}),
+      ...projectPatch,
     },
   });
   return NextResponse.json({ ok: true });

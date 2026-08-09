@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isRestrictedPage } from "@/lib/pageGuard";
 import { pushNotification, userIdsByNames } from "@/lib/activity";
 import { postMessage } from "@/lib/slack";
 import type { NotifEvent } from "@/app/generated/prisma/enums";
@@ -39,6 +40,15 @@ type PropLite = { id: string; name: string; type: string; config: unknown };
 async function loadBoard(databasePageId: string): Promise<{ workspaceId: string | null; projectId: string | null; props: PropLite[] }> {
   const page = await prisma.page.findUnique({ where: { id: databasePageId }, select: { workspaceId: true, projectId: true } });
   const props = (await prisma.dbProperty.findMany({ where: { databasePageId } })) as unknown as PropLite[];
+
+  /* D3 후속: **비공개 보드의 내용을 채널로 뿌리지 않는다.**
+     알림은 규칙에 걸린 슬랙 채널(대개 팀 전체)로 나가는데, 태스크 제목은 그
+     자체가 내용이다. 보드를 잠근 의미가 알림 한 줄로 무너지면 안 된다.
+     workspaceId 를 null 로 돌려 호출부의 발화를 통째로 끊는다 — 호출부마다
+     조건을 흩뿌리면 언젠가 한 곳이 빠진다. */
+  if (page && (await isRestrictedPage(databasePageId))) {
+    return { workspaceId: null, projectId: null, props };
+  }
   return { workspaceId: page?.workspaceId ?? null, projectId: page?.projectId ?? null, props };
 }
 function titleOf(props: PropLite[], rowProps: Record<string, unknown>): string {
