@@ -9,9 +9,9 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   // 단일 내부 사용자 + 워크스페이스 부트스트랩 (멱등)
   const user = await prisma.user.upsert({
-    where: { email: "admin@example.com" },
+    where: { email: "you@example.com" },
     update: {},
-    create: { email: "admin@example.com", name: "Admin" },
+    create: { email: "you@example.com", name: "이호준" },
   });
 
   let workspace = await prisma.workspace.findFirst({ where: { name: "TeamSpace" } });
@@ -27,9 +27,9 @@ async function main() {
 
   // 샘플 멤버 (이미 있으면 스킵) — 멤버 관리 화면 데모용
   const sampleMembers = [
-    { email: "dev@example.com", name: "Dev", role: "editor" as const },
-    { email: "design@example.com", name: "Designer", role: "editor" as const },
-    { email: "viewer@example.com", name: "Viewer", role: "viewer" as const },
+    { email: "kimdev@example.com", name: "김개발", role: "editor" as const },
+    { email: "parkdesign@example.com", name: "박디자인", role: "editor" as const },
+    { email: "leeviewer@example.com", name: "이뷰어", role: "viewer" as const },
   ];
   for (const m of sampleMembers) {
     const sampleUser = await prisma.user.upsert({
@@ -78,10 +78,10 @@ async function main() {
 
   if ((await prisma.project.count({ where: { workspaceId: workspace.id } })) === 0) {
     const sampleProjects = [
-      { name: "iOS App", short: "iOS", color: "blue", description: "iOS 클라이언트 QA·버그 트래킹", lead: "admin@example.com" },
-      { name: "Android App", short: "AOS", color: "green", description: "Android 클라이언트 QA·버그 트래킹", lead: "dev@example.com" },
-      { name: "Core Backend", short: "CORE", color: "purple", description: "API 서버·백엔드 파이프라인", lead: "dev@example.com" },
-      { name: "Web App", short: "WEB", color: "orange", description: "랜딩·대시보드 웹", lead: "design@example.com" },
+      { name: "iOS 앱", short: "iOS", color: "blue", description: "리코더 iOS 클라이언트 QA·버그 트래킹", lead: "you@example.com" },
+      { name: "AOS 앱", short: "AOS", color: "green", description: "리코더 Android 클라이언트 QA·버그 트래킹", lead: "kimdev@example.com" },
+      { name: "코어 백엔드", short: "CORE", color: "purple", description: "STT 파이프라인·API 서버", lead: "kimdev@example.com" },
+      { name: "웹", short: "WEB", color: "orange", description: "랜딩·대시보드 웹", lead: "parkdesign@example.com" },
     ];
     let ppos = 0;
     for (const sp of sampleProjects) {
@@ -99,8 +99,8 @@ async function main() {
     }
   }
 
-  // 코드 repo 링크가 걸린 샘플 프로젝트 — 없을 때만 생성. 다제품 허브 데모용.
-  if (!(await prisma.project.findFirst({ where: { workspaceId: workspace.id, name: "Sample App" } }))) {
+  // CrewPool 프로젝트 (코드 repo 링크) — 없을 때만 생성. 다제품 허브 dogfooding.
+  if (!(await prisma.project.findFirst({ where: { workspaceId: workspace.id, name: "CrewPool" } }))) {
     const lastPos = await prisma.project.findFirst({
       where: { workspaceId: workspace.id },
       orderBy: { position: "desc" },
@@ -109,13 +109,14 @@ async function main() {
     await prisma.project.create({
       data: {
         workspaceId: workspace.id,
-        name: "Sample App",
-        short: "APP",
+        name: "CrewPool",
+        short: "CREW",
         color: "green",
-        description: "코드 repo가 연결된 샘플 프로젝트 데모",
-        repoUrl: "https://github.com/example/sample-app",
+        description: "다매장 운영자용 직원 공유 풀 기반 근무·급여 관리 SaaS",
+        repoUrl: "https://github.com/leecoder5359/crewpool",
+        repoPath: "/Users/ljun/dev/crewpool",
         repoBranch: "main",
-        docsDir: "sample-app",
+        docsDir: "crewpool",
         leadId: user.id,
         position: (lastPos?.position ?? -1) + 1,
       },
