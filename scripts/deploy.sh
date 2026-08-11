@@ -17,9 +17,20 @@ cd "$REPO_DIR"
 pnpm exec next build
 
 echo "→ launchd plist 설치"
+# 템플릿(scripts/launchd/templates/*.plist.tmpl)이 있으면 이 머신의 실경로를 치환해 설치하고,
+# 없으면(사전 렌더된 실물 plist 를 두는 배포) 그대로 복사한다.
+TMPL_DIR="$PLIST_SRC/templates"
+NODE_BIN_DIR="$(dirname "$(command -v node)")"
+PNPM_BIN="$(command -v pnpm)"
 for name in web worker backup health; do
   label="com.teamspace.$name"
-  cp "$PLIST_SRC/$label.plist" "$PLIST_DST/$label.plist"
+  if [ -f "$TMPL_DIR/$label.plist.tmpl" ]; then
+    sed -e "s|__REPO_DIR__|$REPO_DIR|g" -e "s|__HOME__|$HOME|g" \
+        -e "s|__NODE_BIN_DIR__|$NODE_BIN_DIR|g" -e "s|__PNPM__|$PNPM_BIN|g" \
+      "$TMPL_DIR/$label.plist.tmpl" > "$PLIST_DST/$label.plist"
+  else
+    cp "$PLIST_SRC/$label.plist" "$PLIST_DST/$label.plist"
+  fi
   launchctl bootout "gui/$UID_NUM/$label" 2>/dev/null || true
   # bootout 직후 bootstrap 은 간헐적 I/O error — 재시도하고, 실패해도 다음 서비스로 진행
   launchctl bootstrap "gui/$UID_NUM" "$PLIST_DST/$label.plist" 2>/dev/null ||
