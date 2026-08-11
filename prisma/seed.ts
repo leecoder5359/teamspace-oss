@@ -6,12 +6,16 @@ import { pageFilePath, writeContent } from "../lib/content";
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
+// 관리자 계정은 배포마다 다르다 — env 로 받고, 미지정 시 기존 기본값 유지
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL?.trim() || "you@example.com";
+const ADMIN_NAME = process.env.SEED_ADMIN_NAME?.trim() || "이호준";
+
 async function main() {
   // 단일 내부 사용자 + 워크스페이스 부트스트랩 (멱등)
   const user = await prisma.user.upsert({
-    where: { email: "you@example.com" },
+    where: { email: ADMIN_EMAIL },
     update: {},
-    create: { email: "you@example.com", name: "이호준" },
+    create: { email: ADMIN_EMAIL, name: ADMIN_NAME },
   });
 
   let workspace = await prisma.workspace.findFirst({ where: { name: "TeamSpace" } });

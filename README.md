@@ -54,6 +54,21 @@ pnpm dev                             # http://localhost:3000
 
 백업은 `pnpm backup` — Postgres 덤프 + 데이터 디렉토리 tar 를 `TEAMSPACE_BACKUP_DIR`(기본 `~/Backups/teamspace`)에 저장하고 최근 14개를 로테이션한다.
 
+**데이터 디렉토리 git 백업 패턴(권장)** — tar 로테이션은 유실 대비이고, 이력·오프사이트까지 원하면
+데이터 디렉토리를 전용 git 저장소로 둔다:
+
+```bash
+export TEAMSPACE_DATA_DIR=~/teamspace-data   # 레포 밖 전용 디렉토리 (.env 에도 설정)
+mkdir -p ~/teamspace-data && cd ~/teamspace-data
+git init && printf 'content/\n' > .gitignore   # content/ 는 앱이 자체 git 저장소로 관리 — 중첩 방지
+git remote add origin <사설 원격>              # 반드시 private — 문서·업로드 원본이 들어간다
+```
+
+- `docs/`(문서 md)·`uploads/`(첨부)는 이 저장소가 이력을 갖는다. 주기 커밋·푸시는 cron 한 줄:
+  `0 4 * * * cd ~/teamspace-data && git add -A && git commit -m backup -q; git push -q origin main`
+- `content/`(본문 저장소)는 앱이 변경마다 자체 커밋한다 — 원격 백업까지 하려면 그 안에서 따로
+  `git remote add` 후 위 크론에 `cd content && git push` 를 한 줄 더 붙인다.
+
 ## 배포
 
 ### 1) 로컬 / 사내 서버
@@ -81,6 +96,17 @@ pnpm deploy:local
 - `com.teamspace.health` — 5분마다 `/api/health` 확인, 실패 시 재기동
 
 로그는 `~/Library/Logs/teamspace/`. 코드 변경 후엔 같은 명령으로 재배포한다.
+
+**Docker 자동 기동(권장)** — 재부팅 후 Docker 데몬이 안 떠 있으면 DB 연결 실패로 웹이 500을 낸다.
+`com.teamspace.docker` LaunchAgent 가 로그인 시 Docker Desktop 을 띄우고 postgres/redis 컨테이너를 보장한다
+(`scripts/docker-up.sh`). 템플릿을 손으로 렌더해 설치한다:
+
+```bash
+REPO_DIR="$(pwd)" ; sed -e "s|__REPO_DIR__|$REPO_DIR|g" -e "s|__HOME__|$HOME|g" \
+  scripts/launchd/templates/com.teamspace.docker.plist.tmpl \
+  > ~/Library/LaunchAgents/com.teamspace.docker.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.teamspace.docker.plist
+```
 
 HTTPS 노출은 Tailscale 로:
 

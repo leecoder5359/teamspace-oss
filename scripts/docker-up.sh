@@ -1,13 +1,12 @@
 #!/bin/bash
 # 부팅(로그인) 시 Docker Desktop을 띄우고 TeamSpace 인프라 컨테이너(postgres/redis)를 보장한다.
-# LaunchAgent com.teamspace.docker 가 RunAtLoad 로 1회 실행.
-# ⚠️ 그 plist 는 이 레포에 없다(scripts/launchd/ 에는 web·worker·backup·health 만) —
-#    deploy.sh 도 설치하지 않으므로 수동으로 만든 기기에서만 동작한다(전수조사 D21).
+# LaunchAgent com.teamspace.docker 가 RunAtLoad 로 1회 실행 — plist 템플릿은
+# 공개 배포본의 scripts/launchd/templates/com.teamspace.docker.plist.tmpl (deploy.sh 는 설치하지 않음, README 참고).
 # 재부팅 후 Docker 데몬 부재 → DB ECONNREFUSED → 웹 500 재발 방지용.
 set -u
 
-REPO_DIR="/Users/ljun/dev/ljun/teamspace"
-DOCKER_BIN="/usr/local/bin/docker"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+DOCKER_BIN="$(command -v docker || echo /usr/local/bin/docker)"
 TIMEOUT_SECS=300
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
