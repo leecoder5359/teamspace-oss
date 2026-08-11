@@ -182,7 +182,8 @@ export default function LessonsSurface({ project }: { project: string }) {
 
           {open && (
             <div style={card}>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="규칙 제목 (예: 태스크는 claim으로 잡는다)" style={inp} />
+              {/* 빈 상태의 '첫 규칙 추가' 로 열었을 때 바로 입력할 수 있게 */}
+              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="규칙 제목 (예: 태스크는 claim으로 잡는다)" style={inp} />
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
@@ -205,7 +206,29 @@ export default function LessonsSurface({ project }: { project: string }) {
           )}
 
           {rows.length === 0 ? (
-            <div className="ws-empty-hint">아직 규칙이 없습니다. 팀이 알아야 할 규범을 추가해 보세요.</div>
+            <div className="ws-docs-empty">
+              <span style={{ color: "var(--text-muted)" }}><Icon name="flag" size={32} /></span>
+              {list.length > 0 ? (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>검색어에 맞는 규칙이 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>등록된 규칙 {list.length}건이 검색어에 걸러졌습니다.</div>
+                  <div style={{ marginTop: 14 }}>
+                    <button className="ws-btn-soft" onClick={() => setQ("")}>검색어 지우기</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀 작업규칙이 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+                    규칙이 하나도 없으면 세션 시작 시 주입할 것도 없습니다. 반복해서 설명하게 되는 규범을 하나씩 승격하세요.
+                    (CLI: <code>pnpm ws lesson add</code>)
+                  </div>
+                  <div style={{ marginTop: 14 }}>
+                    <button style={primaryBtn} onClick={() => setOpen(true)}>첫 규칙 추가</button>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {rows.map((l) =>

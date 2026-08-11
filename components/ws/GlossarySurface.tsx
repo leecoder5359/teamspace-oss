@@ -74,8 +74,7 @@ export default function GlossarySurface() {
     }
   }
 
-  async function toggleExtract() {
-    const next = !extractOpen;
+  async function showExtract(next: boolean) {
     setExtractOpen(next);
     if (next && pages.length === 0) await loadPages();
   }
@@ -135,14 +134,15 @@ export default function GlossarySurface() {
       <div className="ws-filterbar">
         <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>용어집 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{list.length}</span></span>
         <span style={{ flex: 1 }} />
-        <button className="ws-btn-soft" onClick={toggleExtract}><Icon name="doc" size={15} /> 문서에서 추출</button>
+        <button className="ws-btn-soft" onClick={() => showExtract(!extractOpen)}><Icon name="doc" size={15} /> 문서에서 추출</button>
         <button className="ws-btn-soft" onClick={() => setOpen((v) => !v)}><Icon name="plus" size={15} /> 용어 추가</button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
             <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
-              <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="용어 (예: 워크스페이스)" style={inp} />
+              {/* 빈 상태의 '첫 용어 추가' 로 열었을 때 바로 입력할 수 있게 */}
+              <input autoFocus value={term} onChange={(e) => setTerm(e.target.value)} placeholder="용어 (예: 워크스페이스)" style={inp} />
               <textarea value={definition} onChange={(e) => setDefinition(e.target.value)} placeholder="정의" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <span style={{ flex: 1 }} />
@@ -206,7 +206,11 @@ export default function GlossarySurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="tag" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>용어가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>도메인 용어를 정리해 두면 온보딩이 쉬워져요.</div>
+              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>같은 말을 서로 다르게 쓰기 시작하면 되돌리기 어렵습니다. 직접 적어도 되고, 이미 쓴 문서가 있으면 거기서 뽑아 올 수도 있어요.</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button style={primary} onClick={() => setOpen(true)}>첫 용어 추가</button>
+                <button className="ws-btn-soft" onClick={() => showExtract(true)}><Icon name="doc" size={15} /> 문서에서 추출</button>
+              </div>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

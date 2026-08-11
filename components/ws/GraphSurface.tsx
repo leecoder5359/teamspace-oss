@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import { graphToCypher } from "@/lib/wikilink";
@@ -40,6 +41,8 @@ function graphToGraphML(g: { nodes: Node[]; edges: Edge[] }): string {
   return lines.join("\n");
 }
 
+const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };
+
 const W = 1200;
 const H = 720;
 type Box = { x: number; y: number; w: number; h: number };
@@ -57,6 +60,7 @@ export default function GraphSurface() {
   const [pinned, setPinned] = useState<Map<string, Point>>(new Map());
   // 커서 모양에 쓰므로 ref 가 아니라 state — ref 는 렌더 중에 읽을 수 없다
   const [panning, setPanning] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragNode = useRef<string | null>(null);
@@ -133,6 +137,25 @@ export default function GraphSurface() {
     setBox({ ...from.box, x: from.box.x - dx, y: from.box.y - dy });
   };
 
+  /** 빈 그래프의 첫 액션 — 문서 목록의 '새 문서'와 같은 경로로 만들고 바로 연다. */
+  const createDoc = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/pages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Untitled" }),
+      });
+      if (!res.ok) return;
+      const { page } = (await res.json()) as { page: { id: string } };
+      window.dispatchEvent(new Event("pages:changed"));
+      router.push(`/p/${page.id}`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const endDrag = () => {
     dragNode.current = null;
     panFrom.current = null;
@@ -190,7 +213,16 @@ export default function GraphSurface() {
       </p>
 
       {empty ? (
-        <div className="ws-empty-hint" style={{ marginTop: 24 }}>문서가 없습니다.</div>
+        <div className="ws-docs-empty" style={{ marginTop: 24 }}>
+          <span style={{ color: "var(--text-muted)" }}><Icon name="link" size={32} /></span>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>그래프에 그릴 문서가 없어요</div>
+          <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+            여기는 문서끼리의 연결만 그립니다. 문서를 만들고 본문에서 <code>[[문서 제목]]</code> 으로 다른 문서를 가리키면 그 관계가 선으로 나타나요.
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <button style={primary} disabled={creating} onClick={createDoc}>{creating ? "만드는 중…" : "문서 만들기"}</button>
+          </div>
+        </div>
       ) : (
         <div style={{ marginTop: 12, border: "1px solid var(--border-subtle)", borderRadius: 14, background: "var(--surface-card)", overflow: "hidden" }}>
           <svg

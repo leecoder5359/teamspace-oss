@@ -660,6 +660,47 @@ add({
     }
   },
 });
+add({
+  name: "dod extract",
+  usage: "dod extract <pageId>   (문서에서 완료 기준 추출→기존 DoD 대조 제안; LLM)",
+  ep: ["dod/extract/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("pageId가 필요합니다: ws dod extract <pageId>");
+    const r = (await api("POST", "/api/dod/extract", { pageId: a.pos[0] })) as {
+      ok: boolean; error?: string; proposals?: { text: string; status: string }[];
+    };
+    if (!r.ok) return out(`(추출 불가: ${r.error})`);
+    for (const p of r.proposals ?? []) out(`[${p.status}]\t${p.text}`);
+  },
+});
+add({
+  name: "onboarding extract",
+  usage: "onboarding extract <pageId>   (문서에서 온보딩 단계 추출→기존 단계 대조 제안; LLM)",
+  ep: ["onboarding/extract/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("pageId가 필요합니다: ws onboarding extract <pageId>");
+    const r = (await api("POST", "/api/onboarding/extract", { pageId: a.pos[0] })) as {
+      ok: boolean; error?: string; proposals?: { title: string; body: string; status: string; existingBody?: string }[];
+    };
+    if (!r.ok) return out(`(추출 불가: ${r.error})`);
+    for (const p of r.proposals ?? []) {
+      out(`[${p.status}]\t${p.title}: ${p.body}${p.existingBody ? `  (기존: ${p.existingBody})` : ""}`);
+    }
+  },
+});
+add({
+  name: "qa extract",
+  usage: "qa extract <pageId> [--project <id>]   (문서에서 QA 시나리오 추출→기존 시나리오 대조 제안; LLM)",
+  ep: ["qa/extract/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("pageId가 필요합니다: ws qa extract <pageId>");
+    const r = (await api("POST", "/api/qa/extract", { pageId: a.pos[0], projectId: flag(a, "project") })) as {
+      ok: boolean; error?: string; proposals?: { title: string; steps: string; expected: string; status: string }[];
+    };
+    if (!r.ok) return out(`(추출 불가: ${r.error})`);
+    for (const p of r.proposals ?? []) out(`[${p.status}]\t${p.title}: ${p.expected || p.steps}`);
+  },
+});
 
 // 승인
 add({

@@ -77,7 +77,8 @@ export default function RisksSurface({ project }: { project: string }) {
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
             <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="리스크 제목" style={inp} />
+              {/* 빈 상태의 '첫 리스크 추가' 로 열었을 때 바로 입력할 수 있게 */}
+              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="리스크 제목" style={inp} />
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명/영향" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
                 <select value={severity} onChange={(e) => setSeverity(e.target.value as Sev)} style={{ ...inp, width: "auto" }}>
@@ -94,8 +95,23 @@ export default function RisksSurface({ project }: { project: string }) {
           {rows.length === 0 ? (
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="alert" size={32} /></span>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>리스크가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>위험·이슈를 기록해 추적하세요.</div>
+              {list.length > 0 ? (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 리스크가 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>기록된 리스크 {list.length}건은 다른 상태에 있습니다.</div>
+                  <div style={{ marginTop: 14 }}>
+                    <button className="ws-btn-soft" onClick={() => setFilter("all")}>전체 상태 보기</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>리스크가 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>걱정되는 것을 적어 두면 잊히지 않고 상태(열림·완화·종료)로 추적됩니다.</div>
+                  <div style={{ marginTop: 14 }}>
+                    <button style={primary} onClick={() => setOpen(true)}>첫 리스크 추가</button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -61,7 +61,8 @@ export default function ChangelogSurface() {
           {open && (
             <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="버전 (예: v1.2.0)" style={{ ...inp, flex: "0 0 160px" }} />
+                {/* 빈 상태의 '첫 릴리스 추가' 로 열었을 때 바로 입력할 수 있게 */}
+                <input autoFocus value={version} onChange={(e) => setVersion(e.target.value)} placeholder="버전 (예: v1.2.0)" style={{ ...inp, flex: "0 0 160px" }} />
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목" style={{ ...inp, flex: 1 }} />
               </div>
               <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="변경 내용" rows={3} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
@@ -76,7 +77,10 @@ export default function ChangelogSurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="refresh" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>릴리스 노트가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>버전별 변경 사항을 기록해 두세요.</div>
+              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>배포할 때마다 버전과 바뀐 내용을 남기면, &ldquo;이거 언제부터 이랬죠?&rdquo; 에 답할 수 있는 기록이 됩니다.</div>
+              <div style={{ marginTop: 14 }}>
+                <button style={primary} onClick={() => setOpen(true)}>첫 릴리스 추가</button>
+              </div>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -64,8 +64,7 @@ export default function DataModelSurface() {
   }
   async function remove(id: string) { setBusy(true); try { await fetch(`/api/entities/${id}`, { method: "DELETE" }); await load(); } finally { setBusy(false); } }
 
-  async function toggleExtract() {
-    const next = !extractOpen;
+  async function showExtract(next: boolean) {
     setExtractOpen(next);
     if (next && pages.length === 0) await loadPages();
   }
@@ -123,14 +122,15 @@ export default function DataModelSurface() {
       <div className="ws-filterbar">
         <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>데이터 모델 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{list.length}</span></span>
         <span style={{ flex: 1 }} />
-        <button className="ws-btn-soft" onClick={toggleExtract}><Icon name="doc" size={15} /> 문서에서 추출</button>
+        <button className="ws-btn-soft" onClick={() => showExtract(!extractOpen)}><Icon name="doc" size={15} /> 문서에서 추출</button>
         <button className="ws-btn-soft" onClick={() => setOpen((v) => !v)}><Icon name="plus" size={15} /> 엔티티 추가</button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
             <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="엔티티 이름 (예: Project)" style={inp} />
+              {/* 빈 상태의 '첫 엔티티 추가' 로 열었을 때 바로 입력할 수 있게 */}
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="엔티티 이름 (예: Project)" style={inp} />
               <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명" style={{ ...inp, marginTop: 8 }} />
               <textarea value={fields} onChange={(e) => setFields(e.target.value)} placeholder={"필드 (한 줄에 하나)\nname: string — 이름\nstatus: enum — 상태"} rows={4} style={{ ...inp, marginTop: 8, resize: "vertical", fontFamily: "var(--font-mono)" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -196,7 +196,11 @@ export default function DataModelSurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="table" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>엔티티가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>핵심 도메인 엔티티와 필드를 정리하세요.</div>
+              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>도메인의 뼈대가 되는 개체와 필드를 적어 두는 자리입니다. 직접 적어도 되고, 설계 문서가 있으면 거기서 뽑아 올 수도 있어요.</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button style={primary} onClick={() => setOpen(true)}>첫 엔티티 추가</button>
+                <button className="ws-btn-soft" onClick={() => showExtract(true)}><Icon name="doc" size={15} /> 문서에서 추출</button>
+              </div>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

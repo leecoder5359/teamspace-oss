@@ -3,12 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import ExtractPanel from "./ExtractPanel";
 
 /* QA surface — 테스트 시나리오. /api/qa.
    디자인 반영: 상태 필터 + 행 클릭 상세 드로어(단계/기대 + 통과·실패·삭제). */
 
 type St = "pending" | "pass" | "fail";
 type Qa = { id: string; title: string; steps: string | null; expected: string | null; status: St; project: { name: string; color: string } | null };
+type Proposal = {
+  title: string;
+  steps: string;
+  expected: string;
+  status: "new" | "duplicate" | "conflict";
+  existingId?: string;
+  existingSteps?: string;
+  existingExpected?: string;
+};
 
 const ST: Record<St, { label: string; color: string }> = {
   pending: { label: "대기", color: "#9AA0A6" },
@@ -27,6 +37,7 @@ export default function QaSurface({ project }: { project: string }) {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | St>("all");
   const [selId, setSelId] = useState<string | null>(null);
+  const [extractOpen, setExtractOpen] = useState(false);
 
   const load = useCallback(async () => {
     const qs = REAL(project) ? `?projectId=${project}` : "";
@@ -65,13 +76,15 @@ export default function QaSurface({ project }: { project: string }) {
           <option value="fail">실패</option>
         </select>
         <span style={{ flex: 1 }} />
+        <button className="ws-btn-soft" onClick={() => setExtractOpen((v) => !v)}><Icon name="doc" size={15} /> 문서에서 추출</button>
         <button className="ws-btn-soft" onClick={() => setOpen((v) => !v)}><Icon name="plus" size={15} /> 시나리오 추가</button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
             <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="시나리오 제목" style={inp} />
+              {/* 빈 상태의 '첫 시나리오 추가' 로 열었을 때 바로 입력할 수 있게 */}
+              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="시나리오 제목" style={inp} />
               <textarea value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="단계" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <textarea value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="기대 결과" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -81,11 +94,57 @@ export default function QaSurface({ project }: { project: string }) {
               </div>
             </div>
           )}
+          {extractOpen && (
+            <ExtractPanel<Proposal>
+              label="문서에서 QA 시나리오 추출 (AI)"
+              endpoint="/api/qa/extract"
+              extraBody={{ projectId: REAL(project) ? project : undefined }}
+              runningText="문서를 읽고 시나리오를 정리하는 중입니다(수십 초 걸릴 수 있어요)."
+              emptyText="추출된 시나리오가 없습니다."
+              keyOf={(p) => p.title}
+              renderProposal={(p) => (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)" }}>{p.title}</div>
+                  {p.steps && <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{p.steps}</div>}
+                  {p.expected && <div style={{ fontSize: 12.5, color: "var(--text-body)", marginTop: 4 }}><b>기대:</b> {p.expected}</div>}
+                  {p.status === "conflict" && (p.existingSteps || p.existingExpected) && (
+                    <div style={{ fontSize: 12, color: "#E0900F", marginTop: 4 }}>기존: {[p.existingSteps, p.existingExpected].filter(Boolean).join(" / ")}</div>
+                  )}
+                </>
+              )}
+              onAccept={(p) =>
+                p.existingId
+                  ? fetch(`/api/qa/${p.existingId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ steps: p.steps, expected: p.expected }) })
+                  : fetch("/api/qa", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ title: p.title, steps: p.steps, expected: p.expected, projectId: REAL(project) ? project : undefined }),
+                    })
+              }
+              onAccepted={load}
+            />
+          )}
           {rows.length === 0 ? (
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="check" size={32} /></span>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>시나리오가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>테스트 시나리오를 등록해 통과/실패를 추적하세요.</div>
+              {list.length > 0 ? (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 시나리오가 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>등록된 시나리오 {list.length}건은 다른 상태에 있습니다.</div>
+                  <div style={{ marginTop: 14 }}>
+                    <button className="ws-btn-soft" onClick={() => setFilter("all")}>전체 상태 보기</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>시나리오가 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>무엇을 어떻게 확인했는지 남겨 두면 다음 릴리스에서 같은 걸 다시 헤매지 않습니다. 직접 적거나, 스펙 문서에서 뽑아 오세요.</div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button style={primary} onClick={() => setOpen(true)}>첫 시나리오 추가</button>
+                    <button className="ws-btn-soft" onClick={() => setExtractOpen(true)}><Icon name="doc" size={15} /> 문서에서 추출</button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

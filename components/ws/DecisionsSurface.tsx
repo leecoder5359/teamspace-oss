@@ -132,7 +132,8 @@ export default function DecisionsSurface({ project }: { project: string }) {
         <div style={{ maxWidth: view === "table" ? 1000 : view === "cards" ? 1100 : 760, margin: "0 auto" }}>
           {open && (
             <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="결정 제목 (예: 인증은 Auth.js로 간다)" style={inp} />
+              {/* 빈 상태의 '첫 결정 기록' 으로 열었을 때 바로 입력할 수 있게 */}
+              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="결정 제목 (예: 인증은 Auth.js로 간다)" style={inp} />
               <textarea value={context} onChange={(e) => setContext(e.target.value)} placeholder="배경/맥락" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <textarea value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="결정 내용" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
@@ -151,8 +152,26 @@ export default function DecisionsSurface({ project }: { project: string }) {
           {rows.length === 0 ? (
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="flag" size={32} /></span>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>결정 기록이 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>중요한 의사결정을 남겨 두면 맥락이 보존돼요.</div>
+              {list.length > 0 ? (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>조건에 맞는 결정이 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>기록된 결정 {list.length}건이 검색어·상태 필터에 걸러졌습니다.</div>
+                  <div style={{ marginTop: 14 }}>
+                    <button className="ws-btn-soft" onClick={() => { setQ(""); setFilter("all"); }}>필터 지우기</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>결정 기록이 없어요</div>
+                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+                    무엇을 왜 그렇게 정했는지 남겨 두지 않으면 몇 달 뒤 같은 논의를 처음부터 다시 합니다.
+                    에이전트·CLI(<code>pnpm ws decision add</code>)로 쌓인 결정도 여기 모입니다.
+                  </div>
+                  <div style={{ marginTop: 14 }}>
+                    <button style={primary} onClick={() => setOpen(true)}>첫 결정 기록</button>
+                  </div>
+                </>
+              )}
             </div>
           ) : view === "table" ? (
             <DecisionTable rows={rows} onOpen={setSelId} />
