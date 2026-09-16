@@ -563,6 +563,10 @@ export default function Sidebar({
             <span className="ws-nav-ico"><Icon name="calendar" /></span>
             <span className="ws-nav-label">캘린더</span>
           </Link>
+          <Link href="/sites" className={`ws-nav-item${pathname.startsWith("/sites") ? " active" : ""}`} onClick={onNavigate} title="퍼블리시">
+            <span className="ws-nav-ico"><Icon name="link" /></span>
+            <span className="ws-nav-label">퍼블리시</span>
+          </Link>
           <Link href="/reminders" className={`ws-nav-item${pathname === "/reminders" ? " active" : ""}`} onClick={onNavigate} title="리마인더">
             <span className="ws-nav-ico"><Icon name="bell" /></span>
             <span className="ws-nav-label">리마인더</span>

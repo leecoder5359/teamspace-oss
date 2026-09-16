@@ -9,7 +9,9 @@ import Google from "next-auth/providers/google";
  * Google()는 v5에서 환경변수 AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET 를 자동으로 읽는다.
  */
 export const authConfig = {
-  providers: [Google],
+  // 초대는 User 행을 로그인 전에 만든다 → 첫 Google 로그인이 그 행에 연결돼야 한다(기본값은
+  // OAuthAccountNotLinked 로 거부). 안전 조건(email_verified)은 auth.ts signIn 콜백이 강제한다.
+  providers: [Google({ allowDangerousEmailAccountLinking: true })],
   pages: {
     signIn: "/login",
     // 접근 거부(초대/허용 도메인 아님) 등 오류도 우리 로그인 화면으로

@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
-import { isSignInAllowed } from "@/lib/accessControl";
+import { isSignInAllowed, isVerifiedOAuthEmail } from "@/lib/accessControl";
 
 /**
  * 노드 런타임용 Auth.js 인스턴스.
@@ -19,7 +19,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ),
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
+      // 계정 자동 연결(auth.config.ts)의 전제 — Google 이 확인하지 않은 이메일은 받지 않는다.
+      if (!isVerifiedOAuthEmail(account?.provider, profile)) return false;
       return isSignInAllowed(user?.email);
     },
   },

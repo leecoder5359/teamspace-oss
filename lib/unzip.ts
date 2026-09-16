@@ -121,7 +121,9 @@ export function readZip(buf: Buffer, opts: ReadZipOptions = {}): ZipReadEntry[] 
       data = Buffer.from(body);
     } else if (method === 8) {
       try {
-        data = inflateRawSync(body);
+        // 선언 크기(rawSize)를 출력 상한으로 건다. 위조된 작은 rawSize 로 총량 검사를 통과한 뒤
+        // 수백 MB 로 풀리는 엔트리(zip bomb)를 끝까지 메모리에 풀기 전에 끊는다.
+        data = inflateRawSync(body, { maxOutputLength: Math.max(rawSize, 1) });
       } catch {
         throw new Error(`zip 본문이 손상되었습니다(압축 해제 실패): ${name}`);
       }

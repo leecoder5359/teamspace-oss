@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { parseLessonStack } from "@/lib/lessonInject";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ lessons });
 }
 
-// POST /api/lessons { title, body, projectId? } → 레슨 등록 (컨텍스트 주입에 포함됨)
+// POST /api/lessons { title, body, projectId?, stack? } → 레슨 등록 (컨텍스트 주입에 포함됨)
 export async function POST(req: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
     title?: string;
     body?: string;
     projectId?: string | null;
+    stack?: string | null;
   };
   const title = body.title?.trim() ?? "";
   const text = body.body?.trim() ?? "";
@@ -39,10 +41,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 400 });
     }
   }
+  const st = parseLessonStack(body.stack ?? null);
+  if (!st.ok) return NextResponse.json({ error: st.error }, { status: 400 });
+  if (st.stack && body.projectId) {
+    return NextResponse.json({ error: "레슨 범위는 프로젝트와 스택 중 하나만 정할 수 있습니다." }, { status: 400 });
+  }
   const lesson = await prisma.lesson.create({
     data: {
       workspaceId: guard.workspaceId,
       projectId: body.projectId ?? null,
+      stack: st.stack,
       title,
       body: text,
       createdById: guard.userId,

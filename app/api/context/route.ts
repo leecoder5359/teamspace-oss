@@ -5,6 +5,8 @@ import { requireCtx } from "@/lib/workspace";
 import { loadAccess, pageAccess, visibleOnly } from "@/lib/pageGuard";
 import { resolveRouteByCwd } from "@/lib/ingest";
 
+import { renderLessons, capLines, gistOf, LESSON_BUDGET, CONTEXT_BUDGET } from "@/lib/lessonInject";
+
 export const runtime = "nodejs";
 
 type Opt = { id: string; name: string };
@@ -13,6 +15,8 @@ type Opt = { id: string; name: string };
    워크스페이스를 Claude 세션이 읽을 수 있는 Markdown 컨텍스트로 내보낸다.
    (팀 레슨 · 보드 열린 태스크 · 문서 목록 · 승인된 결정 · 열린 리스크 · 용어집)
    cwd 를 주면 WorkspaceRouteRule 로 프로젝트를 해석해 해당 프로젝트 우선으로 필터한다(W3).
+   compact=1 → 세션 훅 주입용. 전체를 ~9KB 안으로 줄인다(레슨은 제목·요약·id, 나머지는 상위 N건+'외 N건').
+   Claude Code 는 큰 훅 출력을 파일로 빼고 앞 2KB 만 넣기 때문에, 크기 자체가 전달 여부를 가른다.
    format=json → { markdown, counts }, 기본 → text/markdown. */
 export async function GET(request: Request) {
   const guard = await requireCtx();
@@ -21,10 +25,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const fmt = url.searchParams.get("format");
   const cwd = url.searchParams.get("cwd");
+  const compact = url.searchParams.get("compact") === "1";
 
   // cwd → 프로젝트 스코프 (라우트룰, 없으면 워크스페이스 전역)
   let projectId: string | null = null;
   let projectName: string | null = null;
+  let projectStack: string[] = [];
   if (cwd) {
     const rules = await prisma.workspaceRouteRule.findMany({
       where: { workspaceId },
@@ -32,8 +38,9 @@ export async function GET(request: Request) {
     });
     projectId = resolveRouteByCwd(cwd, rules)?.projectId ?? null;
     if (projectId) {
-      const p = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
+      const p = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true, stack: true } });
       projectName = p?.name ?? null;
+      projectStack = p?.stack ?? [];
       if (!p) projectId = null;
     }
   }
@@ -97,11 +104,12 @@ export async function GET(request: Request) {
     prisma.risk.findMany({ where: { workspaceId, status: "open", ...projFilter }, orderBy: { createdAt: "desc" }, select: { title: true, severity: true }, take: 30 }),
     prisma.glossaryTerm.findMany({ where: { workspaceId }, orderBy: { term: "asc" }, select: { term: true, definition: true }, take: 100 }),
     // 레슨: 전역 + (cwd 매핑 시) 해당 프로젝트 — 팀 작업규칙은 항상 주입된다 (W3 mem-9)
+    // 섹션(전역/프로젝트) 나누기와 예산은 lib/lessonInject 가 한다 — 여기서 개수로 자르지 않는다.
     prisma.lesson.findMany({
       where: { workspaceId, ...(projectId ? { OR: [{ projectId: null }, { projectId }] } : {}) },
-      orderBy: [{ projectId: "asc" }, { updatedAt: "desc" }],
-      select: { title: true, body: true, projectId: true },
-      take: 50,
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, title: true, body: true, projectId: true, stack: true },
+      take: 500,
     }),
   ]);
 
@@ -110,39 +118,55 @@ export async function GET(request: Request) {
   L.push(`_Claude 세션 공유 컨텍스트 (읽기 전용 스냅샷${projectName ? `, cwd→${projectName} 스코프` : ""})_`);
   L.push("");
 
-  L.push(`## 팀 작업규칙·레슨 (${lessons.length}) — 반드시 따른다`);
-  if (lessons.length === 0) L.push("- (없음)");
-  for (const l of lessons) L.push(`- **${l.title}**${l.projectId ? "" : " [전역]"}: ${l.body}`);
-  L.push("");
+  const headerLen = L.length; // 레슨은 나머지 섹션을 다 그린 뒤 이 자리에 끼운다(남는 예산을 레슨에 주기 위해)
 
-  L.push(`## 태스크 보드 — 열린 ${tasks.length}건`);
-  if (tasks.length === 0) L.push("- (열린 태스크 없음)");
-  for (const t of tasks) {
-    const meta = [t.status, t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
-    L.push(`- ${t.title}${meta ? ` — ${meta}` : ""}`);
-  }
-  L.push("");
+  // compact: 섹션마다 상한을 두고 넘친 개수를 적는다. full(AI 연결 화면·내보내기)은 전부.
+  const section = (title: string, lines: string[], empty: string, cap: number, moreHint: string) => {
+    L.push(title);
+    if (lines.length === 0) L.push(empty);
+    const r = compact ? capLines(lines, cap) : { lines, omitted: 0 };
+    L.push(...r.lines);
+    if (r.omitted) L.push(`- … 외 ${r.omitted}건 (${moreHint})`);
+    L.push("");
+  };
+
+  section(
+    `## 태스크 보드 — 열린 ${tasks.length}건`,
+    tasks.map((t) => {
+      const meta = [t.status, t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
+      return `- ${t.title}${meta ? ` — ${meta}` : ""}`;
+    }),
+    "- (열린 태스크 없음)",
+    1400,
+    "MCP `task_list`",
+  );
 
   const visibleDocs = visibleOnly(access, docs);
-  L.push(`## 문서 (${visibleDocs.length})`);
-  if (visibleDocs.length === 0) L.push("- (없음)");
-  for (const d of visibleDocs) L.push(`- ${d.title}`);
-  L.push("");
+  section(`## 문서 (${visibleDocs.length})`, visibleDocs.map((d) => `- ${d.title}`), "- (없음)", 700, "MCP `doc_list`");
 
-  L.push(`## 결정 — 승인됨 (${decisions.length})`);
-  if (decisions.length === 0) L.push("- (없음)");
-  for (const d of decisions) L.push(`- ${d.title}${d.decision ? `: ${d.decision}` : ""}`);
-  L.push("");
+  section(
+    `## 결정 — 승인됨 (${decisions.length})`,
+    decisions.map((d) => (compact ? `- ${d.title}${d.decision ? `: ${gistOf(d.decision, 80)}` : ""}` : `- ${d.title}${d.decision ? `: ${d.decision}` : ""}`)),
+    "- (없음)",
+    1000,
+    "MCP `search`",
+  );
 
-  L.push(`## 리스크 — 열림 (${risks.length})`);
-  if (risks.length === 0) L.push("- (없음)");
-  for (const r of risks) L.push(`- [${r.severity}] ${r.title}`);
-  L.push("");
+  section(`## 리스크 — 열림 (${risks.length})`, risks.map((r) => `- [${r.severity}] ${r.title}`), "- (없음)", 400, "MCP `search`");
 
-  L.push(`## 용어집 (${glossary.length})`);
-  if (glossary.length === 0) L.push("- (없음)");
-  for (const g of glossary) L.push(`- **${g.term}**: ${g.definition ?? ""}`);
-  L.push("");
+  if (compact) {
+    L.push(`## 용어집 (${glossary.length})`);
+    const terms = capLines(glossary.map((g) => g.term), 500);
+    L.push(terms.lines.length ? `${terms.lines.join(", ")}${terms.omitted ? ` 외 ${terms.omitted}개` : ""} — 정의는 MCP \`search\`` : "- (없음)");
+    L.push("");
+  } else {
+    section(`## 용어집 (${glossary.length})`, glossary.map((g) => `- **${g.term}**: ${g.definition ?? ""}`), "- (없음)", 0, "");
+  }
+
+  // compact: 전체 예산(CONTEXT_BUDGET)에서 다른 섹션이 쓰고 남은 만큼을 레슨에 준다(최소 LESSON_BUDGET).
+  // 태스크가 없는 레포(로요)는 레슨이 더 들어가고, 태스크가 많은 레포는 레슨이 최소 몫을 지킨다.
+  const lessonBudget = Math.max(LESSON_BUDGET, CONTEXT_BUDGET - L.join("\n").length - 400);
+  L.splice(headerLen, 0, ...renderLessons({ lessons, projectId, projectName, projectStack, mode: compact ? "compact" : "full", budget: lessonBudget }));
 
   const markdown = L.join("\n");
   const counts = { lessons: lessons.length, tasks: tasks.length, docs: visibleDocs.length, decisions: decisions.length, risks: risks.length, glossary: glossary.length };

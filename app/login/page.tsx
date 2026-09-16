@@ -41,7 +41,7 @@ export default function LoginPage() {
 
   const errorMessage =
     authError === "AccessDenied"
-      ? "이 워크스페이스에 초대된 계정이거나 허용된 도메인의 이메일만 로그인할 수 있어요. 관리자에게 초대를 요청하세요."
+      ? "이 워크스페이스에 초대된 계정이거나 허용된 도메인의 이메일만 로그인할 수 있어요. 외부에서 공유받은 페이지라면 받은 링크(/s/…)를 초대받은 이메일 계정으로 여세요."
       : authError
         ? "로그인 중 문제가 발생했어요. 다시 시도해 주세요."
         : null;
@@ -54,7 +54,10 @@ export default function LoginPage() {
   };
 
   const continueWithGoogle = () => {
-    void signIn("google", { redirectTo: resolveRedirectTo() });
+    const to = resolveRedirectTo();
+    // 공유 페이지로 돌아가는 로그인은 계정 선택 화면을 띄운다 — 브라우저에 로그인된
+    // 다른 Google 계정으로 자동 진행돼 '권한 없음'에 갇히는 것을 막는다.
+    void signIn("google", { redirectTo: to }, to.startsWith("/s/") ? { prompt: "select_account" } : undefined);
   };
 
   const createWorkspace = () => {

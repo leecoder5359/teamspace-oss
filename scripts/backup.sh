@@ -43,6 +43,15 @@ else
   echo "  (옛 위치 없음 — 건너뜀)"
 fi
 
+# 퍼블리시 사이트 번들(HTML 퍼블리시). DB 의 PublishedSite/SiteVersion 행이 가리키는 파일.
+SITES_DIR="${TEAMSPACE_DATA_DIR:-$REPO_DIR/data}/sites"
+echo "→ 퍼블리시 사이트 아카이브 ($SITES_DIR)"
+if [ -d "$SITES_DIR" ]; then
+  tar -cf "$DEST/sites.tar" -C "$(dirname "$SITES_DIR")" "$(basename "$SITES_DIR")"
+else
+  echo "  (없음 — 건너뜀)"
+fi
+
 echo "→ 로테이션 (최근 $KEEP 개 유지)"
 ls -1dt "$BACKUP_ROOT"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do
   rm -rf "$old"

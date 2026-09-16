@@ -90,9 +90,16 @@ export async function loadAccess(ctx: Ctx): Promise<AccessIndex> {
   });
 }
 
-const notFound = () =>
+/**
+ * 게이트가 "없다" 고 답할 때 쓰는 표준 404 — 다른 라우트도 "이 대상은 없거나
+ * 접근 불가" 를 이 게이트와 **완전히 같은 몸으로** 말하고 싶으면 새로 문자열을
+ * 베끼지 말고 이 함수를 그대로 재사용한다(예: rows/[id]/move — 대상 보드가
+ * 존재하지 않는지/다른 워크스페이스인지/삭제됐는지/볼 수 없는지를 구분되게
+ * 알려주면 그 자체로 정보가 샌다).
+ */
+export const notFound = () =>
   NextResponse.json({ error: "페이지를 찾을 수 없습니다." }, { status: 404 });
-const forbidden = () =>
+export const forbidden = () =>
   NextResponse.json({ error: "이 페이지를 편집할 권한이 없습니다." }, { status: 403 });
 
 export type PageGate = { idx: AccessIndex; level: AccessLevel } | { err: NextResponse };

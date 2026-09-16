@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import type { Role } from "@/app/generated/prisma/enums";
 import { roleAtLeast } from "@/lib/authz";
 import { hashToken, isAgentTokenFormat } from "@/lib/agentToken";
+import { canAutoJoinDefaultWorkspace } from "@/lib/accessControl";
 
 export const WS_COOKIE = "ws_active";
 
@@ -76,6 +77,9 @@ async function resolveSessionCtx(): Promise<Ctx | null | { err: NextResponse }> 
   // 멤버십이 없으면 기본 워크스페이스 자동 가입 — 단, removed 이력이 있으면 차단(재가입 방지).
   // (로그인 자체는 signIn 게이트(초대/허용 도메인)가 이미 거른다.)
   if (!member) {
+    // 자동 가입은 허용 도메인 사용자만. 퍼블리시 게스트(초대 이메일로만 로그인 허용)가
+    // 워크스페이스 URL 을 여는 순간 editor 가 되는 것을 막는다(lib/accessControl 참조).
+    if (!canAutoJoinDefaultWorkspace(user.email)) return forbidden("워크스페이스 멤버가 아닙니다.");
     const workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: "asc" } });
     if (!workspace) return forbidden("워크스페이스가 없습니다.");
     const removed = await prisma.workspaceMember.findFirst({

@@ -60,7 +60,7 @@ describe("authz coverage", () => {
   }
 
   /* 미들웨어 matcher 에서 뺀 /api 경로는 **라우트 자체 게이트가 유일한 방어선**이다.
-     (지금 하나뿐: api/import — 엣지 미들웨어가 10MB 넘는 본문을 깨뜨려서 뺐다.)
+     (api/import · api/sites — 엣지 미들웨어가 10MB 넘는 본문을 깨뜨려서 뺐다.)
      여기에 requireCtx 가 없으면 그 경로는 통째로 무인증이 되므로 정적으로 강제한다. */
   it("미들웨어 matcher 에서 제외한 /api 경로는 requireCtx 로 스스로 막는다", () => {
     const mw = readFileSync(join(__dirname, "..", "middleware.ts"), "utf8");

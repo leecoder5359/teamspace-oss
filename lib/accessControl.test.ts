@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { parseAllowedDomains, emailDomainAllowed } from "@/lib/accessControl";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import {
+  parseAllowedDomains,
+  emailDomainAllowed,
+  canAutoJoinDefaultWorkspace,
+  isVerifiedOAuthEmail,
+} from "@/lib/accessControl";
 
 describe("parseAllowedDomains", () => {
   it("빈 입력은 빈 배열", () => {
@@ -40,5 +45,34 @@ describe("emailDomainAllowed", () => {
   it("서브도메인은 정확히 일치할 때만(부분일치 금지)", () => {
     expect(emailDomainAllowed("a@mail.example.com", domains)).toBe(false);
     expect(emailDomainAllowed("a@example.com.evil.com", domains)).toBe(false);
+  });
+});
+
+describe("canAutoJoinDefaultWorkspace", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("허용 도메인이 없으면 누구도 자동 가입하지 않는다(초대 전용 모드)", () => {
+    vi.stubEnv("AUTH_ALLOWED_DOMAINS", "");
+    expect(canAutoJoinDefaultWorkspace("guest@gmail.com")).toBe(false);
+  });
+
+  it("허용 도메인 이메일만 자동 가입한다", () => {
+    vi.stubEnv("AUTH_ALLOWED_DOMAINS", "team.com");
+    expect(canAutoJoinDefaultWorkspace("a@team.com")).toBe(true);
+    expect(canAutoJoinDefaultWorkspace("A@Team.com")).toBe(true);
+    expect(canAutoJoinDefaultWorkspace("guest@gmail.com")).toBe(false);
+    expect(canAutoJoinDefaultWorkspace(null)).toBe(false);
+  });
+});
+
+describe("isVerifiedOAuthEmail", () => {
+  it("Google 은 email_verified 가 true 일 때만 통과(계정 자동 연결의 전제)", () => {
+    expect(isVerifiedOAuthEmail("google", { email_verified: true })).toBe(true);
+    expect(isVerifiedOAuthEmail("google", { email_verified: false })).toBe(false);
+    expect(isVerifiedOAuthEmail("google", {})).toBe(false);
+    expect(isVerifiedOAuthEmail("google", undefined)).toBe(false);
+  });
+  it("Google 이 아닌 경로(자격증명 없음)는 이 검사 대상이 아니다", () => {
+    expect(isVerifiedOAuthEmail(undefined, undefined)).toBe(true);
   });
 });

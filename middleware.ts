@@ -39,6 +39,10 @@ export default auth((req) => {
 
   if (isPublicSetupAsset(pathname)) return;
 
+  // 퍼블리시 사이트 파일(/pub/<token>/…): 샌드박스 iframe 요청엔 세션 쿠키가 없다.
+  // 인증은 라우트가 서명 토큰 + 매 요청 초대 재판정으로 한다(app/pub/[token]/[...path]/route.ts).
+  if (pathname.startsWith("/pub/")) return;
+
   // ── API 보호 (fail-closed) ──
   // 엣지 미들웨어는 DB 를 못 보므로 토큰은 "존재"만 확인하고, 실제 검증
   // (레거시 timing-safe 비교·AgentToken 해시 조회·RBAC)은 라우트의 requireCtx 가 수행한다.
@@ -81,7 +85,8 @@ export const config = {
   // 미들웨어의 역할은 어차피 fail-closed 선차단이고 실제 검증은 requireCtx 다.
   // scripts/authz-coverage.test.ts 가 "matcher 에서 뺀 /api 경로는 requireCtx 를
   // 쓴다" 를 정적으로 강제한다 — 이 예외가 조용히 무인증 구멍이 되지 않도록.
+  // **`api/sites` 도 같은 사유로 뺀다**(HTML 퍼블리시 zip 업로드 20MB). 첫 줄 requireCtx 가 게이트다.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|fonts|icons|sw.js|manifest.webmanifest|offline|api/import).*)",
+    "/((?!_next/static|_next/image|favicon.ico|fonts|icons|sw.js|manifest.webmanifest|offline|api/import|api/sites).*)",
   ],
 };

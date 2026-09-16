@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * SessionStart 훅 (W3 mem-1): TeamSpace 팀 컨텍스트를 세션 시작 시 주입한다.
- *   GET /api/context?format=md&cwd=<cwd> → stdout (Claude 컨텍스트로 추가됨)
+ *   GET /api/context?format=md&compact=1&cwd=<cwd> → stdout (Claude 컨텍스트로 추가됨)
+ *   compact=1: 큰 훅 출력은 Claude Code 가 파일로 빼고 앞 2KB 만 넣는다 — 서버가 ~9KB 안으로 줄여 준다.
  * 부수적으로 /api/ingest 에 세션 시작(active)을 기록한다(실패 무해).
  *
  * 설정: ~/.claude/teamspace.json { "base": "http://localhost:3002", "token": "wst_..." }
@@ -85,7 +86,7 @@ async function main() {
   }
 
   try {
-    const res = await fetch(`${base}/api/context?format=md&cwd=${encodeURIComponent(cwd)}`, {
+    const res = await fetch(`${base}/api/context?format=md&compact=1&cwd=${encodeURIComponent(cwd)}`, {
       headers,
       signal: AbortSignal.timeout(3000),
     });

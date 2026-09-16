@@ -30,7 +30,7 @@ pnpm ws approval add "배포 승인?" --body "main 머지" --kind deploy --high
 - 🎭 **RBAC**: `viewer`(읽기) < `editor`(콘텐츠 쓰기) < `admin`(멤버·팀·워크스페이스 이름·슬랙·알림 규칙·에이전트 토큰). viewer 토큰으로 쓰기 호출하면 403.
 - 🔒 **페이지·프로젝트 권한(D3)**: 역할만으로 끝나지 않는다 — 멤버여도 **못 보는 페이지가 있다**. 아래 "공유 범위" 절 참고. 에이전트 토큰은 보통 `editor` 라, 비공개 페이지에 대해 `pnpm ws doc rm` 같은 명령이 **404** 를 받는 것이 정상이다(권한 없음이 아니라 '없는 것처럼' 보이는 설계).
 - 🤖 **에이전트 토큰**(`/api/agent-tokens`, admin): `pnpm ws token add <name> [--role]` → `wst_…` 원문 1회 노출(저장 필수). 발급 시 에이전트가 시스템 User+멤버로 생성되어 작성자 기록·멤버 목록에 실명 표시. `token ls`/`token revoke <id>`(회수 시 멤버십도 removed). 설정 화면 › 에이전트 토큰 섹션에서도 발급/회수 가능. 에이전트마다 자기 토큰을 쓴다(공유 토큰 없음).
-- 🚪 **로그인 접근 게이트**(`auth.ts` signIn 콜백 + `lib/accessControl.ts`): Google 로그인 자체를 두 경로로 제한 — **(a) 초대**: `/api/members`로 초대된(invited/active) 이메일, 또는 **(b) 도메인**: 이메일 도메인이 `AUTH_ALLOWED_DOMAINS`(콤마/공백 구분, `@` 선택) 에 포함. 둘 중 하나라도 만족하면 허용, 아니면 거부 → `/login?error=AccessDenied`(로그인 화면에 안내 배너). `AUTH_ALLOWED_DOMAINS` 미설정 시 (a) 초대 전용 모드. **주의: 게이트는 항상 활성** — 기존 active 멤버는 통과하나, 멤버도 허용 도메인도 아닌 계정은 차단된다(운영 도메인을 `AUTH_ALLOWED_DOMAINS`에 넣어 자기잠금 방지).
+- 🚪 **로그인 접근 게이트**(`auth.ts` signIn 콜백 + `lib/accessControl.ts`): Google 로그인 자체를 두 경로로 제한 — **(a) 초대**: `/api/members`로 초대된(invited/active) 이메일, 또는 **(b) 도메인**: 이메일 도메인이 `AUTH_ALLOWED_DOMAINS`(콤마/공백 구분, `@` 선택) 에 포함. 둘 중 하나라도 만족하면 허용, 아니면 거부 → `/login?error=AccessDenied`(로그인 화면에 안내 배너). `AUTH_ALLOWED_DOMAINS` 미설정 시 (a) 초대 전용 모드. **계정 자동 연결**: 초대(멤버·퍼블리시 게스트)·시드는 User 행을 로그인 전에 만들기 때문에 Google 에 `allowDangerousEmailAccountLinking` 을 켰다 — 안 켜면 첫 로그인이 `OAuthAccountNotLinked`("로그인 중 문제가 발생했어요")로 막힌다(2026-09-14 발견). 대신 signIn 콜백이 `profile.email_verified === true` 를 강제한다(`isVerifiedOAuthEmail`). **주의: 게이트는 항상 활성** — 기존 active 멤버는 통과하나, 멤버도 허용 도메인도 아닌 계정은 차단된다(운영 도메인을 `AUTH_ALLOWED_DOMAINS`에 넣어 자기잠금 방지).
 - 빌드 게이트: `pnpm exec tsc --noEmit && pnpm lint && pnpm test`.
 - 백업: `pnpm backup` (pg_dump + docs/ tar → `~/Backups/teamspace/`, 최근 14개 로테이션). launchd `com.teamspace.backup`이 매일 03:30 자동 실행.
 - 🚀 **배포(맥미니 상시)**: `pnpm deploy:local` = prod 빌드 + launchd 4종(web:3002·worker·backup·health) 설치·재기동. `GET /api/health`(무인증) = `{ok,db,worker}` — health 서비스가 5분마다 확인·자가복구. **3002는 프로덕션**(tailscale funnel로 https://teamspace.example.com 공개) — 개발 서버는 `pnpm exec next dev -p 3003`. 코드 변경 반영은 재배포 필요. 로그: `~/Library/Logs/teamspace/`.
@@ -54,6 +54,13 @@ pnpm ws approval add "배포 승인?" --body "main 머지" --kind deploy --high
 4. 행 추가: `POST /api/databases/<boardId>/rows` `{ "props": {...} }`. 삭제: `DELETE /api/rows/<rowId>`.
 5. **재정렬**: `PATCH /api/rows/<rowId>` `{ "position": <number> }`.
 5-1. **원자적 클레임**: `POST /api/rows/<rowId>/claim` `[{force:true}]` → 담당자 비어 있을 때만 CAS 로 `담당자=현재 액터, 상태=진행 중`. 경쟁/이미 할당이면 **409+현재 담당자**. **에이전트는 태스크를 잡을 때 반드시 claim 을 쓴다**(PATCH 로 담당자 직접 쓰기 금지 — 이중 작업 방지). CLI: `task claim <rowId> [--force]`, 내 태스크: `task mine` / `GET /api/tasks?assignee=me[&board=]`.
+5-2. **다른 보드로 이동**: `POST /api/rows/<rowId>/move` `{ targetDatabaseId, dryRun?, createMissingOptions?, expectedUpdatedAt? }` (editor, 원본·대상 보드 **둘 다 edit**). **같은 행(id 그대로)** 의 `databasePageId` 를 바꾸므로 코멘트·체크리스트·문서 연결(contentPageId)·작성자·활동이 따라간다. 대상 보드 맨 끝(position)으로 가고 `parentRowId` 는 null. 응답 `{ ok, dryRun, row?:{id,databasePageId}, mapped:[{name,type,to?}], dropped:[{name,type,reason,value}], createdOptions:[{property,option}], referencedBy }`(`createdOptions` 는 실제로 새로 만든 옵션만 담는다 — 동시에 다른 요청이 먼저 같은 이름을 만들었으면 그 요청은 재사용만 하고 여기 나오지 않는다). CLI: `task transfer <rowId> --to <boardId> [--dry-run] [--create-options] [--expect <updatedAt>]`. MCP: `task_move`(같은 `expectedUpdatedAt` 필드로 낙관적 잠금). (`task mv` 는 같은 보드 안 순서 변경이다 — 이름이 비슷하니 헷갈리지 말 것.)
+    - **대상 보드 오류는 일부러 구분 안 된다(D3)**: `targetDatabaseId` 가 존재하지 않든, 다른 워크스페이스든, 삭제됐든, 보드(database)가 아니든, 볼 수 없는(접근 게이트 거부) 보드든 — 전부 `lib/pageGuard.ts` 의 `notFound()` 와 **똑같은 404** (`{ error: "페이지를 찾을 수 없습니다." }`)로 응답한다. "존재는 하지만 권한이 없다" 를 알려주면 그 자체로 정보가 새기 때문이다. 원인은 서버 debug 로그에만 남는다 — 클라이언트 메시지로 원인을 유추하려 하지 말 것.
+   - **매핑 규칙**(순수 로직 `lib/rowMove.ts`): 속성 id·옵션 id 는 보드마다 다르므로 **이름+타입** 으로 짝을 찾는다. text/number/date/checkbox/person = 값 복사 · select = **옵션 이름** → 대상 옵션 id(없으면 버림, `createMissingOptions:true` 면 대상 속성에 옵션을 만들고 색 유지) · multiselect = 값마다 같은 규칙 · relation = 두 속성의 `targetDatabaseId` 가 **같을 때만** 복사하고 대상 보드에 실재하는 id 만 남긴다(자기 보드를 가리키는 `선행 태스크` 는 보드가 바뀌면 반드시 끊긴다) · 짝이 없거나 타입이 다르면 버림. 빈 값은 보고하지 않는다. **제목**(첫 text)은 같은 이름이 없으면 대상의 첫 text 속성으로 옮기고, 그것도 없으면 **400 + dropped**.
+   - **거부**: 같은 보드 400 · 대상이 보드가 아님/삭제/다른 워크스페이스 404 · **하위 항목이 있으면 409 `{childCount}`**(자식을 먼저 옮기거나 분리) · `expectedUpdatedAt` 불일치 409 + 현재 행 · 계획을 세운 뒤 행이 바뀌면(CAS: updatedAt·보드·자식 없음) 409 — 옵션 생성까지 트랜잭션으로 롤백.
+   - **보고만 하는 것**: `referencedBy` = 이 행을 relation 으로 가리키는 다른 행 수. 이동을 막지 않지만 그 연결은 원본 보드를 가리키는 relation 에 다른 보드 행 id 가 남는 셈이라 `(삭제된 행)` 으로 보인다.
+   - **dryRun 을 먼저** 돌려 `dropped` 를 확인하고 옮긴다 — 버려진 값은 되돌릴 방법이 없다. dryRun 은 아무것도 쓰지 않고 같은 보고를 200 으로 준다.
+   - 상태·담당자 **알림을 보내지 않는다**(재배치지 변경이 아니다). 활동 로그에 `moved`(보드 이동)로 남는다.
 6. 보드 새로 생성: `POST /api/databases` `{ "title"?, "parentId"?, "projectId"? }`(projectId=프로젝트에 연결) → 위 4속성(상태: 할 일/진행 중/완료, 우선순위: 낮음/보통/높음)·뷰(표/보드)가 갖춰진 보드. 단순 목록: `GET /api/tasks` → `{ tasks:[{id,title,due,status}], databaseId }`.
 
 7. **체크리스트**(행별): `GET/POST /api/rows/<rowId>/checklist` `{ text }` · `PATCH/DELETE /api/rows/<rowId>/checklist/<itemId>` `{ done?, text? }`.
@@ -105,6 +112,39 @@ API·CLI:
 | 회수 | `DELETE .../grants?grantId=` | `pnpm ws page unshare <pageId> <grantId>` |
 
 프로젝트도 같은 모양(`/api/projects/<id>/grants`, `pnpm ws project shares|restrict|share|unshare`). 사람에게 부여하면 인앱 알림이 가고, 모든 변경은 활동 로그에 남는다. UI 는 문서·보드 하단 "공유" 패널(잠겨 있으면 열지 않아도 `· 비공개` 배지).
+
+## HTML 퍼블리시 — 초대 게스트 전용 (2026-09)
+
+HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고, **초대한 이메일로 Google 로그인한 사람만** 본다. 게스트는 워크스페이스 멤버가 아니다. 설계 doc·결정 3건은 TeamSpace 문서에 있다(`doc ls` 에서 "HTML 퍼블리시" 로 찾는다).
+
+| 하는 일 | API | CLI |
+|---|---|---|
+| 목록 | `GET /api/sites` | `site ls` |
+| 생성 | `POST /api/sites` multipart `file`(.html/.zip), `title?`, `projectId?`, `invites?`(쉼표) | `site publish <file\|dir\|zip> [--title] [--project] [--invite a,b]` |
+| 새 버전 | `POST /api/sites/<id>/versions` multipart `file` | `site publish <path> --site <id>` |
+| 상세 | `GET /api/sites/<id>` → `{site,url,versions,invites}` | `site show <id>` |
+| 수정·롤백·비활성 | `PATCH /api/sites/<id> {title?,status?,currentVersion?,projectId?,apiUpstream?}` | `site rollback <id> <v>` · `site disable\|enable <id>` |
+| API 프록시 연결·해제 | `PATCH /api/sites/<id> {apiUpstream:"http://127.0.0.1:<port>"\|null}` (목록·상세 응답에 `apiUpstream`) | `site api <id> http://127.0.0.1:<port>` · `site api <id> --off` |
+| 삭제(소프트) | `DELETE /api/sites/<id>` | `site rm <id>` |
+| 초대·회수 | `POST\|DELETE /api/sites/<id>/invites {emails:[]}` | `site invite\|uninvite <id> <email...>` |
+| 접근 이력 | `GET /api/sites/<id>/access` → `{accounts:[{email,kind(invited\|member\|revoked),count,firstAt,lastAt,recent[]}],total,windowDays}` | `site access <id>` |
+
+MCP: `site_publish {path,title?,siteId?,invites?}` · `site_list`. UI: 사이드바 › 퍼블리시(`/sites`).
+
+- **왜 샌드박스인가**: 올린 HTML 의 JS 가 앱과 같은 출처에서 돌면 로그인한 팀원 브라우저로 `/api` 를 부를 수 있다. Funnel 은 호스트가 하나라 서브도메인 분리가 불가능하고, 쿠키는 포트를 구분하지 않아 포트 분리도 소용없다. 그래서 셸(`/s/<slug>`)이 세션을 판정한 뒤 `/pub/<HMAC토큰>/…` 을 `sandbox` iframe 으로 띄운다. `/pub` 응답에는 항상 `CSP: sandbox …`(**allow-same-origin·allow-top-navigation 없음**)·`no-referrer`·`nosniff` 를 붙인다. sandbox 문자열의 원천은 `lib/sites/headers.SITE_SANDBOX` 하나다.
+- **API 프록시**(`app/pub/[token]/[...path]/route.ts`, 규칙 `lib/sites/apiProxy.ts`): 페이지가 **상대경로** `fetch('api/x')` 를 부르면 `/pub/<token>/api/x` 가 되고, 사이트에 `apiUpstream` 이 있으면 토큰 검증(403) → `siteAccessById` 재판정(404/403) → 경로 검증(`..`·빈 세그먼트·백슬래시·인코딩 슬래시 404) 후 `<upstream>/api/x?<원 쿼리>` 로 넘긴다. 메서드 GET·POST·PUT·PATCH·DELETE(+OPTIONS 프리플라이트). `apiUpstream` 이 없으면 GET 은 기존 파일 서빙, 나머지는 404.
+  - **upstream 은 루프백만**: `http(s)://127.0.0.1|localhost|[::1]:<port>` (포트 필수, 경로·쿼리·userinfo 불가, 끝 슬래시 제거해 저장) — 그 외 400. SSRF 방지. 설정 권한은 editor(프록시는 인증 헤더를 넘기지 않아 앱 자신을 가리켜도 401 — 단 그 루프백 포트의 무인증 서비스는 초대 게스트에게 열리니 무엇을 연결하는지가 보안 경계), 연결·해제는 활동 로그에 남는다(주소 제외).
+  - **넘기는 헤더**: 원 요청의 `content-type`·`accept` 만 + `x-teamspace-site-id`·`x-teamspace-viewer`(판정된 이메일, 소문자)·`x-teamspace-member`(true/false). 쿠키·authorization·host 는 절대 안 넘긴다. **응답**은 status·body·content-type 만 살리고 `cache-control: no-store`·`nosniff`·`no-referrer`·CSP sandbox·`access-control-allow-origin: *` 를 붙인다(set-cookie 등 버림).
+  - **왜 CORS 가 필요한가**: sandbox iframe 은 opaque origin(Origin: null)이라 같은 호스트 fetch 도 교차 출처다. 인증이 쿠키가 아닌 경로 토큰이라 `*`(credentials 없음)로 연다. 403/404 응답에도 CORS 를 붙여 페이지가 만료(403)를 읽을 수 있게 했다.
+  - **상한**: 요청 본문 1MB(413), 응답 5MB(502), 타임아웃 `SITE_API_TIMEOUT_MS`(기본 600000ms, 504), 연결 실패 502 `{error:"upstream 에 연결할 수 없습니다"}`(내부 주소 비노출). undici 300초 기본 타임아웃을 피하려고 `node:http` 로 호출한다. 보는 사람이 연결을 끊으면 upstream 요청도 끊는다.
+  - 접근 이력(SiteAccess)은 기록하지 않는다(셸 열람만).
+- **토큰**: `AUTH_SECRET` 에서 HKDF 로 파생한 키로 서명한다. TTL 1시간이고 버전이 고정된다. `/pub` 는 **매 요청 초대를 다시 판정**하므로 회수·비활성화가 즉시 반영된다. 1시간 넘게 머물면 지연 로딩 에셋이 실패하며, 셸을 새로고침하면 복구된다.
+- **로그인**: `isSignInAllowed` 경로 (c) = 살아 있는 사이트의 `SiteInvite` 에 있는 이메일. 게스트는 멤버 행이 없으므로 `requireCtx` 가 워크스페이스를 막는다. **자동 가입은 허용 도메인 이메일만**(`canAutoJoinDefaultWorkspace`) — 이 제한이 없으면 게스트가 `/dashboard` 를 여는 순간 editor 가 된다.
+- **번들 규칙**(`lib/sites/bundle.ts`): 20MB·해제 50MB·파일 500개. 최상위 폴더 하나는 벗긴다. `index.html` 필수. 확장자는 허용 목록만 받고, 숨김·`__MACOSX` 는 건너뛴다. **루트 기준 경로(`/assets/x.js`)는 로드되지 않는다** — 경고가 뜨면 상대경로로 빌드한다(`vite build --base=./`). CLI·MCP 가 폴더를 묶을 때 숨김 파일·`node_modules` 는 뺀다.
+- **저장**: `DATA_DIR/sites/<siteId>/v<n>/`(원자적 rename). 최근 10개 버전만 유지하고 current 는 지우지 않는다. 백업은 `sites.tar`.
+- **미들웨어**: `api/sites` 는 matcher 밖(10MB 넘는 multipart, `/api/import` 와 같은 사유)이고 `/pub/` 는 조기 통과한다. 둘 다 라우트가 스스로 막는다.
+- **접근 이력**(`SiteAccess`): 셸(`/s/<slug>`) 열람만 기록하고 `/pub` 에셋은 기록하지 않는다. 같은 계정 10분 내 재열람은 생략, IP·UA 는 저장하지 않는다. kind 는 **현재** 기준(지금 초대돼 있으면 invited, 멤버로 본 기록이면 member, 아니면 revoked). 조회는 최근 180일·5000건. 상세 화면 초대 섹션 아래.
+- **초대 알림은 자동 발송하지 않는다**(메일 인프라 없음). 응답·화면의 복사 문구를 사람이 전달한다.
 
 ## 내보내기 / 가져오기 (격차 E1·E2 — 데이터 반출입)
 
@@ -199,7 +239,7 @@ API·CLI:
 
 ## MCP 서버 (W8 — 네이티브 접점)
 
-- **이 레포의 `.mcp.json`이 `teamspace` MCP 서버를 자동 등록** — **18개 툴** 제공(`scripts/mcp-server.ts`): `context_get` · `task_list/claim/update/add` · `board_get` · `doc_list/read/save/create/comment` · `lesson_list/add` · `decision_add` · **`propose`** · `inbox_list` · `activity_list` · `search`. (종전 이 목록에 `propose` 가 빠져 있었다 — `scripts/mcp-server.test.ts` 가 이제 도구↔라우트 패리티를 검증한다). 다른 레포/머신: `claude mcp add teamspace -- pnpm --dir <레포경로> exec tsx scripts/mcp-server.ts`. 인증은 `~/.claude/teamspace.json`.
+- **이 레포의 `.mcp.json`이 `teamspace` MCP 서버를 자동 등록** — **22개 툴** 제공(`scripts/mcp-server.ts`): `context_get` · `task_list/claim/update/add/move` · `board_get` · `doc_list/read/save/create/comment` · `lesson_list/get/add` · `decision_add` · **`propose`** · `inbox_list` · `activity_list` · `search` · `site_list/publish`(HTML 퍼블리시). (종전 이 목록에 `propose` 가 빠져 있었다 — `scripts/mcp-server.test.ts` 가 이제 도구↔라우트 패리티를 검증한다). 다른 레포/머신: `claude mcp add teamspace -- pnpm --dir <레포경로> exec tsx scripts/mcp-server.ts`. 인증은 `~/.claude/teamspace.json`.
 - MCP 툴이 있으면 그걸 우선 사용, 없으면 이 스킬의 CLI/raw API 로.
 - **멱등성**: `Idempotency-Key` 헤더를 지원하는 POST 는 정확히 이 7개다 — `databases/<id>/rows` · `pages` · `pages/<id>/comments` · `rows/<id>/comments` · `schedules` · `approvals` · `proposals`. 재시도 시 같은 키를 보내면 이중 생성 없이 저장된 응답을 돌려준다. (열거가 모호해 행 댓글이 빠진 걸 아무도 몰랐다 — 2026-08-07 지원 추가 + 목록 정정)
 - **이벤트 푸시(W8)**: `GET /api/events` SSE(브라우저 쿠키 전용) — UI 자동 갱신이 이벤트 기반. 에이전트는 폴링/MCP 유지.
@@ -209,7 +249,11 @@ API·CLI:
 
 - `GET /api/context?format=md|json&cwd=<path>` → 워크스페이스를 **Claude가 읽는 Markdown 스냅샷**으로(**팀 레슨**·보드 열린 태스크·문서·승인된 결정·열린 리스크·용어집). `cwd`를 주면 라우트룰로 프로젝트를 해석해 그 프로젝트 우선 필터. `format=json`은 `{ markdown, counts }`. `pnpm ws context`.
 - **자동 주입(W3)**: SessionStart 훅(`scripts/hooks/teamspace-context.mjs`, 전역 사본 `~/.claude/hooks/`)이 매 세션 시작 시 위 스냅샷을 주입하고 세션 시작을 `/api/ingest`에 기록, SessionEnd 훅이 종료를 기록한다. 인증은 `~/.claude/teamspace.json` `{base, token}`(에이전트 토큰) — 팀원 머신도 같은 파일로 참여.
-- **레슨(팀 작업규칙)**: `GET/POST /api/lessons {title, body, projectId?}` · `PATCH/DELETE /api/lessons/<id>`. CLI: `pnpm ws lesson add|ls|rm`. UI: 문서 허브 › 팀 작업규칙 탭. 컨텍스트 주입 최상단에 포함되므로 "팀원 전원의 에이전트가 알아야 할 규범"은 반드시 레슨으로 승격.
+- **레슨(팀 작업규칙)**: `GET/POST /api/lessons {title, body, projectId?}` · `GET/PATCH/DELETE /api/lessons/<id>`. CLI: `pnpm ws lesson add|ls|show|set|rm` (`lesson set <id> --project <id>|--global` 로 범위 변경). MCP: `lesson_list`(id·제목·범위 색인만) · `lesson_get`(전문) · `lesson_add`.
+  - **범위를 정확히 붙인다(셋 중 하나)**: ① **프로젝트** — 그 레포에서만 의미 있는 것(로요 마이그레이션·결제 등) `projectId` ② **스택** — 특정 기술(next·supabase…)을 쓰는 프로젝트에만 해당하는 것 `stack` (예: Next 16 proxy 헤더) ③ **전역** — 둘 다 비움, **모든 레포 세션**에 들어가므로 진짜 공통 규범만. API 는 projectId·stack 동시 지정을 400 으로 거절하고, 한쪽을 새로 정하면 다른 쪽을 비운다. CLI: `lesson add|set … --project <id> | --stack <tag> | --global`.
+  - **스택 레슨이 들어가는 조건**: 세션 cwd 가 프로젝트로 매핑되고(`route-rule`) 그 프로젝트의 `Project.stack` 에 태그가 있을 때. 프로젝트 스택은 `pnpm ws project set <id> --stack next,supabase` / `PATCH /api/projects/<id> {stack}`. 매핑이 안 되거나 스택이 안 맞아 뺀 스택 레슨 수는 주입 끝에 적힌다.
+  - **주입 방식(2026-09-15 개편, `lib/lessonInject.ts`)**: 세션 훅은 `/api/context?compact=1` 을 부른다. 레슨은 `### 프로젝트: <이름>` / `### 스택: <tag>` / `### 전역` **섹션으로 나뉘고 섹션별 예산**(합 5000자, 필요량이 적은 섹션부터 채우고 남는 몫을 넘김)을 받는다. 커버리지 우선 — 먼저 전부 제목 줄로 담고 남는 만큼 최근 것부터 `제목 — 처방 요약 \`id\`` 로 올리며, 넘친 개수는 `… 외 N개` 로 **항상 표시**한다. 요약은 본문의 `처방`/`교훈` 부분을 우선한다(없으면 첫 '실사례(...)' 문장을 건너뜀). 나머지 섹션도 compact 에선 상위 N건 + `외 N건`, 용어집은 용어명만. 전체 ~9KB.
+  - **왜**: 종전엔 take:50 + 프로젝트 우선 정렬로 전역 레슨이 조용히 잘렸고(로요 cwd 에서 27개 누락), 본문 통째 주입으로 53KB 가 되어 **Claude Code 가 훅 출력을 파일로 빼고 앞 2KB 미리보기만 넣었다** — 실제로 읽힌 레슨은 두세 개였다. 본문 속 `##` 제목도 섹션을 깨서 `▸` 로 바꾼다. `compact` 없이 부르면(AI 연결 화면·내보내기) 전체를 섹션 분리해 보여준다. UI: 문서 허브 › 팀 작업규칙 탭. 컨텍스트 주입 최상단에 포함되므로 "팀원 전원의 에이전트가 알아야 할 규범"은 반드시 레슨으로 승격.
 - **승격 제안 큐**: `GET/POST /api/proposals {kind(lesson|decision), title, body, projectId?}` · `PATCH /api/proposals/<id> {action: approve|reject, note?}`(admin — approve 시 레슨/결정 자동 생성) · `DELETE`(본인 pending 철회). CLI: `proposal ls|add|approve|reject`. MCP: `propose`. **세션에서 배운 팀 규범·확정 사항은 세션이 끝나기 전에 lesson_add(확신+admin) 또는 propose(검토 필요)로 남긴다** — admin에게 인앱 알림, 결과는 제안자에게 알림. UI: 팀 작업규칙 탭 상단 대기 목록.
 - **라우트룰(cwd→프로젝트)**: `GET /api/route-rules {cwdPrefix, projectId?, priority?}`(인증만) · `POST`(**editor** — 설치기 재실행이 페어링 발급 editor 토큰으로 호출하므로 admin→editor 완화) · `DELETE /api/route-rules/<id>`(admin 유지). CLI: `pnpm ws route-rule add|ls|rm`.
 - AI 연결 화면(`/aiconnect`)이 이 스냅샷 미리보기·복사·`.md` 내보내기 + 연결 방법(이 스킬·`pnpm ws`·읽기 API·file-first `docs/*.md`)을 보여준다. 세션 탐색기(M4 `/api/sessions`·`/api/ingest`)는 보조.

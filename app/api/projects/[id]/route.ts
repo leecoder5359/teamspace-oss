@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveMemberRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { requireProject } from "@/lib/pageGuard";
+import { normalizeStack } from "@/lib/lessonInject";
 
 const COLORS = ["blue", "orange", "purple", "green", "red", "gray"];
 
@@ -31,9 +32,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     repoPath?: string | null;
     repoBranch?: string | null;
     docsDir?: string | null;
+    stack?: string[] | string | null;
   };
 
   const data: Record<string, unknown> = {};
+  if (body.stack !== undefined) {
+    // 스택 태그 — 스택 레슨(Lesson.stack)이 이 프로젝트 세션에 들어갈지 정한다.
+    const st = normalizeStack(body.stack ?? []);
+    if (!st.ok) return NextResponse.json({ error: st.error }, { status: 400 });
+    data.stack = st.stack;
+  }
   if (typeof body.name === "string") {
     const name = body.name.trim();
     if (!name) return NextResponse.json({ error: "이름은 비울 수 없습니다." }, { status: 400 });

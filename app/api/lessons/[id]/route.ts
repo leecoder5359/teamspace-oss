@@ -2,10 +2,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
+import { parseLessonStack } from "@/lib/lessonInject";
 
 export const runtime = "nodejs";
 
-// PATCH /api/lessons/[id] { title?, body?, projectId? }
+// GET /api/lessons/[id] → { lesson } — 세션 주입(compact)은 제목·요약만 넣으므로 전문은 여기서 읽는다.
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const guard = await requireCtx("viewer");
+  if ("err" in guard) return guard.err;
+  const lesson = await prisma.lesson.findUnique({ where: { id } });
+  if (!lesson || lesson.workspaceId !== guard.workspaceId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json({ lesson });
+}
+
+// PATCH /api/lessons/[id] { title?, body?, projectId?, stack? } — 범위는 셋 중 하나: 전역(둘 다 null) · 프로젝트 · 스택
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
@@ -18,8 +31,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     title?: string;
     body?: string;
     projectId?: string | null;
+    stack?: string | null;
   };
-  const data: { title?: string; body?: string; projectId?: string | null } = {};
+  const data: { title?: string; body?: string; projectId?: string | null; stack?: string | null } = {};
   if (body.title !== undefined) {
     const t = body.title.trim();
     if (!t) return NextResponse.json({ error: "title 이 비었습니다." }, { status: 400 });
@@ -36,6 +50,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!ref.ok) return ref.err;
     data.projectId = ref.projectId;
   }
+  if (body.stack !== undefined) {
+    const st = parseLessonStack(body.stack);
+    if (!st.ok) return NextResponse.json({ error: st.error }, { status: 400 });
+    data.stack = st.stack;
+  }
+  // 범위는 하나만: 한쪽을 새로 정하면 다른 쪽은 비운다. 둘 다 값을 주면 거절한다.
+  if (data.projectId && data.stack) {
+    return NextResponse.json({ error: "레슨 범위는 프로젝트와 스택 중 하나만 정할 수 있습니다." }, { status: 400 });
+  }
+  if (data.projectId) data.stack = null;
+  if (data.stack) data.projectId = null;
   const updated = await prisma.lesson.update({ where: { id }, data });
   return NextResponse.json({ lesson: updated });
 }
@@ -52,3 +77,4 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   await prisma.lesson.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
+

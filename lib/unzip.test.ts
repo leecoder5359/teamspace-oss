@@ -139,3 +139,12 @@ describe("readZip — 깨진 입력에는 조용히 실패하지 않는다", () 
     expect(() => readZip(buf, { maxTotalBytes: 100_000 })).toThrow(/너무 큽니다|상한/);
   });
 });
+
+describe("readZip — 선언 크기를 속인 엔트리(zip bomb)", () => {
+  it("central directory 의 rawSize 보다 크게 풀리면 끝까지 풀기 전에 거절한다", () => {
+    const buf = Buffer.from(createZip([{ path: "big.txt", data: Buffer.alloc(2 * 1024 * 1024) }]));
+    const central = buf.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    buf.writeUInt32LE(16, central + 24); // rawSize 를 16바이트로 위조
+    expect(() => readZip(buf)).toThrow(/압축 해제 실패/);
+  });
+});

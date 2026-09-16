@@ -65,7 +65,7 @@ function ActivityFeed() {
   }, [load]);
   useAutoRefresh(load);
 
-  const VERB: Record<string, string> = { created: "생성", updated: "수정", deleted: "삭제", restored: "복원", purged: "영구 삭제", claimed: "클레임", commented: "코멘트", requested: "승인 요청", decided: "결정", uploaded: "업로드", invited: "초대", revoked: "회수" };
+  const VERB: Record<string, string> = { created: "생성", updated: "수정", deleted: "삭제", restored: "복원", purged: "영구 삭제", claimed: "클레임", commented: "코멘트", requested: "승인 요청", decided: "결정", uploaded: "업로드", invited: "초대", revoked: "회수", moved: "보드 이동" };
   const TYPE: Record<string, string> = { doc: "문서", task: "태스크", board: "보드", decision: "결정", approval: "승인", member: "멤버", token: "토큰", file: "파일", lesson: "레슨" };
 
   return (

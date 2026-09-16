@@ -13,6 +13,7 @@ type Lesson = {
   title: string;
   body: string;
   projectId: string | null;
+  stack?: string | null;
   createdById: string | null;
   updatedAt: string;
 };
@@ -248,6 +249,8 @@ export default function LessonsSurface({ project }: { project: string }) {
                       <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{l.title}</span>
                       {l.projectId ? (
                         <span style={badge}>프로젝트</span>
+                      ) : l.stack ? (
+                        <span style={badge} title="이 스택을 쓰는 프로젝트 세션에만 주입">스택: {l.stack}</span>
                       ) : (
                         <span style={{ ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>전역</span>
                       )}

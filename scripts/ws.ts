@@ -73,6 +73,27 @@ async function api(method: string, path: string, body?: unknown): Promise<unknow
   return data;
 }
 
+/** api() 와 같지만 실패해도 던지지 않고 본문을 돌려준다 — 에러 응답에 담긴 보고(예: dropped)를 보여줄 때. */
+async function apiRaw(method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["content-type"] = "application/json";
+  if (TOKEN) headers["x-ws-token"] = TOKEN;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  } catch {
+    throw new Error(`${BASE} 에 연결할 수 없습니다. dev 서버를 먼저 띄우세요: pnpm exec next dev -p 3002`);
+  }
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    data = text;
+  }
+  return { ok: res.ok, status: res.status, data };
+}
+
 // ── 인자 파싱 ───────────────────────────────────────────────────────────────
 interface Args {
   pos: string[];
@@ -359,6 +380,49 @@ add({
     const [rowId, pos] = a.pos;
     if (!rowId || pos === undefined) throw new Error("usage: ws task mv <rowId> <position>");
     out(await api("PATCH", `/api/rows/${rowId}`, { position: Number(pos) }));
+  },
+});
+add({
+  name: "task transfer",
+  usage:
+    "task transfer <rowId> --to <boardId> [--dry-run] [--create-options] [--expect <updatedAt>]   (행을 다른 보드로 이동 — 이름·타입 매핑, 먼저 --dry-run 권장)",
+  ep: ["rows/[id]/move/route.ts"],
+  run: async (a) => {
+    const rowId = a.pos[0];
+    const to = flag(a, "to");
+    if (!rowId || !to)
+      throw new Error("usage: ws task transfer <rowId> --to <boardId> [--dry-run] [--create-options] [--expect <updatedAt>]");
+    const dryRun = bool(a, "dry-run");
+    const expect = flag(a, "expect");
+    const r = await apiRaw("POST", `/api/rows/${rowId}/move`, {
+      targetDatabaseId: to,
+      ...(dryRun ? { dryRun: true } : {}),
+      ...(bool(a, "create-options") ? { createMissingOptions: true } : {}),
+      ...(expect ? { expectedUpdatedAt: expect } : {}),
+    });
+    const d = (r.data ?? {}) as {
+      error?: string;
+      childCount?: number;
+      row?: { id: string; databasePageId: string };
+      mapped?: { name: string; type: string; to?: string }[];
+      dropped?: { name: string; type: string; reason: string; value: unknown }[];
+      createdOptions?: { property: string; option: { id: string; name: string } }[];
+      referencedBy?: number;
+    };
+    if (!r.ok) {
+      console.error(`POST /api/rows/${rowId}/move → ${r.status}: ${d.error ?? JSON.stringify(r.data)}`);
+      if (d.childCount !== undefined) console.error(`  하위 항목 ${d.childCount}개`);
+      for (const x of d.dropped ?? []) console.error(`  - 버림 ${x.name}(${x.type}): ${x.reason} ${JSON.stringify(x.value)}`);
+      process.exit(1);
+    }
+    out(dryRun ? `[드라이런] 아무것도 바뀌지 않았습니다 — 대상 보드 ${to}` : `이동 완료: ${d.row?.id} → 보드 ${d.row?.databasePageId}`);
+    out(`매핑 ${d.mapped?.length ?? 0}개: ${(d.mapped ?? []).map((m) => (m.to ? `${m.name}→${m.to}` : m.name)).join(", ") || "-"}`);
+    out(`버림 ${d.dropped?.length ?? 0}개`);
+    for (const x of d.dropped ?? []) out(`  - ${x.name}(${x.type}): ${x.reason} ${JSON.stringify(x.value)}`);
+    if (d.createdOptions?.length) {
+      out(`${dryRun ? "만들 옵션" : "만든 옵션"} ${d.createdOptions.length}개: ${d.createdOptions.map((c) => `${c.property}='${c.option.name}'`).join(", ")}`);
+    }
+    if (d.referencedBy) out(`주의: 다른 행 ${d.referencedBy}개가 이 행을 relation 으로 가리킵니다 — 이동 후 그 연결은 보드를 넘는 링크가 됩니다.`);
   },
 });
 add({
@@ -876,9 +940,32 @@ add({
 });
 add({
   name: "lesson add",
-  usage: 'lesson add <title> --body "<규칙 본문>" [--project <id>]',
+  usage: 'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…>]   (없으면 전역 — 모든 레포 세션에 주입)',
   ep: ["lessons/route.ts"],
-  run: async (a) => out(await api("POST", "/api/lessons", { title: a.pos[0], body: flag(a, "body"), projectId: flag(a, "project") })),
+  run: async (a) => out(await api("POST", "/api/lessons", { title: a.pos[0], body: flag(a, "body"), projectId: flag(a, "project"), stack: flag(a, "stack") })),
+});
+add({
+  name: "lesson show",
+  usage: "lesson show <id>   (레슨 전문 — 세션 주입에는 제목·요약만 들어간다)",
+  ep: ["lessons/[id]/route.ts"],
+  run: async (a) => {
+    const { lesson } = (await api("GET", `/api/lessons/${a.pos[0]}`)) as { lesson: { title: string; body: string; projectId: string | null } };
+    out(`# ${lesson.title}${lesson.projectId ? `  [프로젝트 ${lesson.projectId}]` : "  [전역]"}\n\n${lesson.body}`);
+  },
+});
+add({
+  name: "lesson set",
+  usage: 'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --global]   (범위는 하나: 프로젝트·스택·전역)',
+  ep: ["lessons/[id]/route.ts"],
+  run: async (a) => {
+    const body: Record<string, unknown> = {};
+    if (flag(a, "title")) body.title = flag(a, "title");
+    if (flag(a, "body")) body.body = flag(a, "body");
+    if (bool(a, "global")) Object.assign(body, { projectId: null, stack: null });
+    else if (flag(a, "project")) body.projectId = flag(a, "project");
+    else if (flag(a, "stack")) body.stack = flag(a, "stack");
+    out(await api("PATCH", `/api/lessons/${a.pos[0]}`, body));
+  },
 });
 add({
   name: "lesson rm",
@@ -989,9 +1076,9 @@ add({
 });
 add({
   name: "project set",
-  usage: "project set <id> [--name <n>] [--desc <d>] [--color <c>] [--repo <url>]",
+  usage: "project set <id> [--name <n>] [--desc <d>] [--color <c>] [--repo <url>] [--stack next,supabase]   (--stack: 스택 레슨 주입 대상)",
   ep: ["projects/[id]/route.ts"],
-  run: async (a) => out(await api("PATCH", `/api/projects/${a.pos[0]}`, { name: flag(a, "name"), description: flag(a, "desc"), color: flag(a, "color"), repoUrl: flag(a, "repo") })),
+  run: async (a) => out(await api("PATCH", `/api/projects/${a.pos[0]}`, { name: flag(a, "name"), description: flag(a, "desc"), color: flag(a, "color"), repoUrl: flag(a, "repo"), stack: flag(a, "stack") })),
 });
 add({
   name: "project rm",
@@ -1175,6 +1262,132 @@ add({
     for (const s of payload.skipped ?? []) out(`건너뜀  ${s.path} — ${s.reason}`);
     out(payload.counts ?? {});
   },
+});
+// ── HTML 퍼블리시 (초대 게스트 전용) ──
+async function siteUpload(path: string, url: string, extra: Record<string, string> = {}): Promise<Record<string, unknown>> {
+  const { bundleFromPath } = await import("../lib/sites/pathBundle");
+  const b = bundleFromPath(path);
+  const form = new FormData();
+  form.set("file", new Blob([new Uint8Array(b.data)]), b.filename);
+  for (const [k, v] of Object.entries(extra)) form.set(k, v);
+  const res = await fetch(`${BASE}${url}`, { method: "POST", headers: TOKEN ? { "x-ws-token": TOKEN } : {}, body: form });
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  // multipart 라 api() 를 우회한다(import 와 같은 이유) — 실패를 exit 1 로 전파.
+  if (!res.ok) throw new Error(`POST ${url} → ${res.status}: ${JSON.stringify(payload)}`);
+  return payload;
+}
+const emailsArg = (a: Args) => [...a.pos.slice(1), ...(flag(a, "invite") ?? "").split(",")].map((s) => s.trim()).filter(Boolean);
+
+add({
+  name: "site ls",
+  usage: "site ls   (퍼블리시한 HTML 페이지 목록 — 마지막 열은 API 프록시 upstream)",
+  ep: ["sites/route.ts"],
+  run: async () => {
+    const { sites } = (await api("GET", "/api/sites")) as { sites: { id: string; title: string; status: string; currentVersion: number; inviteCount: number; url: string; apiUpstream?: string | null }[] };
+    for (const s of sites) out(`${s.id}\t${s.title}\tv${s.currentVersion}\t초대 ${s.inviteCount}\t${s.status}\t${s.url}\tapi ${s.apiUpstream ?? "-"}`);
+  },
+});
+add({
+  name: "site access",
+  usage: "site access <siteId>   (계정별 접근 이력 — 열람 횟수·처음·마지막)",
+  ep: ["sites/[id]/access/route.ts"],
+  run: async (a) => {
+    const { accounts } = (await api("GET", `/api/sites/${a.pos[0]}/access`)) as {
+      accounts: { email: string; kind: string; count: number; firstAt: string; lastAt: string }[];
+    };
+    if (!accounts.length) return out("아직 열어본 사람이 없습니다.");
+    for (const x of accounts) out(`${x.email}\t${x.kind}\t${x.count}회\t처음 ${x.firstAt}\t마지막 ${x.lastAt}`);
+  },
+});
+add({
+  name: "site show",
+  usage: "site show <siteId>   (site.apiUpstream = API 프록시 대상)",
+  ep: ["sites/[id]/route.ts"],
+  // JSON 한 줄 그대로(파이프로 jq 에 넘기는 사용처) — upstream 은 site.apiUpstream 필드로 보인다.
+  run: async (a) => out(await api("GET", `/api/sites/${a.pos[0]}`)),
+});
+add({
+  name: "site api",
+  usage: "site api <siteId> <http://127.0.0.1:<port>|--off>   (페이지의 상대경로 fetch('api/..') 를 로컬 서버로 프록시 — 루프백만)",
+  ep: ["sites/[id]/route.ts"],
+  run: async (a) => {
+    const id = a.pos[0];
+    const off = bool(a, "off");
+    const upstream = a.pos[1];
+    if (!id || (!off && !upstream)) throw new Error("사용법: pnpm ws site api <siteId> http://127.0.0.1:<port>  |  pnpm ws site api <siteId> --off");
+    const { site } = (await api("PATCH", `/api/sites/${id}`, { apiUpstream: off ? null : upstream })) as { site: { id: string; title: string; apiUpstream: string | null } };
+    out(site.apiUpstream ? `${site.id}\t${site.title}\tapi → ${site.apiUpstream}` : `${site.id}\t${site.title}\tapi 프록시 해제`);
+  },
+});
+add({
+  name: "site publish",
+  usage: "site publish <file.html|dir|file.zip> [--title T] [--project <id>] [--invite a@gmail.com,b@gmail.com] [--site <id>(새 버전)]",
+  ep: ["sites/route.ts", "sites/[id]/versions/route.ts", "sites/[id]/invites/route.ts"],
+  run: async (a) => {
+    const src = a.pos[0];
+    if (!src) throw new Error("경로가 필요합니다. 예: pnpm ws site publish ./dist --invite guest@gmail.com");
+    const siteId = flag(a, "site");
+    const invites = (flag(a, "invite") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    let id: string;
+    let url: string;
+    let payload: Record<string, unknown>;
+    if (siteId) {
+      payload = await siteUpload(src, `/api/sites/${siteId}/versions`);
+      id = siteId;
+      url = ((await api("GET", `/api/sites/${siteId}`)) as { url: string }).url;
+      if (invites.length) await api("POST", `/api/sites/${siteId}/invites`, { emails: invites });
+      out(`새 버전 v${payload.version} 을 올렸습니다.`);
+    } else {
+      const extra: Record<string, string> = {};
+      if (flag(a, "title")) extra.title = flag(a, "title")!;
+      if (flag(a, "project")) extra.projectId = flag(a, "project")!;
+      if (invites.length) extra.invites = invites.join(",");
+      payload = await siteUpload(src, "/api/sites", extra);
+      id = (payload.site as { id: string }).id;
+      url = payload.url as string;
+      const inv = payload.invites as { added: string[]; invalid: string[] };
+      if (inv.invalid.length) out(`⚠ 형식이 틀린 이메일: ${inv.invalid.join(", ")}`);
+    }
+    for (const w of (payload.warnings as string[] | undefined) ?? []) out(`⚠ ${w}`);
+    out(`사이트 ${id}\n링크: ${url}`);
+    if (invites.length) out(`보낼 문구: 이 링크를 열고 ${invites.join(", ")} 계정으로 Google 로그인하세요: ${url}`);
+  },
+});
+add({
+  name: "site invite",
+  usage: "site invite <siteId> <email...>",
+  ep: ["sites/[id]/invites/route.ts"],
+  run: async (a) => out(await api("POST", `/api/sites/${a.pos[0]}/invites`, { emails: emailsArg(a) })),
+});
+add({
+  name: "site uninvite",
+  usage: "site uninvite <siteId> <email...>   (즉시 접근 차단)",
+  ep: ["sites/[id]/invites/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/sites/${a.pos[0]}/invites`, { emails: emailsArg(a) })),
+});
+add({
+  name: "site disable",
+  usage: "site disable <siteId>   (링크 차단)",
+  ep: ["sites/[id]/route.ts"],
+  run: async (a) => out(await api("PATCH", `/api/sites/${a.pos[0]}`, { status: "disabled" })),
+});
+add({
+  name: "site enable",
+  usage: "site enable <siteId>",
+  ep: ["sites/[id]/route.ts"],
+  run: async (a) => out(await api("PATCH", `/api/sites/${a.pos[0]}`, { status: "active" })),
+});
+add({
+  name: "site rollback",
+  usage: "site rollback <siteId> <version>",
+  ep: ["sites/[id]/route.ts"],
+  run: async (a) => out(await api("PATCH", `/api/sites/${a.pos[0]}`, { currentVersion: Number(a.pos[1]) })),
+});
+add({
+  name: "site rm",
+  usage: "site rm <siteId>   (소프트 삭제 — 링크 즉시 차단)",
+  ep: ["sites/[id]/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/sites/${a.pos[0]}`)),
 });
 add({
   name: "similar",
