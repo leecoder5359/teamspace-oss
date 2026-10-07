@@ -6,6 +6,7 @@ import { requirePage } from "@/lib/pageGuard";
 import { recordActivity } from "@/lib/activity";
 import { resolveDocPath } from "@/lib/docFiles";
 import { deleteContent } from "@/lib/content";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     where: { id },
     data: { deletedAt: null, ...(parentGone ? { parentId: null } : {}) },
   });
+  invalidateGraphCache(guard.workspaceId);
   recordActivity(guard, "restored", page.kind === "database" ? "board" : "doc", page.title, id);
   return NextResponse.json({ ok: true, movedToRoot: parentGone });
 }
@@ -72,8 +74,11 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       where: { parentId: id, deletedAt: { not: null } },
       data: { parentId: null },
     }),
+    // GraphEdge 는 끝점 FK 가 없다 — 같은 트랜잭션에서 고아 간선(LLM related 등)을 함께 지운다
+    prisma.graphEdge.deleteMany({ where: { workspaceId: guard.workspaceId, OR: [{ fromId: id }, { toId: id }] } }),
     prisma.page.delete({ where: { id } }),
   ]);
+  invalidateGraphCache(guard.workspaceId);
   await deletePageFile(page);
   recordActivity(guard, "purged", page.kind === "database" ? "board" : "doc", page.title, id);
   return NextResponse.json({ ok: true });

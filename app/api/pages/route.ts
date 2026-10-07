@@ -6,6 +6,7 @@ import { loadAccess, visibleOnly, projectAccess, gatePage } from "@/lib/pageGuar
 import { effectiveRestricted } from "@/lib/pageAccess";
 import { withIdempotency } from "@/lib/idempotency";
 import { recordActivity } from "@/lib/activity";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { pageFilePath, writeContent } from "@/lib/content";
 import { writeDoc, docFolderFor, listDocFolder, uniqueFileName } from "@/lib/docFiles";
 
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
     await writeContent(filePath, initialMd, `create: ${title}`);
     await prisma.page.update({ where: { id: page.id }, data: { filePath } });
 
+    invalidateGraphCache(workspaceId);
     recordActivity(guard, "created", "doc", page.title, page.id);
     return NextResponse.json({
       page: { id: page.id, title: page.title, parentId: page.parentId, position, kind: page.kind },
@@ -161,6 +163,7 @@ export async function POST(request: Request) {
 
   await writeDoc(filePath, initialMd);
 
+  invalidateGraphCache(workspaceId);
   recordActivity(guard, "created", "doc", page.title, page.id);
   return NextResponse.json({
     page: { id: page.id, title: page.title, parentId: page.parentId, position, kind: page.kind },

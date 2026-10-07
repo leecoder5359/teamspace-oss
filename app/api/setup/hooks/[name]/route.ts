@@ -4,7 +4,7 @@ import { join } from "node:path";
 export const runtime = "nodejs";
 
 // 서빙 허용 훅 화이트리스트 — scripts/hooks/ 의 실제 파일명(확장자 제외)과 일치해야 한다.
-const ALLOW = new Set(["teamspace-context", "teamspace-session-end", "deny-repo-docs"]);
+const ALLOW = new Set(["teamspace-context", "teamspace-session-end", "deny-repo-docs", "teamspace-project-context"]);
 
 // GET /api/setup/hooks/[name] — curl 설치기가 훅 스크립트를 내려받는 엔드포인트.
 // name 이 화이트리스트에 없으면(경로 탈출 시도 포함) 404 — Set 조회이므로 "../secret" 같은

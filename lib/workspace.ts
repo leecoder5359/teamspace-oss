@@ -7,6 +7,8 @@ import type { Role } from "@/app/generated/prisma/enums";
 import { roleAtLeast } from "@/lib/authz";
 import { hashToken, isAgentTokenFormat } from "@/lib/agentToken";
 import { canAutoJoinDefaultWorkspace } from "@/lib/accessControl";
+import { hasProxyIdentityHeaders } from "@/lib/sites/proxyIdentity";
+import { LEGACY_ACTOR_NAME } from "@/lib/bootstrapCtx";
 
 export const WS_COOKIE = "ws_active";
 
@@ -125,7 +127,7 @@ async function resolveLegacyCtx(): Promise<Ctx | { err: NextResponse }> {
   // 작성자 귀속: 사람 멤버로 위장하지 않고 전용 시스템 User 를 사용한다.
   const user = await prisma.user.upsert({
     where: { email: LEGACY_AGENT_EMAIL },
-    create: { email: LEGACY_AGENT_EMAIL, name: "legacy-cli" },
+    create: { email: LEGACY_AGENT_EMAIL, name: LEGACY_ACTOR_NAME },
     update: {},
     select: { id: true },
   });
@@ -134,9 +136,19 @@ async function resolveLegacyCtx(): Promise<Ctx | { err: NextResponse }> {
     workspaceId: workspace.id,
     userId: user.id,
     role: "admin",
-    actor: { type: "agent", id: user.id, name: "legacy-cli" },
+    actor: { type: "agent", id: user.id, name: LEGACY_ACTOR_NAME },
   };
 }
+
+/** /pub API 프록시를 타고 들어온 요청인가(lib/sites/proxyIdentity 의 헤더 존재 여부). */
+async function cameFromSiteProxy(): Promise<boolean> {
+  try {
+    return hasProxyIdentityHeaders(await headers());
+  } catch {
+    return false; // headers() 불가 컨텍스트 = HTTP 요청이 아니다 = 프록시도 아니다
+  }
+}
+
 
 /** 에이전트 토큰(wst_…) → 토큰에 박힌 워크스페이스·역할·시스템 User Ctx. */
 async function resolveAgentCtx(token: string): Promise<Ctx | { err: NextResponse }> {
@@ -168,6 +180,18 @@ async function resolveAgentCtx(token: string): Promise<Ctx | { err: NextResponse
  *   if ("err" in ctx) return ctx.err;
  */
 export async function requireCtx(min: Role = "viewer"): Promise<CtxResult> {
+  // ── 퍼블리시 사이트 프록시에서 온 요청은 여기서 통째로 끊는다 ───────────────
+  // /pub 프록시(app/pub/[token]/[...path]/route.ts)는 경로 첫 세그먼트가 `api` 이기만 하면
+  // 무엇이든 upstream 으로 넘긴다. 그 upstream 이 **앱 자신**이면(인테이크 기능의 설치 안내가
+  // 실제로 그렇게 시킨다) 초대 게스트가 우리 /api/* 를 두드리게 된다. `/api/sites/**` 는
+  // 미들웨어 matcher 밖이라 유일한 문이 여기이고, AUTH_OPEN_API=true 면 세션 없이 admin 이
+  // 나가므로 게스트가 저장된 자격 증명을 그대로 읽어 갈 수 있었다.
+  //
+  // 프록시는 이 헤더들을 **항상** 붙이고, 게스트는 지울 수 없다(upstreamRequestHeaders 가
+  // 원 요청에서 content-type·accept 만 통과시킨다) — 그래서 이 검사는 우회 불가능하다.
+  // 게스트용 경로(/api/site-intake)는 requireCtx 를 쓰지 않으므로 영향받지 않는다.
+  if (await cameFromSiteProxy()) return forbidden("퍼블리시 사이트에서는 이 API 를 호출할 수 없습니다.");
+
   let ctx: Ctx | null = null;
 
   const fromSession = await resolveSessionCtx();

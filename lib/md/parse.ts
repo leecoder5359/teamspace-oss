@@ -10,12 +10,12 @@
    ===================================================================== */
 
 import type { Align, Block, Doc, Frontmatter, Inline, ListItem, TableCell } from "./ast";
+import { matchWikilinkAt } from "./wikilinkSyntax";
 
 /* ───────────────────────── 인라인 ───────────────────────── */
 
 const RE_CODE = /^`([^`]+)`/;
 const RE_IMAGE = /^!\[([^\]]*)\]\(([^)\s]*)\)/;
-const RE_WIKILINK = /^\[\[([^\]]+)\]\]/;
 const RE_LINK = /^\[([^\]]*)\]\(([^)\s]*)\)/;
 const RE_STRONG = /^\*\*([\s\S]+?)\*\*/;
 const RE_DEL = /^~~([\s\S]+?)~~/;
@@ -71,14 +71,15 @@ export function parseInline(src: string): Inline[] {
 
     if (ch === "[") {
       // 3) 위키링크 — 표준 링크보다 먼저([[A]] 가 [ + [A](..) 로 쪼개지지 않게)
-      const w = RE_WIKILINK.exec(rest);
+      //    제목 안 대괄호([[[반장] 제목]])는 짝을 세어 바깥 ]] 까지 읽는다
+      const w = matchWikilinkAt(src, i);
       if (w) {
-        const [targetPart, labelPart] = w[1].split("|");
+        const [targetPart, labelPart] = w.inner.split("|");
         const target = targetPart.trim();
         if (target) {
           flush();
           out.push({ t: "wikilink", target, label: (labelPart ?? targetPart).trim() });
-          i += w[0].length;
+          i = w.end;
           continue;
         }
       }
@@ -167,7 +168,13 @@ export function parseInline(src: string): Inline[] {
 const RE_HEADING = /^(#{1,6})\s+(.*)$/;
 const RE_HR = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const RE_FENCE = /^\s*```(.*)$/;
-const RE_EMBED = /^!\[\[([^\]]+)\]\]\s*$/;
+/** 한 줄이 통째로 ![[대상]] 인가 — 위키링크와 같은 경계 규칙(제목 안 대괄호 허용). */
+function matchEmbed(line: string): string | null {
+  const s = line.trim();
+  if (s[0] !== "!") return null;
+  const m = matchWikilinkAt(s, 1);
+  return m && m.end === s.length ? m.inner : null;
+}
 const RE_QUOTE = /^>\s?(.*)$/;
 const RE_CALLOUT = /^\[!([A-Za-z]+)\]\s*(.*)$/;
 const RE_LIST_ITEM = /^(\s*)(?:([-*+])|(\d+)[.)])\s+(.*)$/;
@@ -260,9 +267,9 @@ export function parseBlocks(lines: string[]): Block[] {
     }
 
     // 임베드(트랜스클루전) — 한 줄이 통째로 ![[대상]] 일 때만
-    const emb = RE_EMBED.exec(line.trim());
-    if (emb) {
-      out.push({ t: "embed", target: emb[1].split("|")[0].trim() });
+    const emb = matchEmbed(line);
+    if (emb !== null) {
+      out.push({ t: "embed", target: emb.split("|")[0].trim() });
       i++;
       continue;
     }
@@ -338,7 +345,7 @@ function startsNewBlock(line: string, next: string): boolean {
     RE_HR.test(line) ||
     RE_FENCE.test(line) ||
     RE_QUOTE.test(line) ||
-    RE_EMBED.test(line.trim()) ||
+    matchEmbed(line) !== null ||
     matchListItem(line) !== null ||
     (isTableRow(line) && isTableSeparator(next))
   );

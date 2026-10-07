@@ -69,6 +69,7 @@ model Workspace {
   llmJobs        LlmJob[]
   pairings       Pairing[]
   publishedSites PublishedSite[]
+  graphEdges     GraphEdge[]
 }
 
 enum Role {
@@ -272,8 +273,29 @@ model PublishedSite {
   invites  SiteInvite[]
   versions SiteVersion[]
   accesses SiteAccess[]
+  intake   SiteIntakeEntry[]
 
   @@index([workspaceId])
+}
+
+// 인테이크 — 초대 게스트(외주사)가 퍼블리시 페이지의 폼으로 보낸 계정 정보.
+// 평문으로 남는 것은 `service`(항목 이름표)뿐이고, 입력값은 전부 `secret` 하나에
+// AES-256-GCM(SITE_INTAKE_KEY 파생 키)으로 묶어 넣는다 — lib/sites/intakeCrypto.
+// 게스트는 쓰기만 할 수 있고(POST /api/site-intake), 읽기·삭제는 워크스페이스 멤버만.
+model SiteIntakeEntry {
+  id                String        @id @default(cuid())
+  site              PublishedSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId            String
+  service           String // 비밀이 아니다 — 목록에 그대로 보여준다
+  fieldCount        Int
+  secret            String // "v1:iv:tag:ct" — fields 배열 JSON 의 암호문
+  submittedBy       String // /pub 프록시가 판정한 열람자 이메일(소문자)
+  submittedByMember Boolean
+  createdAt         DateTime      @default(now())
+  revealCount       Int           @default(0)
+  lastRevealedAt    DateTime?
+
+  @@index([siteId, createdAt])
 }
 
 model SiteInvite {
@@ -974,5 +996,24 @@ model Pairing {
   tokenDeliveredAt DateTime?
   createdAt        DateTime  @default(now())
 
+  @@index([workspaceId])
+}
+
+// ---------- 지식 그래프: LLM 연관 간선(설계: 지식 그래프 확장(Graphify 차용)) ----------
+// 결정적 간선(link·ref·mention·contains·pair)은 저장하지 않고 요청 시 계산한다(lib/knowledgeGraph).
+// 여기는 LLM 이 고른 related 만 — 재계산 비용이 커서 저장한다. 읽을 때 양 끝 가시성으로 거른다.
+model GraphEdge {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  fromId      String
+  toId        String
+  kind        String    @default("related")
+  tag         String    @default("모호")
+  reason      String?
+  model       String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([fromId, toId, kind])
   @@index([workspaceId])
 }

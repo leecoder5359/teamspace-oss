@@ -1383,6 +1383,47 @@ add({
   ep: ["sites/[id]/route.ts"],
   run: async (a) => out(await api("PATCH", `/api/sites/${a.pos[0]}`, { currentVersion: Number(a.pos[1]) })),
 });
+// 인테이크(게스트가 폼으로 보낸 계정 정보). 값은 SITE_INTAKE_KEY 로 암호화돼 있고,
+// 'site intake show' 만 복호화한다 — 그 호출은 활동 로그에 열람으로 남는다.
+add({
+  name: "site intake",
+  usage: "site intake <siteId>   (퍼블리시 페이지로 받은 계정 정보 목록 — 값은 안 보인다)",
+  ep: ["sites/[id]/intake/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/sites/${a.pos[0]}/intake`)) as {
+      entries: { id: string; service: string; fieldCount: number; submittedBy: string; createdAt: string; revealCount: number }[];
+      keyMissing: boolean;
+    };
+    if (r.keyMissing) out("⚠ SITE_INTAKE_KEY 가 설정되지 않았습니다 — 새 제출은 거절되고, 이미 받은 값도 못 풉니다.");
+    if (!r.entries.length) return out("아직 받은 계정 정보가 없습니다.");
+    for (const e of r.entries) out(`${e.id}\t${e.service}\t${e.fieldCount}칸\t${e.submittedBy}\t${e.createdAt}\t열람 ${e.revealCount}회`);
+  },
+});
+add({
+  name: "site intake show",
+  usage: "site intake show <siteId> <entryId> [--reveal]   (기본은 가림 — --reveal 이어야 평문, 열람은 활동 로그에 남는다)",
+  ep: ["sites/[id]/intake/[entryId]/route.ts"],
+  run: async (a) => {
+    const reveal = Boolean(a.flags.reveal);
+    const { entry } = (await api("GET", `/api/sites/${a.pos[0]}/intake/${a.pos[1]}`)) as {
+      entry: { service: string; submittedBy: string; createdAt: string; fields: { label: string; value: string }[] };
+    };
+    out(`# ${entry.service}  (${entry.submittedBy} · ${entry.createdAt})`);
+    for (const f of entry.fields) {
+      // 평문 자격 증명은 셸 히스토리·스크롤백·tmux 캡처·script 로그에 그대로 남는다.
+      // 기본을 가림으로 두고, 정말 볼 때만 --reveal 로 켠다.
+      out(`${f.label}\t${reveal ? f.value : `•`.repeat(Math.min(f.value.length, 12)) + ` (${f.value.length}자)`}`);
+    }
+    if (reveal) console.error("⚠ 평문을 출력했습니다 — 터미널 스크롤백·로그에 남습니다. 필요한 곳에 옮긴 뒤 `site intake rm` 으로 지우세요.");
+    else out("(값을 보려면 --reveal — 어느 쪽이든 이 조회는 열람으로 기록됩니다)");
+  },
+});
+add({
+  name: "site intake rm",
+  usage: "site intake rm <siteId> <entryId>   (진짜 있어야 할 곳으로 옮긴 뒤 지운다)",
+  ep: ["sites/[id]/intake/[entryId]/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/sites/${a.pos[0]}/intake/${a.pos[1]}`)),
+});
 add({
   name: "site rm",
   usage: "site rm <siteId>   (소프트 삭제 — 링크 즉시 차단)",
@@ -1661,9 +1702,52 @@ add({
 });
 add({
   name: "graph",
-  usage: "graph   (위키 그래프)",
+  usage: "graph [--types doc,project,…] [--kinds link,ref,…]   (지식 그래프 — 노드 6종·근거 태그 간선)",
   ep: ["graph/route.ts"],
-  run: async () => out(await api("GET", "/api/graph")),
+  run: async (a) => {
+    const q = new URLSearchParams();
+    const t = flag(a, "types"); if (t) q.set("types", t);
+    const k = flag(a, "kinds"); if (k) q.set("kinds", k);
+    out(await api("GET", `/api/graph${q.size ? `?${q}` : ""}`));
+  },
+});
+add({
+  name: "graph neighbors",
+  usage: "graph neighbors <id> [--depth 1|2]   (노드의 이웃 — 관계 종류·근거 태그)",
+  ep: ["graph/neighbors/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/graph/neighbors?id=${encodeURIComponent(a.pos[0] ?? "")}&depth=${flag(a, "depth") ?? 1}`)) as {
+      node: { title: string; type: string }; neighbors: { id: string; title: string; type: string; kind: string; tag: string; direction: string; hop: number }[];
+    };
+    out(`${r.node.title} [${r.node.type}] — 이웃 ${r.neighbors.length}`);
+    for (const n of r.neighbors) out(`${"  ".repeat(n.hop - 1)}${n.direction === "out" ? "→" : "←"} [${n.kind}/${n.tag}] ${n.title} (${n.type}) ${n.id}`);
+  },
+});
+add({
+  name: "graph infer",
+  usage: "graph infer [--limit 5] [--dry-run] [--all]   (근거 없는 문서에 LLM 연관 간선. --all 은 남은 게 없을 때까지 반복)",
+  ep: ["graph/infer/route.ts"],
+  run: async (a) => {
+    const limit = Number(flag(a, "limit") ?? 5);
+    const dryRun = bool(a, "dry-run");
+    const seen = new Set<string>();
+    let noPick = 0;
+    for (;;) {
+      const r = (await api("POST", "/api/graph/infer", { limit, dryRun, exclude: [...seen] })) as {
+        processed: { id: string; title: string; related: { title: string; reason: string }[] }[]; remaining: number;
+      };
+      let fresh = 0;
+      for (const p of r.processed) {
+        if (!seen.has(p.id)) { fresh++; seen.add(p.id); }
+        out(`■ ${p.title}`);
+        for (const x of p.related) out(`   ~ ${x.title}${x.reason ? `  (${x.reason})` : ""}`);
+        if (p.related.length === 0) { out("   (관련 없음)"); noPick++; }
+      }
+      out(`남은 대상 ${r.remaining}${dryRun ? " (dry-run: 저장 안 함)" : ""}`);
+      if (dryRun || !bool(a, "all") || r.remaining === 0 || fresh === 0) break;
+    }
+    if (bool(a, "all") && noPick > 0) out(`LLM 이 연관을 못 찾은 문서 ${noPick}개(이번 실행에서 제외)`);
+  },
 });
 add({
   name: "context",

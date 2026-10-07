@@ -89,6 +89,25 @@ describe("parseInline — 위키링크·태그", () => {
     expect(parseInline("[[A]]")).toEqual([{ t: "wikilink", target: "A", label: "A" }]);
   });
 
+  it("제목 안의 대괄호 — 짝이 맞으면 바깥 ]] 까지가 링크", () => {
+    const title = "[반장 핸드오프 B1] 시스템 아키텍처 개요";
+    expect(parseInline(`[[${title}]]`)).toEqual([{ t: "wikilink", target: title, label: title }]);
+    expect(parseInline(`상위: [[${title}|개요]] 끝`)).toEqual([
+      t("상위: "),
+      { t: "wikilink", target: title, label: "개요" },
+      t(" 끝"),
+    ]);
+    expect(parseInline("[[A [B] C]] 와 [[[X] Y]]")).toEqual([
+      { t: "wikilink", target: "A [B] C", label: "A [B] C" },
+      t(" 와 "),
+      { t: "wikilink", target: "[X] Y", label: "[X] Y" },
+    ]);
+  });
+
+  it("남는 여는 대괄호는 텍스트 — [[[PLAN]] 은 [ + [[PLAN]]", () => {
+    expect(parseInline("[[[PLAN]]")).toEqual([t("["), { t: "wikilink", target: "PLAN", label: "PLAN" }]);
+  });
+
   it("#태그", () => {
     expect(parseInline("이건 #결정 이다")).toEqual([t("이건 "), { t: "tag", name: "결정" }, t(" 이다")]);
   });
@@ -223,6 +242,10 @@ describe("parseMarkdown — 코드·표·구분선", () => {
 describe("parseMarkdown — 트랜스클루전·프론트매터", () => {
   it("![[문서]] 는 임베드 블록", () => {
     expect(parseMarkdown("![[설계 노트]]").blocks[0]).toEqual({ t: "embed", target: "설계 노트" });
+  });
+
+  it("![[[접두] 제목]] — 제목 안 대괄호도 임베드", () => {
+    expect(parseMarkdown("![[[반장] 노트]]").blocks[0]).toEqual({ t: "embed", target: "[반장] 노트" });
   });
 
   it("YAML 프론트매터 — 스칼라와 배열", () => {

@@ -1,15 +1,14 @@
 /* 위키링크 파싱/백링크 — file-first 문서의 [[제목]] 양방향 링크. 순수 함수. */
 
 import { extractFrontmatter } from "./md/parse";
-
-export const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
+import { scanWikilinks } from "./md/wikilinkSyntax";
 
 /** [[제목]] / [[제목|표시]] 에서 제목부만 추출. 트림·중복제거·순서유지. */
 export function extractWikiTitles(md: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const m of md.matchAll(WIKILINK_RE)) {
-    const raw = m[1].split("|")[0].trim();
+  for (const m of scanWikilinks(md)) {
+    const raw = m.inner.split("|")[0].trim();
     if (!raw) continue;
     const key = raw.toLowerCase();
     if (seen.has(key)) continue;
@@ -125,18 +124,32 @@ export function computeLint(pages: PageLite[]): {
   return { broken, orphans };
 }
 
-/** 위키 그래프 → Cypher(Neo4j) 스크립트. */
+const CYPHER_LABELS: Record<string, string> = { doc: "Doc", project: "Project", decision: "Decision", lesson: "Lesson", task: "Task", risk: "Risk" };
+const CYPHER_RELS = new Set(["link", "ref", "mention", "contains", "pair", "related"]);
+
+/**
+ * 위키/지식 그래프 → Cypher(Neo4j) 스크립트.
+ * 노드 type → 라벨(Doc·Project·Decision·Lesson·Task·Risk, 그 외/없음=Doc),
+ * 간선 kind → 관계(LINK·REF·MENTION·CONTAINS·PAIR·RELATED, 그 외/없음=LINKS_TO) + tag 가 있으면 {tag}.
+ * 라벨·관계 이름은 이스케이프가 안 되므로 정해진 목록만 쓴다(값은 esc).
+ */
 export function graphToCypher(graph: {
-  nodes: { id: string; title: string }[];
-  edges: { from: string; to: string }[];
+  nodes: { id: string; title: string; type?: string }[];
+  edges: { from: string; to: string; kind?: string; tag?: string }[];
 }): string {
   const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const label = (type?: string) => (type && Object.hasOwn(CYPHER_LABELS, type) ? CYPHER_LABELS[type] : "Doc");
+  const labelOf = new Map(graph.nodes.map((n) => [n.id, label(n.type)]));
   const lines: string[] = [];
   for (const n of graph.nodes) {
-    lines.push(`CREATE (\`${n.id}\`:Doc {id:'${esc(n.id)}', title:'${esc(n.title)}'});`);
+    lines.push(`CREATE (\`${n.id}\`:${label(n.type)} {id:'${esc(n.id)}', title:'${esc(n.title)}'});`);
   }
   for (const e of graph.edges) {
-    lines.push(`MATCH (a:Doc {id:'${esc(e.from)}'}), (b:Doc {id:'${esc(e.to)}'}) CREATE (a)-[:LINKS_TO]->(b);`);
+    const rel = e.kind && CYPHER_RELS.has(e.kind) ? e.kind.toUpperCase() : "LINKS_TO";
+    const props = e.tag ? ` {tag:'${esc(e.tag)}'}` : "";
+    const la = labelOf.get(e.from) ?? "Doc";
+    const lb = labelOf.get(e.to) ?? "Doc";
+    lines.push(`MATCH (a:${la} {id:'${esc(e.from)}'}), (b:${lb} {id:'${esc(e.to)}'}) CREATE (a)-[:${rel}${props}]->(b);`);
   }
   return lines.join("\n");
 }

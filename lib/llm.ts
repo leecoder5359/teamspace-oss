@@ -15,9 +15,32 @@ const execFileP = promisify(execFile);
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 
 /**
+ * `claude -p` 인자 — 텍스트 합성만 하는 격리된 호출.
+ * 워크스페이스 문서·질문이 프롬프트로 들어가므로 인젝션을 전제로 한다:
+ * - `--tools ""` 로 도구를 전부 끈다. `--allowedTools` 는 권한 허용목록이라 사용자 설정이
+ *   bypassPermissions 면 아무것도 막지 못한다.
+ * - `--setting-sources ""` 로 사용자·프로젝트 설정(권한 모드·훅)을 읽지 않고, 권한 모드를 dontAsk 로 고정한다(선택지에 default 는 없다 — 미리 허용 안 된 동작은 전부 거부).
+ * - `--strict-mcp-config`(MCP 없음)·`--no-session-persistence`(세션 기록 없음).
+ * - `--bare` 는 쓰지 않는다 — OAuth 를 읽지 않아 "키 없는 대체" 가 깨진다.
+ */
+export function claudeCliArgs(fullPrompt: string, model: string): string[] {
+  return [
+    "-p", fullPrompt,
+    "--tools", "",
+    "--setting-sources", "",
+    "--strict-mcp-config",
+    "--no-session-persistence",
+    "--permission-mode", "dontAsk",
+    "--max-turns", "1",
+    "--output-format", "text",
+    "--model", model,
+  ];
+}
+
+/**
  * 로컬 `claude` CLI 헤드리스 텍스트 호출(프로바이더 cli 공용).
- * - 중립 cwd(tmpdir)로 띄워 프로젝트 CLAUDE.md/skills/MCP 로딩 오버헤드를 피한다(속도·안전).
- * - 툴 비활성·1턴·텍스트. 바이너리 부재/타임아웃/오류 시 null.
+ * - 중립 cwd(tmpdir)로 띄워 프로젝트 CLAUDE.md/skills 를 읽지 않는다(속도·안전).
+ * - 격리 인자는 claudeCliArgs. 바이너리 부재/타임아웃/오류 시 null.
  */
 async function runClaudeText(fullPrompt: string): Promise<string | null> {
   if (!fullPrompt.trim()) return null;
@@ -26,7 +49,7 @@ async function runClaudeText(fullPrompt: string): Promise<string | null> {
   try {
     const { stdout } = await execFileP(
       "claude",
-      ["-p", fullPrompt, "--allowedTools", "", "--max-turns", "1", "--output-format", "text", "--model", model],
+      claudeCliArgs(fullPrompt, model),
       { timeout, maxBuffer: 4 * 1024 * 1024, windowsHide: true, cwd: tmpdir() },
     );
     const text = (stdout || "").trim();

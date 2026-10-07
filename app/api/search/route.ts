@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, visibleOnly } from "@/lib/pageGuard";
+import { loadGraph } from "@/lib/graphLoad";
+import { neighbors as graphNeighbors } from "@/lib/graphInsights";
 import { rankSearch, usesTrigramIndex, type Candidate, type SearchKind } from "@/lib/searchRank";
 
 export const runtime = "nodejs";
@@ -93,6 +95,22 @@ export async function GET(request: Request) {
 
   const results = rankSearch(candidates, q, { projectId, kinds, from, to }, limit);
 
+  // neighbors=1: 상위 결과에 지식 그래프 이웃(제목·관계·근거)을 붙인다 — 에이전트가 문서를 통째로
+  // 읽기 전에 주변부터 본다. 권한은 같은 색인(idx)으로 거른 그래프라 새지 않는다.
+  // 그래프 로드가 실패해도 검색 자체는 성공해야 하므로 이웃만 생략한다.
+  const nb = new Map<string, { id: string; title: string; type: string; kind: string; tag: string }[]>();
+  if (sp.get("neighbors") === "1" && results.length) {
+    try {
+      const g = await loadGraph(guard, idx);
+      for (const r of results.slice(0, 5)) {
+        nb.set(r.id, graphNeighbors(g, r.id, 1).slice(0, 5).map((n) => ({ id: n.id, title: n.title, type: n.type, kind: n.kind, tag: n.tag })));
+      }
+    } catch (e) {
+      console.warn("[search] 그래프 이웃 생략:", e);
+      nb.clear();
+    }
+  }
+
   return NextResponse.json({
     q,
     // 3글자 미만이면 인덱스가 못 붙는다는 걸 호출자가 알 수 있게 한다
@@ -107,6 +125,7 @@ export async function GET(request: Request) {
       projectName: r.projectName,
       updatedAt: r.updatedAt,
       href: r.kind === "decision" ? `/docs?cat=decisions` : `/p/${r.id}`,
+      ...(nb.has(r.id) ? { neighbors: nb.get(r.id) } : {}),
     })),
     // 기존 화면(Search.tsx)이 docs/decisions 를 쓰고 있어 함께 낸다.
     // 한쪽만 바꾸면 배포 순서에 따라 검색이 빈 화면이 되므로 둘 다 유지한다.

@@ -250,8 +250,17 @@ server.registerTool(
 
 server.registerTool(
   "search",
-  { description: "문서·결정 전문 검색.", inputSchema: { q: z.string() } },
-  async ({ q }) => jsonResult(await api("GET", `/api/search?q=${encodeURIComponent(q)}`)),
+  { description: "문서·결정 전문 검색. 상위 결과에는 지식 그래프 이웃(관계·근거 태그)이 붙는다.", inputSchema: { q: z.string() } },
+  async ({ q }) => jsonResult(await api("GET", `/api/search?q=${encodeURIComponent(q)}&neighbors=1`)),
+);
+
+server.registerTool(
+  "graph_neighbors",
+  {
+    description: "지식 그래프에서 노드(문서·결정·레슨·태스크·리스크·프로젝트 id)의 이웃을 관계 종류(link·ref·mention·contains·pair·related)와 근거 태그(추출·추론·모호)로 반환. 원문을 다 읽기 전에 관계부터 확인할 때.",
+    inputSchema: { id: z.string(), depth: z.number().optional() },
+  },
+  async ({ id, depth }) => jsonResult(await api("GET", `/api/graph/neighbors?id=${encodeURIComponent(id)}&depth=${depth ?? 1}`)),
 );
 
 server.registerTool(

@@ -67,4 +67,9 @@ describe("MCP 서버 ↔ /api 라우트 패리티", () => {
       expect(src, `${c.raw}`).toMatch(new RegExp(`export async function ${c.method}\\b`));
     });
   }
+
+  it("search 도구는 neighbors=1 로 부른다(그래프 이웃 동봉)", () => {
+    const call = CALLS.find((c) => c.method === "GET" && c.routeFile === "search/route.ts");
+    expect(call?.raw).toContain("neighbors=1");
+  });
 });

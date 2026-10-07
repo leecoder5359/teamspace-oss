@@ -46,6 +46,6 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # 메모리 3층 역할 (W3 일원화)
 
-- **TeamSpace = 팀 지식의 단일 진실 원천.** 팀이 알아야 할 규칙·교훈은 레슨(`pnpm ws lesson add`)으로, 결정은 decisions 로, 문서는 doc 으로 승격한다. 세션 시작 시 SessionStart 훅이 `/api/context?cwd=` 를 자동 주입한다(cwd→프로젝트 매핑은 `pnpm ws route-rule`).
+- **TeamSpace = 팀 지식의 단일 진실 원천.** 팀이 알아야 할 규칙·교훈은 레슨(`pnpm ws lesson add`)으로, 결정은 decisions 로, 문서는 doc 으로 승격한다. 세션 시작 시 SessionStart 훅이 `/api/context?cwd=` 를 자동 주입한다(cwd→프로젝트 매핑은 `pnpm ws route-rule`). 세션을 연 레포 밖의 매핑된 프로젝트 경로를 도구로 건드리면 PostToolUse 훅(`scripts/hooks/teamspace-project-context.mjs`)이 그 프로젝트 컨텍스트를 세션당 한 번 추가 주입한다 — 반장 작업을 teamspace 세션에서 해도 반장 레슨이 들어온다.
 - **agentmemory = 로컬 원시 관찰 캐시.** 캡처·recall 검색만 사용, 세션 시작 컨텍스트 주입은 끔(AGENTMEMORY_INJECT_CONTEXT=false). 팀 공유 지식을 agentmemory 에만 남기지 말 것. 레포별로 AGENTMEMORY_PROJECT_NAME 명시를 권장(스코프 오염 방지).
 - **내장 파일 메모리(~/.claude/projects/*/memory) = 개인 습관·포인터.** 팀 규범이 생기면 레슨으로 승격하고 개인 메모리에는 포인터만 남긴다.

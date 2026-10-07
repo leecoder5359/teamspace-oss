@@ -6,6 +6,7 @@ import { requirePage, isRestrictedPage } from "@/lib/pageGuard";
 import { checkBaseRev } from "@/lib/concurrency";
 import { recordActivity } from "@/lib/activity";
 import { fireNotif } from "@/lib/notify";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { pageFilePath, readContent, writeContent } from "@/lib/content";
 import {
   readDoc,
@@ -96,6 +97,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       return NextResponse.json({ error: "markdown 또는 title 이 필요합니다." }, { status: 400 });
     }
     await prisma.page.update({ where: { id }, data: { title } });
+    invalidateGraphCache(guard.workspaceId); // 제목 = 언급·링크 대상
     return NextResponse.json({ ok: true, rev: page.rev });
   }
 
@@ -127,6 +129,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
         data: { pageId: id, rev: nextRev, title, markdown, authorId: guard.userId },
       }),
     ]);
+    invalidateGraphCache(guard.workspaceId);
     return NextResponse.json({ ok: true, rev: nextRev });
   }
 
@@ -151,6 +154,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }),
   ]);
 
+  invalidateGraphCache(guard.workspaceId); // 본문이 바뀌면 링크·언급 간선이 바뀐다
   recordActivity(guard, "updated", "doc", title, id);
   // D3 후속: 비공개 문서의 제목을 채널로 뿌리지 않는다(제목 자체가 내용이다).
   void isRestrictedPage(id).then((restricted) => {
@@ -244,6 +248,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 
   await prisma.page.update({ where: { id }, data });
+  invalidateGraphCache(workspaceId); // 제목·폴더·프로젝트 변경은 노드·contains 간선에 반영
   return NextResponse.json({ ok: true });
 }
 
@@ -297,6 +302,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   }
 
   await prisma.page.updateMany({ where: { id: { in: ids } }, data: { deletedAt: now } });
+  invalidateGraphCache(workspaceId);
   recordActivity(guard, "deleted", page.kind === "database" ? "board" : "doc", page.title, id);
   return NextResponse.json({ ok: true, trashed: ids.length });
 }

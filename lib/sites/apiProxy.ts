@@ -74,9 +74,15 @@ export function apiPathSegments(raw: string[]): string[] | null {
   return out.length > 0 && out[0] === "api" ? out : null;
 }
 
-/** upstream + 세그먼트(각각 다시 인코딩 — 디코드된 `?`·`#` 가 쿼리로 새지 않게) + 원 쿼리스트링. */
+/** upstream 에 보낼 경로(쿼리 제외). 각 세그먼트를 다시 인코딩한다 — 디코드된 `?`·`#` 가 쿼리로 새지 않게.
+    프록시 서명(lib/sites/proxyIdentity)이 묶는 경로도 이 값이다 — 양쪽이 같은 문자열을 봐야 한다. */
+export function upstreamPath(segments: string[]): string {
+  return `/${segments.map(encodeURIComponent).join("/")}`;
+}
+
+/** upstream + 경로 + 원 쿼리스트링. */
 export function buildUpstreamUrl(upstream: string, segments: string[], search: string): string {
-  return `${upstream}/${segments.map(encodeURIComponent).join("/")}${search}`;
+  return `${upstream}${upstreamPath(segments)}${search}`;
 }
 
 /** upstream 으로 넘길 헤더 — 원 요청에서는 content-type·accept 만. 쿠키·authorization·host 는 절대 넘기지 않는다. */

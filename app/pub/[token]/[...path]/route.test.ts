@@ -13,6 +13,7 @@ vi.mock("@/lib/sites/store", async (orig) => ({ ...(await orig<object>()), sites
 import { siteAccessById } from "@/lib/sites/server";
 import { writeVersion } from "@/lib/sites/store";
 import { signSiteToken } from "@/lib/sites/token";
+import { readProxyIdentity } from "@/lib/sites/proxyIdentity";
 import { GET, POST, DELETE, OPTIONS } from "./route";
 
 const m = (f: unknown) => f as Mock;
@@ -172,6 +173,27 @@ describe("/pub/[token]/api/* — upstream 프록시", () => {
     const d = await DELETE(new Request("http://t/x", { method: "DELETE" }), params(tok(), ["api", "items", "7"]));
     expect(d.status).toBe(200);
     expect(seen.map((s) => `${s.method} ${s.url}`)).toEqual(["GET /api/data.json?q=1", "DELETE /api/items/7"]);
+  });
+
+  it("판정 헤더에 프록시 서명이 함께 붙고, 그 요청(메서드·경로·본문)에 묶여 있다", async () => {
+    ok(upstream, false);
+    const payload = '{"items":[{"service":"Supabase","fields":[]}]}';
+    await POST(new Request("http://t/x", { method: "POST", body: payload }), params(tok(), ["api", "site-intake"]));
+    const sig = seen[0].headers["x-teamspace-proxy-sig"];
+    expect(typeof sig).toBe("string");
+    const h = new Headers({
+      "x-teamspace-site-id": String(seen[0].headers["x-teamspace-site-id"]),
+      "x-teamspace-viewer": String(seen[0].headers["x-teamspace-viewer"]),
+      "x-teamspace-member": String(seen[0].headers["x-teamspace-member"]),
+      "x-teamspace-proxy-sig": String(sig),
+    });
+    const bind = { method: "POST", path: "/api/site-intake", body: Buffer.from(payload, "utf8") };
+    // 받는 쪽(readProxyIdentity)이 그대로 검증할 수 있어야 한다.
+    expect(readProxyIdentity(h, bind)).toEqual({ siteId: "cs1", email: "g@gmail.com", member: false });
+    // 그리고 다른 본문·경로·메서드로는 쓸 수 없어야 한다.
+    expect(readProxyIdentity(h, { ...bind, body: Buffer.from("{}") })).toBeNull();
+    expect(readProxyIdentity(h, { ...bind, path: "/api/sites/cs1/intake" })).toBeNull();
+    expect(readProxyIdentity(h, { ...bind, method: "DELETE" })).toBeNull();
   });
 
   it("204 는 본문 없이", async () => {

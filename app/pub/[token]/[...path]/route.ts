@@ -12,6 +12,7 @@ import {
   isApiPath,
   proxyResponseHeaders,
   siteApiTimeoutMs,
+  upstreamPath,
   upstreamRequestHeaders,
   SITE_API_CORS_HEADERS,
   SITE_API_MAX_BODY_BYTES,
@@ -19,6 +20,7 @@ import {
   SITE_API_PREFLIGHT_HEADERS,
 } from "@/lib/sites/apiProxy";
 import { callUpstream, readBodyLimited } from "@/lib/sites/upstreamCall";
+import { PROXY_SIG_HEADER, signProxyIdentity } from "@/lib/sites/proxyIdentity";
 
 export const runtime = "nodejs";
 
@@ -86,7 +88,16 @@ async function proxy(req: Request, j: Extract<Judged, { ok: true }>, raw: string
 
   const r = await callUpstream(buildUpstreamUrl(j.apiUpstream, segments, new URL(req.url).search), {
     method: req.method,
-    headers: upstreamRequestHeaders(req.headers, { siteId: j.siteId, email: j.email, member: j.member }),
+    headers: {
+      ...upstreamRequestHeaders(req.headers, { siteId: j.siteId, email: j.email, member: j.member }),
+      // upstream 이 TeamSpace 자신일 때(/api/site-intake) 헤더 위조를 막는 짧은 수명 MAC.
+      // **이 요청 하나에 묶는다**(메서드·경로·본문) — 새어 나가도 다른 제출을 심는 데 못 쓴다.
+      // 다른 루프백 upstream 은 그냥 무시하면 된다. (lib/sites/proxyIdentity)
+      [PROXY_SIG_HEADER]: signProxyIdentity(
+        { siteId: j.siteId, email: j.email, member: j.member },
+        { method: req.method, path: upstreamPath(segments), body },
+      ),
+    },
     body,
     timeoutMs: siteApiTimeoutMs(),
     maxResponseBytes: SITE_API_MAX_RESPONSE_BYTES,

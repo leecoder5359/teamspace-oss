@@ -66,6 +66,8 @@ const REVERSE_WHITELIST = new Set([
   "pair/[code]/route-rule/route.ts", // 설치기 route-rule 등록(페어링 게이트)
   "setup/script/route.ts", // curl 설치기 스크립트 서빙(공개 정적)
   "setup/hooks/[name]/route.ts", // 훅 서빙(화이트리스트 공개 정적)
+  "site-intake/route.ts", // 퍼블리시 페이지의 폼 제출(게스트 전용 쓰기) — CLI 가 호출할 대상이 아니다.
+  //                        멤버용 읽기·삭제는 'site intake *' 가 sites/[id]/intake 로 커버한다.
 ]);
 
 function collectRoutes(dir: string, prefix = ""): string[] {

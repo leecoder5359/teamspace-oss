@@ -115,7 +115,7 @@ API·CLI:
 
 ## HTML 퍼블리시 — 초대 게스트 전용 (2026-09)
 
-HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고, **초대한 이메일로 Google 로그인한 사람만** 본다. 게스트는 워크스페이스 멤버가 아니다. 설계 doc·결정 3건은 TeamSpace 문서에 있다(`doc ls` 에서 "HTML 퍼블리시" 로 찾는다).
+HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고, **초대한 이메일로 Google 로그인한 사람만** 본다. 게스트는 워크스페이스 멤버가 아니다. 설계·결정은 TeamSpace 의 'HTML 퍼블리시' 문서·결정 참고.
 
 | 하는 일 | API | CLI |
 |---|---|---|
@@ -128,6 +128,10 @@ HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고, **초대
 | 삭제(소프트) | `DELETE /api/sites/<id>` | `site rm <id>` |
 | 초대·회수 | `POST\|DELETE /api/sites/<id>/invites {emails:[]}` | `site invite\|uninvite <id> <email...>` |
 | 접근 이력 | `GET /api/sites/<id>/access` → `{accounts:[{email,kind(invited\|member\|revoked),count,firstAt,lastAt,recent[]}],total,windowDays}` | `site access <id>` |
+| 인테이크 목록 | `GET /api/sites/<id>/intake` → `{entries:[{id,service,fieldCount,submittedBy,submittedByMember,createdAt,revealCount,lastRevealedAt}],keyMissing}` (값·암호문 없음) | `site intake <id>` |
+| 인테이크 열람 | `GET /api/sites/<id>/intake/<entryId>` → `{entry:{…,fields:[{label,value}]}}` — 복호화(**admin**), **열람이 활동 로그에 남는다** | `site intake show <id> <entryId> [--reveal]` |
+| 인테이크 삭제 | `DELETE /api/sites/<id>/intake/<entryId>` (**admin**) | `site intake rm <id> <entryId>` |
+| (게스트 제출) | `POST /api/site-intake {items:[{service,fields:[{label,value}]}]}` — 퍼블리시 페이지에서 상대경로 `fetch('api/site-intake')` 로만 | CLI 없음(게스트 전용) |
 
 MCP: `site_publish {path,title?,siteId?,invites?}` · `site_list`. UI: 사이드바 › 퍼블리시(`/sites`).
 
@@ -142,7 +146,22 @@ MCP: `site_publish {path,title?,siteId?,invites?}` · `site_list`. UI: 사이드
 - **로그인**: `isSignInAllowed` 경로 (c) = 살아 있는 사이트의 `SiteInvite` 에 있는 이메일. 게스트는 멤버 행이 없으므로 `requireCtx` 가 워크스페이스를 막는다. **자동 가입은 허용 도메인 이메일만**(`canAutoJoinDefaultWorkspace`) — 이 제한이 없으면 게스트가 `/dashboard` 를 여는 순간 editor 가 된다.
 - **번들 규칙**(`lib/sites/bundle.ts`): 20MB·해제 50MB·파일 500개. 최상위 폴더 하나는 벗긴다. `index.html` 필수. 확장자는 허용 목록만 받고, 숨김·`__MACOSX` 는 건너뛴다. **루트 기준 경로(`/assets/x.js`)는 로드되지 않는다** — 경고가 뜨면 상대경로로 빌드한다(`vite build --base=./`). CLI·MCP 가 폴더를 묶을 때 숨김 파일·`node_modules` 는 뺀다.
 - **저장**: `DATA_DIR/sites/<siteId>/v<n>/`(원자적 rename). 최근 10개 버전만 유지하고 current 는 지우지 않는다. 백업은 `sites.tar`.
-- **미들웨어**: `api/sites` 는 matcher 밖(10MB 넘는 multipart, `/api/import` 와 같은 사유)이고 `/pub/` 는 조기 통과한다. 둘 다 라우트가 스스로 막는다.
+- **미들웨어**: `api/sites` 는 matcher 밖(10MB 넘는 multipart, `/api/import` 와 같은 사유)이고 `/pub/`·`/api/site-intake` 는 조기 통과한다. 셋 다 라우트가 스스로 막는다.
+
+### 인테이크 — 게스트가 폼으로 보낸 계정 정보 (2026-09)
+
+외주사·거래처에게 계정 정보를 받아야 할 때, 퍼블리시 페이지에 폼을 올리고 그 제출을 암호화해 받는다. 페이지 원본은 `site-sources/account-intake/index.html` — 줄(서비스)은 그 파일의 `ROWS` 배열 하나로 정의되고, `kind: "handover"`(지금 우리 계정에 있어 넘겨야 하는 것) 와 `kind: "create"`(아직 없어 상대가 처음부터 자기 계정으로 만들 것) 를 색·배지·묶음 제목·상태 선택지로 갈라서 보여준다. `omit`(그 줄에서 뺄 입력칸 key)·`caution`(적으면 안 되는 것)도 줄 단위 속성이다 — 구글 계정·결제수단 줄은 비밀번호·2FA 칸 자체가 없다.
+
+- **누가 쓰나**: 초대 게스트만. 페이지가 상대경로 `fetch('api/site-intake')` 를 부르면 `/pub/<token>/api/site-intake` → (사이트의 `apiUpstream`) → `POST /api/site-intake`. 그래서 **사이트에 `apiUpstream` 을 TeamSpace 자신으로 걸어야 한다**: `pnpm ws site api <siteId> http://127.0.0.1:3002`.
+- **누가 읽나**: 워크스페이스 멤버만. 목록은 viewer, **열람·삭제는 admin**(이 레포에서 editor 는 허용 도메인 사용자가 로그인만 하면 자동으로 받는 기본 역할이라 남의 계정 비밀번호를 걸 수 없다). 게스트에게는 읽기 경로가 아예 없다(POST 만 export).
+- **자체 인증 두 겹**(`app/api/site-intake/route.ts`): ① `x-teamspace-proxy-sig` — 프록시가 `AUTH_SECRET` 파생 키로 **1분짜리** MAC 을 붙인다(`lib/sites/proxyIdentity`). 서명은 신원뿐 아니라 **메서드·경로·본문 해시**에 묶여 있어서, 새어 나가도 다른 내용을 그 게스트 이름으로 심을 수 없다. ② `siteAccessById` 재판정 — 사이트가 살아 있고 그 이메일이 **지금도** 초대돼 있어야 한다. 그래서 middleware `isOpenApi`(정확 일치)·authz-coverage WHITELIST 에 올라가 있다.
+- **인터록 2종**(리뷰 C1 — `apiUpstream` 을 앱 자신으로 걸면 게스트 요청이 우리 `/api/*` 로 들어온다):
+  ① `requireCtx` 는 **프록시 헤더가 붙은 요청을 전부 거절한다**(`lib/workspace.cameFromSiteProxy`). 프록시는 그 헤더를 항상 붙이고 게스트는 지울 수 없으므로 우회가 없다. 이 한 줄이 `/api/sites/**` 뿐 아니라 requireCtx 를 쓰는 모든 라우트를 닫는다.
+  ② 인테이크 라우트는 `AUTH_OPEN_API=true` 로 세션 없이 얻은 부트스트랩 admin 을 거절한다(`lib/bootstrapCtx.isBootstrapCtx`). 로그인 세션·에이전트 토큰은 그대로 동작하므로 로컬 개발은 막히지 않는다.
+- **암호화**: 값은 `SITE_INTAKE_KEY` 에서 HKDF 로 판 키로 AES-256-GCM(`lib/sites/intakeCrypto`). 키는 **base64/hex 로 32바이트 이상만** 받는다(`openssl rand -base64 32`) — HKDF 는 스트레칭을 안 하므로 사람이 고른 문구는 거부한다. 암호문은 **AAD 로 그 행(사이트·제출자·항목명)에 묶여** 있어 다른 행으로 옮겨 붙이면 풀리지 않는다. 평문으로 남는 것은 `service`(항목 이름표)뿐. **키가 없거나 약하면 제출을 503 으로 거절한다**(평문 저장 금지) — `AUTH_SECRET` 과 일부러 분리했다.
+- **상한**: 항목 40개·칸 24개·값 4000자·본문 256KB. 넘치면 **잘라 저장하지 않고 400 으로 거절한다**(조용한 손상 금지). 값의 앞뒤 공백은 보존한다(공백 든 비밀번호). 같은 (사이트·이메일) 10분 12회(429) — 형식 오류는 한도를 깎지 않는다. 값은 로그·에러 메시지에 절대 싣지 않고, 복호화 응답에는 `cache-control: no-store` 를 붙인다.
+- **UI**: 사이트 상세(`/sites/<id>`) 의 "받은 계정 정보" — `apiUpstream` 이 걸려 있거나 받은 값이 있으면 나타난다. 값 보기(admin)·복사·삭제. CLI 는 기본이 가림이고 `--reveal` 이어야 평문을 찍는다(스크롤백에 남는다).
+- **페이지 쪽 주의**: `/pub` 토큰은 1시간이고 갱신되지 않는다. 페이지가 5분마다 살아 있는지 찔러 보고, 끊기면 "복사 → 새로고침 → 붙여넣기" 를 안내한다(`내용 꺼내기`/`이전 내용 붙여넣기`). 샌드박스라 브라우저 저장소를 못 쓰기 때문이다. 꺼내기 형식은 `## 서비스` + `라벨: 값` 이고, **한 줄로 안전하지 않은 값(개행·역슬래시·앞뒤 공백·따옴표 시작·가림표시 모양)은 JSON 문자열로 감싼다** — 감싸지 않으면 2FA 백업코드가 첫 줄만 남는다. 꺼낼 때 스스로 왕복 검사를 하고, 되돌리지 못한 줄은 **개수로 보고한다**(조용히 버리지 않는다). 만료 경로에서는 비밀번호까지 포함해 꺼낸다(그래야 안내대로 복원된다 — 복사본은 쓰고 지우라고 안내한다).
 - **접근 이력**(`SiteAccess`): 셸(`/s/<slug>`) 열람만 기록하고 `/pub` 에셋은 기록하지 않는다. 같은 계정 10분 내 재열람은 생략, IP·UA 는 저장하지 않는다. kind 는 **현재** 기준(지금 초대돼 있으면 invited, 멤버로 본 기록이면 member, 아니면 revoked). 조회는 최근 180일·5000건. 상세 화면 초대 섹션 아래.
 - **초대 알림은 자동 발송하지 않는다**(메일 인프라 없음). 응답·화면의 복사 문구를 사람이 전달한다.
 
@@ -210,14 +229,24 @@ MCP: `site_publish {path,title?,siteId?,invites?}` · `site_list`. UI: 사이드
   - UI 공통 껍데기는 `components/ws/ExtractPanel.tsx`(문서 선택→추출→제안 검토→항목별 반영). 용어집·데이터모델 화면은 아직 각자 구현을 쓴다.
 - **provenance 태깅**(주장 신뢰도, 키리스): `POST /api/provenance {pageId}` → 로컬 LLM 으로 문서의 핵심 주장을 **추출/추론/모호**로 분류 → `{ ok, claims:[{claim,tag,note}], counts:{추출,추론,모호} }`. 순수 로직 `lib/provenance.ts`(buildProvenancePrompt·parseProvenance·countTags). `pnpm ws provenance <pageId>`. LLM 미설정 시 503. 문서 리더의 "신뢰도 분석" 패널.
 - **웹 클리퍼**(키리스 자동 분류·요약): `POST /api/clip {url, title?, text, html?}` → 로컬 LLM 으로 본문 요약 + 기존 프로젝트 자동 분류 → 출처 포함 doc 페이지 생성(분류된 projectId 배정) → `{ ok, pageId, projectId, projectName, summary, mode("classified"|"plain") }`. LLM 없으면 원문만 저장(plain). 순수 로직 `lib/clip.ts`(buildClassifyPrompt·parseClassification). `pnpm ws clip <url> --text "<본문>" [--title <t>]`. 브라우저 진입점은 북마클릿(`/clip` 페이지로 수집 데이터 전달, 동일 출처 POST).
-- 부가: `GET /api/graph`(위키 그래프) · `GET /api/lint`(깨진 링크·고아).
-- **검색**: `GET /api/search?q=&projectId=&kind=doc,board,decision&from=&to=&limit=` — 랭킹(제목 정확일치 > 앞부분 > 포함 > 본문 다수 > 본문 1회 + 최근 수정 약가산)은 `lib/searchRank.ts`(순수). 응답 `{q, indexed, total, results[], docs[], decisions[]}` — `results` 가 통합 랭킹, `docs/decisions` 는 기존 화면 호환용. **`indexed:false` = 질의가 3글자 미만이라 트라이그램 인덱스를 못 탔다**(순차 스캔). 인덱스는 `pg_trgm` GIN(마이그 `20260808140000`). `projectId=__none__` 은 미분류만. CLI: `ws search <q> [--project|--kind|--from|--to|--limit]`.
+- 부가: `GET /api/lint`(깨진 링크·고아).
+
+- **검색**: `GET /api/search?q=&projectId=&kind=doc,board,decision&from=&to=&limit=` — 랭킹(제목 정확일치 > 앞부분 > 포함 > 본문 다수 > 본문 1회 + 최근 수정 약가산)은 `lib/searchRank.ts`(순수). 응답 `{q, indexed, total, results[], docs[], decisions[]}` — `results` 가 통합 랭킹, `docs/decisions` 는 기존 화면 호환용. **`indexed:false` = 질의가 3글자 미만이라 트라이그램 인덱스를 못 탔다**(순차 스캔). 인덱스는 `pg_trgm` GIN(마이그 `20260808140000`). `projectId=__none__` 은 미분류만. CLI: `ws search <q> [--project|--kind|--from|--to|--limit]`. `&neighbors=1` 을 붙이면 상위 5개 결과에 `neighbors:[{id,title,type,kind,tag}]`(지식 그래프 이웃, 각 ≤5, 권한 필터 적용)가 붙는다 — MCP `search` 는 기본으로 쓴다.
 - **비동기 LLM 잡**(범용 큐, editor 이상): `POST /api/llm/classify {kind, payload, callbackUrl, callbackSecret?}` → 즉시 `202 {jobId}`, 실제 처리는 워커(`dispatchLlmJobs`, `lib/llmjob.ts`)가 맡아 완료 후 `callbackUrl` 로 `{jobId,kind,ref,ok,result}` POST(Bearer `callbackSecret`, 있으면). 현재 지원 kind: `feedback_classify`(`payload:{ref,body,agendas:[{id,title,summary?}]}`). `pnpm ws llm classify --body <텍스트> --callback <url>`(디버그용 최소 명령 — callback 필수, 결과가 원문 포함으로 그 URL에 POST되므로 신뢰할 수 있는 수신처만).
   - **콜백 URL 은 SSRF 게이트를 지난다**(`lib/callbackUrl.ts`, 피드백허브 후속). 서버가 남이 준 주소로 요청을 보내는 기능이라 검사가 `^https?://` 하나였던 것을 고쳤다. 막는 것: http(s) 아닌 스킴 · `user:pw@` 자격증명 · 제어문자 · 루프백·사설망·링크로컬(169.254 메타데이터)·CGNAT(=tailscale 100.64/10)·IPv6 사설 · `.local`/`.internal`/`localhost` 계열 · **8진수·16진수·정수로 위장한 IP**(`http://2130706433/` = 127.0.0.1). **검사는 접수(라우트)와 발송(워커) 양쪽**에서 한다 — 한쪽만 막으면 이미 쌓인 행이 나가거나 부른 쪽이 거절을 모른다. 안 하는 것: **DNS 해석**(공격자 도메인이 사설 IP 를 가리키는 rebinding 은 allowlist 를 설정해야 닫힌다).
   - **이 배포에서는 `LLM_CALLBACK_ALLOWED_HOSTS=callback.example.com` 이 `.env` 가 아니라 launchd plist 의 `EnvironmentVariables` 에 있다**(`~/Library/LaunchAgents/com.teamspace.{web,worker}.plist`, 2026-08-10). 에이전트는 `.env` 쓰기가 권한 규칙으로 차단돼 있어서 그 경로를 썼다 — **값을 찾을 때 `.env` 만 보면 없다.** 바꾸려면 plist 를 고치고 `launchctl bootout` → (수 초 대기) → `bootstrap`. 두 명령을 붙여 치면 경합으로 `Bootstrap failed: 5` 가 나고 서비스가 내려간다(겪었다; 재시도로 복구).
   - 환경변수 2개(`lib/llmjob.callbackPolicy`): `LLM_CALLBACK_ALLOWED_HOSTS`(콤마 구분 호스트. 하위 도메인 포함 허용. **비면 "내부 차단만"** 이라 기존 공개 콜백은 그대로 동작한다. 실제 수신처는 `callback.example.com` 하나다) · `LLM_CALLBACK_ALLOW_PRIVATE=true`(로컬 개발에서 자기 서버로 콜백받을 때만).
   - **콜백이 실패해도 `result` 는 저장한다.** 전엔 `result: ok ? … : undefined` 라 파싱까지 끝난 분류를 버렸고, 재시도마다 같은 프롬프트로 LLM 을 다시 불렀다(콜백 쪽 장애 = 같은 분류를 3번 과금). 이제 `result` 가 있으면 LLM 을 건너뛰고 재전송만 한다. 콜백 게이트에 걸린 잡은 재시도해도 달라질 게 없으니 attempts 를 태우지 않고 즉시 `failed`.
   - **보관 30일**: 워커가 한 시간에 한 번 `purgeOldLlmJobs()` 로 `done|failed` + `updatedAt` 30일 경과 행을 지운다(`JOB_RETENTION_DAYS`). payload 에 사장님 원문이 들어 있어 영구보관할 이유가 없다.
+
+### 지식 그래프
+- `GET /api/graph?types=&kinds=` — 노드(doc·project·decision·lesson·task·risk) + 간선(link·ref·contains=추출 / mention·pair=추론 / related=모호). CLI `pnpm ws graph [--types][--kinds]`.
+- `GET /api/graph/neighbors?id=&depth=1|2` — 이웃. CLI `pnpm ws graph neighbors <id>`, MCP `graph_neighbors`. 문서를 통째로 읽기 전에 먼저 본다.
+- 권한: 볼 수 없는 것은 그래프에 없다(404).
+- 캐시: 권한은 정확(권한 지문 기준), 내용은 ≤60 s(페이지 쓰기 시 무효화).
+- 응답: neighbors → `{node, neighbors:[{id,title,type,href,kind,tag,direction,hop}]}` — hop 2 의 kind/direction 은 중간 노드 기준. infer → `{ok, processed:[{id,title,related:[{id,title,reason}]}], remaining}`.
+- `/api/context` compact 에 `## 지식 지도`(허브 id·커뮤니티)가 들어간다 — 그래프 로드가 800 ms 를 넘으면 생략.
+- `POST /api/graph/infer {limit,dryRun,exclude?}` — 근거 없는 문서에 LLM 연관(related, 모호). 후보는 볼 수 있는 문서 중 TF-IDF 유사도 상위 ≤60(모자라면 제목순 채움). CLI `pnpm ws graph infer --limit 5 --dry-run` 으로 먼저 보고 `--all`. `--limit` 기본 5·최대 20, `--all` 은 이번 실행에서 이미 시도한 문서를 `exclude` 로 빼며 반복(연관을 못 찾은 문서가 무한 재시도되지 않음).
 
 ## 모바일 (격차 F2)
 

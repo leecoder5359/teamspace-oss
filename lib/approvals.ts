@@ -99,7 +99,10 @@ async function slackCall(token: string, method: string, body: Record<string, unk
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(body),
   });
-  return res.json();
+  const json = await res.json();
+  // 슬랙은 실패도 HTTP 200 + { ok:false, error } 로 준다 — 삼키면 카드가 안 바뀌어도 아무도 모른다
+  if (!json?.ok) console.warn(`[slack] ${method} 실패: ${json?.error ?? res.status}`);
+  return json;
 }
 
 export type ApprovalKindStr = "general" | "status" | "triage" | "doc" | "project" | "deploy";
@@ -184,17 +187,37 @@ export async function sendApproval(
 }
 
 /** 결정 적용: DB 상태 갱신 + (가능하면) 원본 메시지를 결과로 치환. */
-export async function applyDecision(
+/** `already_decided:<status>` 오류면 그 상태, 아니면 null. */
+export function parseAlreadyDecided(err: unknown): ApprovalStatusStr | null {
+  const m = err instanceof Error ? /^already_decided:(\w+)$/.exec(err.message) : null;
+  return m ? (m[1] as ApprovalStatusStr) : null;
+}
+
+const STATUS_LABEL: Record<ApprovalStatusStr, string> = { pending: "대기", approved: "승인", rejected: "거부", additional: "추가 요청" };
+
+/**
+ * 이미 처리된 승인에 모달을 다시 제출했을 때의 view_submission 응답.
+ * 500 을 내면 슬랙은 "문제가 발생했다" 만 보여 줘서, 사용자는 앞선 제출이 저장됐는지 모른 채 다시 누른다.
+ */
+export function alreadyDecidedModalResponse(status: ApprovalStatusStr): { response_action: "errors"; errors: { reason: string } } {
+  return { response_action: "errors", errors: { reason: `이미 처리된 요청이에요(현재: ${STATUS_LABEL[status]}). 창을 닫아 주세요.` } };
+}
+
+/**
+ * 결정을 DB 에 기록한다(빠름). 카드 갱신(chat.update)은 refreshDecisionCard 로 분리 —
+ * 슬랙 인터랙션은 3초 안에 응답해야 해서, 라우트는 기록만 기다리고 카드 갱신은 응답 뒤(after)에 한다.
+ */
+export async function recordDecision(
   approvalId: string,
   d: { status: ApprovalStatusStr; responseText?: string; userId?: string },
-): Promise<void> {
+) {
   // 재결정 가드(W8 agent-9): pending 이 아닌 승인은 어떤 경로(앱·슬랙 버튼)로도 뒤집을 수 없다
   const current = await prisma.approval.findUnique({ where: { id: approvalId }, select: { status: true } });
   if (!current) throw new Error("approval not found");
   if (current.status !== "pending") {
     throw new Error(`already_decided:${current.status}`);
   }
-  const approval = await prisma.approval.update({
+  return prisma.approval.update({
     where: { id: approvalId },
     data: {
       status: d.status,
@@ -203,15 +226,24 @@ export async function applyDecision(
       respondedAt: new Date(),
     },
   });
-
-  if (approval.slackChannel && approval.slackTs) {
-    const cfg = await getSlackConfig(approval.workspaceId);
-    if (cfg) {
-      const card = buildResolvedCard(
-        { title: approval.title, body: approval.body, kind: approval.kind as ApprovalKindStr },
-        { status: d.status, responseText: d.responseText, responder: approval.respondedBy, at: approval.respondedAt },
-      );
-      await slackCall(cfg.token, "chat.update", { channel: approval.slackChannel, ts: approval.slackTs, text: card.text, attachments: card.attachments });
-    }
-  }
 }
+
+/** 기록된 결정으로 슬랙 카드를 결과 카드로 바꾼다(실패는 로그만). */
+export async function refreshDecisionCard(approval: Awaited<ReturnType<typeof recordDecision>>): Promise<void> {
+  if (!approval.slackChannel || !approval.slackTs) return;
+  const cfg = await getSlackConfig(approval.workspaceId);
+  if (!cfg) return;
+  const card = buildResolvedCard(
+    { title: approval.title, body: approval.body, kind: approval.kind as ApprovalKindStr },
+    { status: approval.status as ApprovalStatusStr, responseText: approval.responseText ?? undefined, responder: approval.respondedBy, at: approval.respondedAt },
+  );
+  await slackCall(cfg.token, "chat.update", { channel: approval.slackChannel, ts: approval.slackTs, text: card.text, attachments: card.attachments });
+}
+
+export async function applyDecision(
+  approvalId: string,
+  d: { status: ApprovalStatusStr; responseText?: string; userId?: string },
+): Promise<void> {
+  await refreshDecisionCard(await recordDecision(approvalId, d));
+}
+

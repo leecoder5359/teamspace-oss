@@ -8,6 +8,22 @@ describe("extractWikiTitles", () => {
   it("[[제목|표시]] 는 제목부만", () => {
     expect(extractWikiTitles("[[PLAN|계획 문서]]")).toEqual(["PLAN"]);
   });
+  it("제목 안의 대괄호 — 짝이 맞으면 바깥 ]] 까지(별칭 포함)", () => {
+    expect(
+      extractWikiTitles("[[[반장 핸드오프 B1] 시스템 아키텍처 개요]] · [[[반장] 핸드오프 문서 모음|허브]] · [[A [B] C]]"),
+    ).toEqual(["[반장 핸드오프 B1] 시스템 아키텍처 개요", "[반장] 핸드오프 문서 모음", "A [B] C"]);
+  });
+  it("남는 여는 대괄호는 제목에 넣지 않는다", () => {
+    expect(extractWikiTitles("[[[PLAN]]")).toEqual(["PLAN"]);
+  });
+  it("대괄호 제목도 백링크로 해결된다", () => {
+    const b = computeBacklinks([
+      { id: "hub", title: "[반장] 핸드오프 문서 모음", markdown: "- [[[반장 핸드오프 B1] 개요]]" },
+      { id: "b1", title: "[반장 핸드오프 B1] 개요", markdown: "상위: [[[반장] 핸드오프 문서 모음|허브]]" },
+    ]);
+    expect(b.hub).toEqual([{ id: "b1", title: "[반장 핸드오프 B1] 개요" }]);
+    expect(b.b1).toEqual([{ id: "hub", title: "[반장] 핸드오프 문서 모음" }]);
+  });
   it("링크 없으면 빈 배열", () => {
     expect(extractWikiTitles("그냥 텍스트")).toEqual([]);
   });
@@ -80,6 +96,42 @@ describe("graphToCypher", () => {
   });
   it("간선 MATCH+CREATE LINKS_TO", () => {
     expect(cy).toContain("MATCH (a:Doc {id:'a'}), (b:Doc {id:'b'}) CREATE (a)-[:LINKS_TO]->(b);");
+  });
+
+  describe("A3: 노드 종류·간선 종류/태그", () => {
+    const typed = graphToCypher({
+      nodes: [
+        { id: "d", title: "문서", type: "doc" },
+        { id: "p", title: "프로젝트", type: "project" },
+        { id: "x", title: "결정", type: "decision" },
+        { id: "l", title: "레슨", type: "lesson" },
+        { id: "t", title: "태스크", type: "task" },
+        { id: "r", title: "리스크", type: "risk" },
+        { id: "n", title: "무종류" },
+      ],
+      edges: [
+        { from: "p", to: "d", kind: "contains", tag: "추출" },
+        { from: "d", to: "x", kind: "ref" },
+        { from: "d", to: "l", kind: "related", tag: "모호's" },
+        { from: "d", to: "n" },
+      ],
+    });
+    it("라벨 = 종류 대문자화(기본 Doc)", () => {
+      for (const [id, label] of [["d", "Doc"], ["p", "Project"], ["x", "Decision"], ["l", "Lesson"], ["t", "Task"], ["r", "Risk"], ["n", "Doc"]]) {
+        expect(typed).toContain(`CREATE (\`${id}\`:${label} {id:'${id}'`);
+      }
+    });
+    it("관계 = kind 대문자 + {tag}, 끝점 라벨은 노드 종류를 따른다", () => {
+      expect(typed).toContain("MATCH (a:Project {id:'p'}), (b:Doc {id:'d'}) CREATE (a)-[:CONTAINS {tag:'추출'}]->(b);");
+      expect(typed).toContain("MATCH (a:Doc {id:'d'}), (b:Decision {id:'x'}) CREATE (a)-[:REF]->(b);");
+      expect(typed).toContain("CREATE (a)-[:RELATED {tag:'모호\\'s'}]->(b);");
+      expect(typed).toContain("MATCH (a:Doc {id:'d'}), (b:Doc {id:'n'}) CREATE (a)-[:LINKS_TO]->(b);");
+    });
+    it("종류 문자열의 이상한 글자는 라벨/관계에 실리지 않는다", () => {
+      const evil = graphToCypher({ nodes: [{ id: "e", title: "E", type: "doc`) DETACH DELETE n //" }], edges: [{ from: "e", to: "e", kind: "x]->() //" }] });
+      expect(evil).not.toContain("DETACH");
+      expect(evil).not.toContain("//");
+    });
   });
 });
 

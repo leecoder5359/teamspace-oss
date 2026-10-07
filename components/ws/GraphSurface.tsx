@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import { graphToCypher } from "@/lib/wikilink";
+import { isZoomedIn, selectLabelIds, truncateLabel } from "@/lib/graphLabels";
 import { adjacency, computeLayout, degrees, withinDepth, type Point } from "@/lib/graphLayout";
 
 function download(name: string, mime: string, content: string) {
@@ -24,8 +25,10 @@ function download(name: string, mime: string, content: string) {
    검색·깊이 필터를 붙인다.
    ===================================================================== */
 
-type Node = { id: string; title: string };
-type Edge = { from: string; to: string };
+type Node = { id: string; title: string; type?: string; href?: string | null };
+type Edge = { from: string; to: string; kind?: string; kinds?: string[]; tag?: string };
+const NODE_TYPES: [string, string][] = [["doc,project", "문서+프로젝트"], ["doc", "문서만"], ["", "전체"]];
+const EDGE_KINDS: [string, string][] = [["", "모든 관계"], ["link,ref,contains", "명시(추출)"], ["mention,pair", "언급·짝(추론)"], ["related", "AI 연관(모호)"]];
 
 const xmlEsc = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[c]!));
 function graphToGraphML(g: { nodes: Node[]; edges: Edge[] }): string {
@@ -33,10 +36,13 @@ function graphToGraphML(g: { nodes: Node[]; edges: Edge[] }): string {
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<graphml xmlns="http://graphml.graphdrawing.org/xmlns">',
     '  <key id="label" for="node" attr.name="label" attr.type="string"/>',
+    '  <key id="type" for="node" attr.name="type" attr.type="string"/>',
+    '  <key id="kind" for="edge" attr.name="kind" attr.type="string"/>',
+    '  <key id="tag" for="edge" attr.name="tag" attr.type="string"/>',
     '  <graph edgedefault="directed">',
   ];
-  for (const n of g.nodes) lines.push(`    <node id="${xmlEsc(n.id)}"><data key="label">${xmlEsc(n.title)}</data></node>`);
-  g.edges.forEach((e, i) => lines.push(`    <edge id="e${i}" source="${xmlEsc(e.from)}" target="${xmlEsc(e.to)}"/>`));
+  for (const n of g.nodes) lines.push(`    <node id="${xmlEsc(n.id)}"><data key="label">${xmlEsc(n.title)}</data><data key="type">${xmlEsc(n.type ?? "")}</data></node>`);
+  g.edges.forEach((e, i) => lines.push(`    <edge id="e${i}" source="${xmlEsc(e.from)}" target="${xmlEsc(e.to)}"><data key="kind">${xmlEsc(e.kind ?? "")}</data><data key="tag">${xmlEsc(e.tag ?? "")}</data></edge>`));
   lines.push("  </graph>", "</graphml>");
   return lines.join("\n");
 }
@@ -55,6 +61,8 @@ export default function GraphSurface() {
   const [focus, setFocus] = useState<string | null>(null);
   const [depth, setDepth] = useState(0); // 0 = 전체
   const [query, setQuery] = useState("");
+  const [types, setTypes] = useState("doc,project");
+  const [kinds, setKinds] = useState("");
   const [box, setBox] = useState<Box>(FULL);
   /** 사용자가 끌어다 놓은 노드 — 레이아웃 결과를 덮어쓴다 */
   const [pinned, setPinned] = useState<Map<string, Point>>(new Map());
@@ -67,11 +75,34 @@ export default function GraphSurface() {
   const panFrom = useRef<{ x: number; y: number; box: Box } | null>(null);
 
   useEffect(() => {
+    let cancelled = false; // 느린 이전 응답이 최신 응답을 덮어쓰지 않게
     void (async () => {
-      const res = await fetch("/api/graph", { cache: "no-store" });
-      setData((await res.json()) as { nodes: Node[]; edges: Edge[] });
+      const q = new URLSearchParams();
+      if (types) q.set("types", types);
+      if (kinds) q.set("kinds", kinds);
+      try {
+        const res = await fetch(`/api/graph${q.size ? `?${q}` : ""}`, { cache: "no-store" });
+        if (!res.ok) {
+          if (cancelled) return;
+          console.warn(`[graph] /api/graph ${res.status} — 이전 데이터를 유지합니다`);
+          return;
+        }
+        const json = (await res.json()) as { nodes: Node[]; edges: Edge[] };
+        if (!cancelled) setData(json);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn("[graph] /api/graph 요청 실패", err);
+      }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [types, kinds]);
+
+  const go = (nd: Node) => {
+    const href = nd.href === undefined ? `/p/${nd.id}` : nd.href;
+    if (href) router.push(href);
+  };
 
   const layout = useMemo(() => (data ? computeLayout(data.nodes, data.edges, { width: W, height: H }) : new Map<string, Point>()), [data]);
   const deg = useMemo(() => (data ? degrees(data.nodes, data.edges) : new Map<string, number>()), [data]);
@@ -91,6 +122,13 @@ export default function GraphSurface() {
     if (!q || !data) return null;
     return new Set(data.nodes.filter((n) => n.title.toLowerCase().includes(q)).map((n) => n.id));
   }, [query, data]);
+
+  /** 라벨을 그릴 노드 — 상위 차수·기준·깊이 범위·검색 적중, 충분히 확대했으면 전부. 호버는 렌더에서 더한다. */
+  const zoomedIn = isZoomedIn(box.w, W);
+  const labelIds = useMemo(
+    () => selectLabelIds({ nodes: data?.nodes ?? [], deg, focus, visible, matches, zoomedIn }),
+    [data, deg, focus, visible, matches, zoomedIn],
+  );
 
   /* ── 화면 좌표 → SVG 좌표 ── */
   const toSvg = useCallback(
@@ -165,6 +203,7 @@ export default function GraphSurface() {
   if (data === null) return <div className="ws-db" style={{ padding: 40 }} />;
 
   const empty = data.nodes.length === 0;
+  const filtered = types !== "doc,project" || kinds !== "";
   const dim = (id: string) => {
     if (visible && !visible.has(id)) return 0.06;
     if (matches && !matches.has(id)) return 0.15;
@@ -199,6 +238,12 @@ export default function GraphSurface() {
           <option value={2}>이웃 2홉</option>
           <option value={3}>이웃 3홉</option>
         </select>
+        <select className="ws-db-filter" value={types} onChange={(e) => { setTypes(e.target.value); setFocus(null); }} aria-label="노드 종류">
+          {NODE_TYPES.map(([v, l]) => <option key={l} value={v}>{l}</option>)}
+        </select>
+        <select className="ws-db-filter" value={kinds} onChange={(e) => { setKinds(e.target.value); setFocus(null); }} aria-label="관계 종류">
+          {EDGE_KINDS.map(([v, l]) => <option key={l} value={v}>{l}</option>)}
+        </select>
         <button className="ws-btn-soft" onClick={() => { setBox(FULL); setPinned(new Map()); setFocus(null); }}>
           초기화
         </button>
@@ -208,20 +253,24 @@ export default function GraphSurface() {
       </div>
 
       <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4 }}>
-        노드 {data.nodes.length} · 간선 {data.edges.length} · 휠=확대 · 배경 끌기=이동 · 노드 끌기=고정 · 클릭=문서 열기
+        노드 {data.nodes.length} · 간선 {data.edges.length} · 휠=확대 · 배경 끌기=이동 · 노드 끌기=고정 · 클릭=기준 선택 · 더블클릭(⌥/⌘-클릭)=문서 열기
         {focus && <> · 기준 <b style={{ color: "var(--color-primary)" }}>{data.nodes.find((n) => n.id === focus)?.title}</b></>}
       </p>
 
       {empty ? (
         <div className="ws-docs-empty" style={{ marginTop: 24 }}>
           <span style={{ color: "var(--text-muted)" }}><Icon name="link" size={32} /></span>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>그래프에 그릴 문서가 없어요</div>
-          <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
-            여기는 문서끼리의 연결만 그립니다. 문서를 만들고 본문에서 <code>[[문서 제목]]</code> 으로 다른 문서를 가리키면 그 관계가 선으로 나타나요.
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <button style={primary} disabled={creating} onClick={createDoc}>{creating ? "만드는 중…" : "문서 만들기"}</button>
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>{filtered ? "이 필터에 맞는 노드가 없어요" : "그래프에 그릴 문서가 없어요"}</div>
+          {!filtered && (
+            <>
+              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+                여기는 문서끼리의 연결만 그립니다. 문서를 만들고 본문에서 <code>[[문서 제목]]</code> 으로 다른 문서를 가리키면 그 관계가 선으로 나타나요.
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <button style={primary} disabled={creating} onClick={createDoc}>{creating ? "만드는 중…" : "문서 만들기"}</button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ marginTop: 12, border: "1px solid var(--border-subtle)", borderRadius: 14, background: "var(--surface-card)", overflow: "hidden" }}>
@@ -253,6 +302,7 @@ export default function GraphSurface() {
                   x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                   stroke={on ? "var(--color-primary)" : "var(--border-default)"}
                   strokeWidth={on ? 2 : 1}
+                  strokeDasharray={e.tag && e.tag !== "추출" ? "4 3" : undefined}
                   markerEnd="url(#wl-arrow)"
                   opacity={on ? 1 : op * 0.7}
                 />
@@ -281,10 +331,10 @@ export default function GraphSurface() {
                   onClick={(e) => {
                     // 끌어서 옮긴 직후엔 이동하지 않는다
                     if (pinned.has(nd.id) && e.detail === 1 && dragNode.current === nd.id) return;
-                    if (e.altKey || e.metaKey) router.push(`/p/${nd.id}`);
+                    if (e.altKey || e.metaKey) go(nd);
                     else setFocus(isFocus ? null : nd.id);
                   }}
-                  onDoubleClick={() => router.push(`/p/${nd.id}`)}
+                  onDoubleClick={() => go(nd)}
                 >
                   <circle
                     cx={p.x} cy={p.y} r={r}
@@ -292,13 +342,16 @@ export default function GraphSurface() {
                     stroke="var(--color-primary)"
                     strokeWidth={isFocus ? 2.5 : 1.5}
                   />
-                  <text
-                    x={p.x + r + 5}
-                    y={p.y + 4}
-                    style={{ fontSize: 12, fontWeight: 600, fill: "var(--text-strong)", pointerEvents: "none" }}
-                  >
-                    {nd.title.length > 22 ? nd.title.slice(0, 22) + "…" : nd.title}
-                  </text>
+                  <title>{nd.title}</title>
+                  {(labelIds.has(nd.id) || hover === nd.id) && (
+                    <text
+                      x={p.x + r + 5}
+                      y={p.y + 4}
+                      style={{ fontSize: 12, fontWeight: 600, fill: "var(--text-strong)", pointerEvents: "none" }}
+                    >
+                      {truncateLabel(nd.title)}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -306,7 +359,7 @@ export default function GraphSurface() {
         </div>
       )}
       <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 6 }}>
-        노드를 클릭하면 그 문서를 기준으로 삼는다(깊이 필터가 여기에 걸린다). 문서를 열려면 더블클릭.
+        노드를 클릭하면 그 문서를 기준으로 삼는다(깊이 필터가 여기에 걸린다). 문서를 열려면 더블클릭(또는 ⌥/⌘-클릭) — 링크가 없는 노드는 열리지 않는다.
       </p>
     </div>
   );

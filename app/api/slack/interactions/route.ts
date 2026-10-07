@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getDefaultContext } from "@/lib/workspace";
 import { getSlackConfig } from "@/lib/slack";
 import { verifySlackSignature } from "@/lib/slackSign";
-import { applyDecision, buildReasonModalView } from "@/lib/approvals";
+import { alreadyDecidedModalResponse, buildReasonModalView, parseAlreadyDecided, recordDecision, refreshDecisionCard } from "@/lib/approvals";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -50,21 +50,29 @@ export async function POST(request: Request) {
     const userId = payload.user?.id as string | undefined;
     if (!action || !approvalId) return NextResponse.json({});
 
+    // 슬랙은 3초 안에 응답이 없으면 실패로 보여 준다 — DB 기록만 기다리고 카드 갱신(chat.update)은 응답 뒤에.
     if (action.action_id === "approve") {
-      await applyDecision(approvalId, { status: "approved", userId });
+      try {
+        const approval = await recordDecision(approvalId, { status: "approved", userId });
+        after(() => refreshDecisionCard(approval).catch((e) => console.warn("[slack] 카드 갱신 실패", e)));
+      } catch (e) {
+        if (!parseAlreadyDecided(e)) throw e; // 이미 처리됨: 버튼 재클릭은 조용히 무시(카드가 곧 결과로 바뀐다)
+      }
       return NextResponse.json({});
     }
 
-    // reject / additional → 입력 모달 열기
+    // reject / additional → 입력 모달 열기. trigger_id 는 3초 안에만 유효하다.
     const kind = action.action_id === "reject" ? "reject" : "additional";
     const cfg = await getSlackConfig(workspaceId);
     if (cfg && payload.trigger_id) {
-      const ap = await prisma.approval.findUnique({ where: { id: approvalId } });
-      await fetch(`${SLACK}/views.open`, {
+      const ap = await prisma.approval.findUnique({ where: { id: approvalId }, select: { title: true } });
+      const res = await fetch(`${SLACK}/views.open`, {
         method: "POST",
         headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({ trigger_id: payload.trigger_id, view: buildReasonModalView({ approvalId, kind, title: ap?.title ?? "" }) }),
       });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!json?.ok) console.warn(`[slack] views.open 실패: ${json?.error ?? res.status}`);
     }
     return NextResponse.json({});
   }
@@ -79,11 +87,19 @@ export async function POST(request: Request) {
     const value: string | undefined = payload.view?.state?.values?.reason?.value?.value;
     const userId = payload.user?.id as string | undefined;
     if (meta.approvalId) {
-      await applyDecision(meta.approvalId, {
-        status: meta.kind === "reject" ? "rejected" : "additional",
-        responseText: value?.trim() || undefined,
-        userId,
-      });
+      try {
+        const approval = await recordDecision(meta.approvalId, {
+          status: meta.kind === "reject" ? "rejected" : "additional",
+          responseText: value?.trim() || undefined,
+          userId,
+        });
+        after(() => refreshDecisionCard(approval).catch((e) => console.warn("[slack] 카드 갱신 실패", e)));
+      } catch (e) {
+        const status = parseAlreadyDecided(e);
+        if (!status) throw e;
+        // 앞선 제출이 이미 저장됐다 — 500 대신 모달 안에 알린다(재제출 루프 방지)
+        return NextResponse.json(alreadyDecidedModalResponse(status));
+      }
     }
     return NextResponse.json({ response_action: "clear" });
   }

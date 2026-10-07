@@ -5,6 +5,8 @@ import { requireCtx } from "@/lib/workspace";
 import { loadAccess, pageAccess, visibleOnly } from "@/lib/pageGuard";
 import { resolveRouteByCwd } from "@/lib/ingest";
 
+import { loadGraph } from "@/lib/graphLoad";
+import { subgraph, renderKnowledgeMap } from "@/lib/graphInsights";
 import { renderLessons, capLines, gistOf, LESSON_BUDGET, CONTEXT_BUDGET } from "@/lib/lessonInject";
 
 export const runtime = "nodejs";
@@ -153,6 +155,31 @@ export async function GET(request: Request) {
   );
 
   section(`## 리스크 — 열림 (${risks.length})`, risks.map((r) => `- [${r.severity}] ${r.title}`), "- (없음)", 400, "MCP `search`");
+
+  // 지식 지도(Graphify 차용) — 허브·군집으로 '무엇부터 읽을지'를 준다. 설계: 지식 그래프 확장(Graphify 차용).
+  // cwd→프로젝트면 그 프로젝트 문서만. 그래프 실패가 세션 컨텍스트 전체를 막으면 안 된다 → 섹션만 생략.
+  // SessionStart 훅은 3초에 끊긴다 → 그래프 로드는 800ms 안에 못 끝나면 섹션만 버린다.
+  let graphTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      graphTimer = setTimeout(() => reject(new Error("graph load timeout 800ms")), 800);
+    });
+    let g = await Promise.race([loadGraph(guard, access), timeout]);
+    if (projectId) g = subgraph(g, (n) => n.type === "doc" && n.projectId === projectId);
+    const map = renderKnowledgeMap(g, compact ? { hubN: 8, commN: 5 } : { hubN: 20, commN: 10 });
+    if (compact) {
+      // 레슨 예산을 잠식하지 않게 ~1200자로 자른다(제목 줄은 유지)
+      const body = capLines(map.slice(1), 1200);
+      L.push(map[0], ...body.lines);
+      if (body.omitted) L.push("");
+    } else {
+      L.push(...map);
+    }
+  } catch (e) {
+    console.error("[context] 지식 지도 생략:", e);
+  } finally {
+    clearTimeout(graphTimer);
+  }
 
   if (compact) {
     L.push(`## 용어집 (${glossary.length})`);

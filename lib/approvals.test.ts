@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildApprovalCard, buildResolvedCard, decisionSummary, KIND_META, formatKST, buildReasonModalView } from "@/lib/approvals";
+import { buildApprovalCard, buildResolvedCard, decisionSummary, KIND_META, formatKST, buildReasonModalView, alreadyDecidedModalResponse, parseAlreadyDecided } from "@/lib/approvals";
 
 describe("buildApprovalCard", () => {
   const full = buildApprovalCard({
@@ -107,5 +107,20 @@ describe("buildReasonModalView", () => {
   });
   it("원본 제목을 context로 노출", () => {
     expect(JSON.stringify(v.blocks)).toContain("배포");
+  });
+});
+
+describe("이미 처리된 승인 — 모달 응답", () => {
+  it("already_decided 오류에서 현재 상태를 읽는다", () => {
+    expect(parseAlreadyDecided(new Error("already_decided:additional"))).toBe("additional");
+    expect(parseAlreadyDecided(new Error("approval not found"))).toBeNull();
+    expect(parseAlreadyDecided("nope")).toBeNull();
+  });
+
+  it("모달을 닫지 않고 reason 칸에 '이미 처리됨' 을 보여 준다(500 대신)", () => {
+    const r = alreadyDecidedModalResponse("additional");
+    expect(r.response_action).toBe("errors");
+    expect(r.errors.reason).toContain("이미 처리된 요청");
+    expect(r.errors.reason).toContain("추가 요청");
   });
 });

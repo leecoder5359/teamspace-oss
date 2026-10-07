@@ -11,6 +11,9 @@ const { auth } = NextAuth(authConfig);
 //   /api/ingest               — HMAC 서명(x-ingest-signature)으로 자체 인증
 //   /api/slack/interactions   — 슬랙 서명으로 자체 인증
 //   /api/setup                — curl 설치기가 로그인 전에 받는 공개 스크립트(화이트리스트 파일만 서빙)
+//   /api/site-intake          — 퍼블리시 사이트 폼 제출. /pub 프록시가 쿠키·authorization 을 떼고 넘기므로
+//                              세션으로는 올 수 없다. 프록시 서명(x-teamspace-proxy-sig) + 초대 재판정이
+//                              자체 인증 게이트다(app/api/site-intake/route.ts). 쓰기 전용 — 읽기 경로가 없다.
 //   /api/pair/<code>(/route-rule) — CLI 가 로그인 쿠키 없이 호출하는 페어링 폴링·route-rule 등록.
 //                              페어링 코드(만료·존재 검증)가 자체 인증 게이트 — requireCtx 불필요.
 //                              /api/pair/approve 는 예외 — 브라우저 Google 로그인 세션이 증명 수단이므로
@@ -22,6 +25,7 @@ function isOpenApi(pathname: string): boolean {
     pathname.startsWith("/api/ingest") ||
     pathname.startsWith("/api/slack/interactions") ||
     pathname.startsWith("/api/setup") ||
+    pathname === "/api/site-intake" ||
     (pathname.startsWith("/api/pair/") &&
       !(pathname === "/api/pair/approve" || pathname.startsWith("/api/pair/approve/")))
   );
