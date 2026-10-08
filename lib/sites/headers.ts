@@ -5,8 +5,17 @@
 export const SITE_SANDBOX =
   "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
 
-export function siteFileHeaders(contentType: string, length: number): Record<string, string> {
+/* ?download 로 열면 첨부파일로 내려준다. 샌드박스 iframe 은 opaque origin 이라 <a download> 가
+   교차 출처로 취급돼 무시되고(그냥 이동), PDF 는 샌드박스 안에서 열리지도 않는다 — 서버가
+   Content-Disposition: attachment 를 붙여야 allow-downloads 로 실제 저장된다. */
+export function attachmentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]|["\\]/g, "_");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+export function siteFileHeaders(contentType: string, length: number, downloadName?: string): Record<string, string> {
   return {
+    ...(downloadName ? { "content-disposition": attachmentDisposition(downloadName) } : {}),
     "content-type": contentType,
     "content-length": String(length),
     "content-security-policy": `sandbox ${SITE_SANDBOX}; frame-ancestors 'self'`,

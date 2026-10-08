@@ -147,7 +147,8 @@ export async function GET(req: Request, { params }: Ctx) {
   } catch {
     return deny(404);
   }
-  return new NextResponse(new Uint8Array(data), { headers: siteFileHeaders(type, data.length) });
+  const download = new URL(req.url).searchParams.has("download") ? segments[segments.length - 1] : undefined;
+  return new NextResponse(new Uint8Array(data), { headers: siteFileHeaders(type, data.length, download) });
 }
 
 async function apiOnly(req: Request, { params }: Ctx) {
