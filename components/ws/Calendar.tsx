@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { getPages } from "@/lib/pagesClient";
 
 /* =====================================================================
    캘린더 (design app/calendar.jsx 반영) — 월/주/일 뷰 + 스코프 필터 + 이벤트 상세.
@@ -57,6 +58,9 @@ export default function Calendar() {
   const [docs, setDocs] = useState<DocPage[]>([]);
   const [reminders, setReminders] = useState<Schedule[]>([]);
   const [databaseId, setDatabaseId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   const [view, setView] = useState<View>("month");
   const [ref, setRef] = useState(() => new Date());
@@ -67,24 +71,30 @@ export default function Calendar() {
 
   useEffect(() => {
     void (async () => {
+    try {
       const [tRes, pRes, sRes] = await Promise.all([
-        fetch("/api/tasks", { cache: "no-store" }),
-        fetch("/api/pages", { cache: "no-store" }),
+        fetch("/api/tasks?status=all&limit=all", { cache: "no-store" }),
+        getPages(),
         fetch("/api/schedules", { cache: "no-store" }),
       ]);
+      if (!tRes.ok) throw new Error(`tasks ${tRes.status}`);
       const tData = (await tRes.json()) as { tasks: Task[]; databaseId: string | null };
       setTasks(tData.tasks);
       setDatabaseId(tData.databaseId);
       if (pRes.ok) {
-        const pData = (await pRes.json()) as { pages: DocPage[] };
+        const pData = pRes.data as { pages: DocPage[] };
         setDocs(pData.pages.filter((p) => p.kind === "doc"));
       }
       if (sRes.ok) {
         const sData = (await sRes.json()) as { schedules: Schedule[] };
         setReminders(sData.schedules);
       }
+      setLoaded(true);
+    } catch {
+      setLoadError(true);
+    }
     })();
-  }, []);
+  }, [attempt]);
 
   // 이벤트 + 날짜별 그룹
   const { byDate, total } = useMemo(() => {
@@ -114,8 +124,6 @@ export default function Calendar() {
     }
     return { byDate: map, total: evs.length };
   }, [tasks, docs, reminders, scopeOn]);
-
-  if (tasks === null) return <div className="ws-db" style={{ padding: 40 }} />;
 
   // 현재 뷰 범위(스코프 개수 표시용)
   const weekStart = startOfWeek(ref);
@@ -186,7 +194,7 @@ export default function Calendar() {
         </div>
       </div>
 
-      {total === 0 && (
+      {loaded && total === 0 && (
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 12 }}>
           마감일이 설정된 태스크와 문서 수정 이력이 캘린더에 표시됩니다.
         </p>
@@ -202,11 +210,24 @@ export default function Calendar() {
               ))}
             </div>
           )}
+          {loadError ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 4px", fontSize: 13, color: "var(--text-sub)" }}>
+              <span>캘린더를 불러오지 못했어요.</span>
+              <button className="ws-btn-soft" onClick={() => { setLoadError(false); setAttempt((n) => n + 1); }}>다시 시도</button>
+            </div>
+          ) : !loaded ? (
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }} aria-busy="true">
+              {Array.from({ length: view === "month" ? 42 : view === "week" ? 7 : 1 }, (_, i) => (
+                <div key={i} className="ws-skeleton" style={{ minHeight: view === "month" ? 94 : 220, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+              ))}
+            </div>
+          ) : (
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }}>
             {view === "month" && monthCells.map((d, i) => <DayCell key={i} d={d} inMonth={d.getMonth() === ref.getMonth()} events={byDate.get(toKey(d)) ?? []} today={today} onSelect={setSel} />)}
             {view === "week" && weekCells.map((d, i) => <DayCell key={i} d={d} inMonth tall events={byDate.get(toKey(d)) ?? []} today={today} onSelect={setSel} />)}
             {view === "day" && <DayCell d={ref} inMonth tall events={byDate.get(toKey(ref)) ?? []} today={today} onSelect={setSel} />}
           </div>
+          )}
         </div>
       </div>
 

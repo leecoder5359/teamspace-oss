@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
@@ -55,7 +57,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if ("err" in guard) return guard.err;
   const gate = await requirePage(guard, id, "edit");
   if ("err" in gate) return gate.err;
-  const body = (await req.json().catch(() => ({}))) as { rev?: number };
+  const parsedBody = await readBody(req, z.object({ rev: z.number().optional() }));
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
   if (typeof body.rev !== "number") {
     return NextResponse.json({ error: "rev 가 필요합니다." }, { status: 400 });
   }

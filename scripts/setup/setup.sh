@@ -153,8 +153,8 @@ if [ -n "${TS_DIR:-}" ] && [ -f "$TS_DIR/scripts/mcp-server.ts" ] && command -v 
   fi
 fi
 
-# 6) 전역 훅 3종 (서버 최신본으로 덮어씀)
-for h in teamspace-context teamspace-session-end deny-repo-docs; do
+# 6) 전역 훅 4종 (서버 최신본으로 덮어씀)
+for h in teamspace-context teamspace-session-end deny-repo-docs teamspace-project-context; do
   curl -sf "$BASE/setup/hooks/$h.mjs" -o "$HOME/.claude/hooks/$h.mjs" || die "$h 훅 내려받기 실패"
 done
 
@@ -164,6 +164,7 @@ SETTINGS="$HOME/.claude/settings.json"
 TMP=$(mktemp)
 jq '
   .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{matcher:"Write|Edit|MultiEdit|NotebookEdit",hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/deny-repo-docs.mjs\""}]}] | unique) |
+  .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher:"Read|Write|Edit|MultiEdit|NotebookEdit|Glob|Grep|Bash",hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-project-context.mjs\""}]}] | unique) |
   .hooks.SessionStart = ((.hooks.SessionStart // []) + [{hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-context.mjs\""}]}] | unique) |
   .hooks.SessionEnd = ((.hooks.SessionEnd // []) + [{hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-session-end.mjs\""}]}] | unique) |
   .env = ((.env // {}) + {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS":"1"})

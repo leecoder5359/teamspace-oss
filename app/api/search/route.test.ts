@@ -4,7 +4,7 @@ import type { Mock } from "vitest";
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
 vi.mock("@/lib/pageGuard", () => ({ loadAccess: vi.fn(async () => ({})), visibleOnly: (_i: unknown, r: unknown[]) => r }));
 vi.mock("@/lib/graphLoad", () => ({ loadGraph: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({ prisma: { page: { findMany: vi.fn() }, decision: { findMany: vi.fn(async () => []) } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { page: { findMany: vi.fn(), count: vi.fn(async () => 0) }, decision: { findMany: vi.fn(async () => []) } } }));
 
 import { requireCtx } from "@/lib/workspace";
 import { loadGraph } from "@/lib/graphLoad";
@@ -45,6 +45,63 @@ describe("GET /api/search neighbors", () => {
     expect(j.results[0].neighbors).toBeUndefined();
   });
 
+  describe("보관(F2)", () => {
+    const at = new Date("2026-10-09T00:00:00Z");
+    const tree = [
+      { id: "p", parentId: null, archivedAt: at },
+      { id: "kid", parentId: "p", archivedAt: null },
+      { id: "other", parentId: null, archivedAt: null },
+    ];
+    const withArchived = () => {
+      m(prisma.page.count).mockResolvedValue(1);
+      // 첫 findMany 는 트리 로드(select 에 parentId), 이후는 후보 조회
+      m(prisma.page.findMany).mockImplementation((async (args: { select: Record<string, unknown> }) =>
+        "parentId" in args.select ? tree : []) as never);
+    };
+    const whereOfCandidates = () =>
+      m(prisma.page.findMany).mock.calls.map((c) => c[0]).find((a) => !("parentId" in a.select)).where;
+
+    it("보관 페이지가 없으면 트리를 읽지 않고 id 필터도 없다", async () => {
+      await GET(new Request("http://t/api/search?q=배포"));
+      expect(m(prisma.page.findMany).mock.calls.every((c) => !("parentId" in c[0].select))).toBe(true);
+      expect(m(prisma.page.findMany).mock.calls[0][0].where).not.toHaveProperty("id");
+    });
+    it("보관된 부모의 하위 문서도 후보에서 제외", async () => {
+      withArchived();
+      await GET(new Request("http://t/api/search?q=배포"));
+      expect(whereOfCandidates().id.notIn.sort()).toEqual(["kid", "p"]);
+    });
+    it("?archived=1 이면 제외하지 않고 트리도 읽지 않는다", async () => {
+      withArchived();
+      await GET(new Request("http://t/api/search?q=배포&archived=1"));
+      expect(whereOfCandidates()).not.toHaveProperty("id");
+      expect(m(prisma.page.count)).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("보관 id 상한(2,000)", () => {
+    const at = new Date("2026-10-09T00:00:00Z");
+    const big = Array.from({ length: 2001 }, (_, i) => ({ id: `ar${i}`, parentId: null, archivedAt: at }));
+    const cand = (id: string) => ({ id, title: "배포 " + id, markdown: "", kind: "doc", updatedAt: new Date(), projectId: null, project: null });
+    const setup = (tree: unknown[]) => {
+      m(prisma.page.count).mockResolvedValue(1);
+      m(prisma.page.findMany).mockImplementation((async (args: { select: Record<string, unknown> }) =>
+        "parentId" in args.select ? tree : [cand("ar5"), cand("live")]) as never);
+    };
+    const cands = () => m(prisma.page.findMany).mock.calls.map((c) => c[0]).filter((a) => !("parentId" in a.select));
+    it("상한을 넘으면 notIn 없이 조회하고 결과에서 보관 문서를 거른다", async () => {
+      setup(big);
+      const j = await (await GET(new Request("http://t/api/search?q=배포"))).json();
+      expect(cands().every((a) => !("id" in a.where))).toBe(true);
+      expect(j.results.map((r: { id: string }) => r.id)).toEqual(["live"]);
+    });
+    it("상한 이하(2,000)면 여전히 notIn 을 쓴다", async () => {
+      setup(big.slice(0, 2000));
+      await GET(new Request("http://t/api/search?q=배포"));
+      expect(cands()[0].where.id.notIn).toHaveLength(2000);
+    });
+  });
+
   describe("A6", () => {
     const docRow = (id: string) => ({ id, title: `배포 문서 ${id}`, markdown: "배포", kind: "doc", updatedAt: new Date(), projectId: null, project: null });
     const node = (id: string) => ({ id, title: `T-${id}`, type: "doc", href: `/p/${id}`, projectId: null });
@@ -76,5 +133,77 @@ describe("GET /api/search neighbors", () => {
       const j = await (await GET(new Request("http://t/api/search?q=배포&neighbors=1"))).json();
       expect(j.results[0].neighbors).toEqual([]);
     });
+  });
+});
+
+describe("GET /api/search 공백 변형", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "member" });
+    m(prisma.decision.findMany).mockResolvedValue([]);
+  });
+
+  it("where 가 변형 OR 이고 공백 변형 문서가 결과에 남는다", async () => {
+    m(prisma.page.findMany).mockResolvedValue([{ id: "a", title: "인증 코어 설계", markdown: "", kind: "doc", updatedAt: new Date(), projectId: null, project: null }]);
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어")))).json();
+    const where = m(prisma.page.findMany).mock.calls[1][0].where;
+    expect(where.OR).toContainEqual({ title: { contains: "인증 코어", mode: "insensitive" } });
+    expect(m(prisma.page.findMany).mock.calls[0][0].where.OR).toEqual([{ title: { contains: "인증코어", mode: "insensitive" } }, { markdown: { contains: "인증코어", mode: "insensitive" } }]);
+    expect(where.AND).toBeDefined();
+    expect(j.results.map((r: { id: string }) => r.id)).toEqual(["a"]);
+  });
+
+  it("원문 일치가 변형 일치보다 먼저", async () => {
+    const row = (id: string, title: string) => ({ id, title, markdown: "", kind: "doc", updatedAt: new Date(), projectId: null, project: null });
+    m(prisma.page.findMany).mockResolvedValue([row("v", "인증 코어"), row("o", "인증코어")]);
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어")))).json();
+    expect(j.results.map((r: { id: string }) => r.id)).toEqual(["o", "v"]);
+  });
+});
+
+describe("GET /api/search 후보 조회 순서", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "member" });
+    m(prisma.decision.findMany).mockResolvedValue([]);
+  });
+  const row = (id: string) => ({ id, title: "인증코어 " + id, markdown: "", kind: "doc", updatedAt: new Date(), projectId: null, project: null });
+
+  it("원문이 limit 을 채우면 변형 쿼리를 하지 않는다", async () => {
+    m(prisma.page.findMany).mockResolvedValue([row("a"), row("b")]);
+    await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&limit=2"));
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("모자라면 변형 OR 로 채우고 id 중복 제거", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce([row("a")]).mockResolvedValueOnce([row("a"), row("b")]);
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어")))).json();
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2);
+    expect(j.results.map((r: { id: string }) => r.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("GET /api/search 변형 폴백은 필터 후 건수로 비교", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "member" });
+    m(prisma.decision.findMany).mockResolvedValue([]);
+    m(prisma.page.count).mockResolvedValue(0);
+  });
+  const row = (id: string, projectId: string | null, title = "인증코어") => ({ id, title, markdown: "", kind: "doc", updatedAt: new Date(), projectId, project: null });
+
+  it("원문 후보가 limit 이상이어도 projectId 필터에 다 걸러지면 변형을 조회한다", async () => {
+    m(prisma.page.findMany)
+      .mockResolvedValueOnce([row("x1", "other"), row("x2", "other")])
+      .mockResolvedValueOnce([row("v1", "p1", "인증 코어")]);
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&projectId=p1&limit=2"))).json();
+    expect(m(prisma.page.findMany)).toHaveBeenCalledTimes(2);
+    expect(j.results.map((r: { id: string }) => r.id)).toEqual(["v1"]);
+  });
+
+  it("필터 통과 건수가 limit 이상이면 변형을 조회하지 않는다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce([row("a", "p1"), row("b", "p1")]);
+    await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&projectId=p1&limit=2"));
+    expect(m(prisma.page.findMany)).toHaveBeenCalledTimes(1);
   });
 });

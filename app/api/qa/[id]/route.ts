@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const QaPatchBody = z.object({
+  title: z.string().optional(),
+  steps: z.string().optional(),
+  expected: z.string().optional(),
+  status: z.string().optional(),
+  projectId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 const ST = ["pending", "pass", "fail"] as const;
@@ -12,9 +22,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { workspaceId } = guard;
   const found = await prisma.qaScenario.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const b = (await req.json().catch(() => ({}))) as {
-    title?: string; steps?: string; expected?: string; status?: string; projectId?: string;
-  };
+  const parsed = await readBody(req, QaPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const b = parsed.data;
   // status 는 주어졌을 때만 검증한다 — 종전엔 status 없이 다른 필드만 고치려 하면 400 이었다.
   if (b.status !== undefined && !(ST as readonly string[]).includes(b.status)) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });

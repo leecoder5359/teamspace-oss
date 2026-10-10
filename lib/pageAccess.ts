@@ -172,6 +172,15 @@ export function canManageProjectGrants(idx: AccessIndex, projectId: string): boo
   return projectAccess(idx, projectId) === "edit";
 }
 
+/**
+ * 이 뷰어가 볼 수 없는 페이지 id. 행을 읽지 않는 자리(count 등)에서 where 의 `id: { notIn }` 으로 밀어 넣는다.
+ * 색인(loadAccess)이 워크스페이스 페이지 전체를 담으므로 '색인 밖 = none' 인 새 페이지만 빠질 수 있다(경합 창).
+ */
+export function hiddenPageIds(idx: AccessIndex): string[] {
+  if (idx.viewer?.role === "admin") return []; // admin 우회(pageAccess 와 같은 정책)
+  return [...(idx.pages?.keys() ?? [])].filter((id) => pageAccess(idx, id) === "none");
+}
+
 /** 목록 필터링용 — 볼 수 있는 페이지만 남긴다. */
 export function filterVisible<T extends { id: string }>(idx: AccessIndex, pages: T[]): T[] {
   return pages.filter((p) => pageAccess(idx, p.id) !== "none");

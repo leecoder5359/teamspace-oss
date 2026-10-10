@@ -8,6 +8,8 @@ import dynamic from "next/dynamic";
 // 클라이언트 전용 로드 — 첫 페인트를 막지 않게 지연 로드한다.
 const CommandPalette = dynamic(() => import("./CommandPalette"), { ssr: false });
 import { Icon } from "./ws/icons";
+import type { SidebarPage, SidebarProject } from "@/lib/pagesList";
+import { seedPages } from "@/lib/pagesClient";
 
 type Theme = "light" | "dark";
 
@@ -17,13 +19,26 @@ export type SessionUser = {
   image: string | null;
 } | null;
 
+/** 레이아웃이 서버에서 읽어 넘기는 첫 사이드바 트리(U7). null = 서버 조회 실패 → 클라가 받는다. */
+export type InitialSidebar = { pages: SidebarPage[]; projects: SidebarProject[]; serverTime?: string } | null;
+
 export default function AppShell({
   children,
   sessionUser = null,
+  initialSidebar = null,
 }: {
   children: React.ReactNode;
   sessionUser?: SessionUser;
+  initialSidebar?: InitialSidebar;
 }) {
+  // 서버가 준 목록을 자식이 렌더되기 전에 공유 캐시에 심는다 — 사이드바가 마운트되기 전에 getPages() 를 부르는
+  // 페이지 컴포넌트도 네트워크 없이 받는다. 마운트당 한 번: useState 초기화 함수가 그 가드다(렌더 중 ref 쓰기는
+  // react-hooks/refs 가 막는다). 서버에서는 seedPages 가 아무것도 안 한다.
+  // 사이드바 훅도 같은 목록을 심지만 seedPages 가 더 새 캐시·이후 무효화를 이기지 못하게 막는다.
+  useState(() => {
+    if (initialSidebar) seedPages({ pages: initialSidebar.pages }, { at: initialSidebar.serverTime });
+    return true;
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [rail, setRail] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
@@ -83,6 +98,7 @@ export default function AppShell({
           onToggleTheme={toggleTheme}
           onNavigate={closeDrawer}
           sessionUser={sessionUser}
+          initialSidebar={initialSidebar}
         />
       </Suspense>
 

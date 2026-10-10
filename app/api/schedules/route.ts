@@ -3,6 +3,18 @@ import { requireCtx } from "@/lib/workspace";
 import { withIdempotency } from "@/lib/idempotency";
 import { createRecurring, createReminder, listReminders } from "@/lib/schedule";
 import { parseRecurringSpec } from "@/lib/dispatch";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ScheduleBody = z.object({
+  remindAt: z.string().optional(),
+  text: z.string().optional(),
+  databasePageId: z.string().optional(),
+  rowId: z.string().optional(),
+  channelId: z.string().optional(),
+  repeat: z.string().optional(),
+  time: z.string().optional(),
+});
 
 // GET /api/schedules?databasePageId=... → 등록된 알림(once) 목록
 export async function GET(request: Request) {
@@ -21,15 +33,9 @@ export async function POST(request: Request) {
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
   return withIdempotency(request, guard, async () => {
-  const body = (await request.json().catch(() => ({}))) as {
-    remindAt?: string;
-    text?: string;
-    databasePageId?: string;
-    rowId?: string;
-    channelId?: string;
-    repeat?: string; // "daily" | "weekly:MON" — 반복 리마인더 (W7)
-    time?: string; // "HH:MM" (repeat 와 함께)
-  };
+  const parsed = await readBody(request, ScheduleBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const text = body.text?.trim();
   // 반복 리마인더 (W7 inv-10): repeat+time → kind=cron, spec=daily:HH:MM | weekly:DDD:HH:MM
   if (body.repeat && text) {

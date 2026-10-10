@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
 import { safeParseDbPropertyConfig } from "@/lib/dbConfig";
+import { withReq } from "@/lib/log";
 
 // GET /api/databases/[id] → database 페이지 메타 + 속성/뷰/행 일괄
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
@@ -30,7 +31,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   for (const p of properties) {
     const parsed = safeParseDbPropertyConfig(p.type, p.config);
     if (!parsed.success) {
-      console.warn(`[dbConfig] invalid ${p.type} config on property ${p.id}:`, parsed.error.issues);
+      withReq(req).warn("db.property_config_invalid", { msg: "속성 config 형태가 잘못됨(출력은 유지)", propertyId: p.id, type: p.type, issues: parsed.error.issues });
     }
   }
 

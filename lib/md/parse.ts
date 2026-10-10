@@ -186,13 +186,59 @@ const indentOf = (s: string) => (s.match(/^\s*/)?.[0].replace(/\t/g, "    ").len
 const isTableRow = (s: string) => /^\s*\|.*\|\s*$/.test(s);
 const isTableSeparator = (s: string) => isTableRow(s) && /^\s*\|[\s:|-]+\|\s*$/.test(s) && s.includes("-");
 
+/**
+ * 표 행을 셀로 나눈다. 백틱 코드 스팬(같은 길이의 백틱으로 닫힘) 안의 `|` 는 구분자가 아니고,
+ * `\|` 는 어디서든 리터럴 `|` 로 바꾼다. 닫히지 않은 백틱은 일반 글자로 보고 그대로 나눈다.
+ */
 function splitCells(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((c) => c.trim());
+  const s = line.trim();
+  const cells: string[] = [];
+  let cur = "";
+  let i = s.startsWith("|") ? 1 : 0;
+  let endedWithSep = false;
+  while (i < s.length) {
+    endedWithSep = false;
+    const ch = s[i];
+    if (ch === "\\" && s[i + 1] === "|") {
+      cur += "|";
+      i += 2;
+    } else if (ch === "`") {
+      let n = 1;
+      while (s[i + n] === "`") n++;
+      const open = "`".repeat(n);
+      // 같은 길이(정확히 n)의 닫는 백틱 런 찾기
+      let j = i + n;
+      let close = -1;
+      while (j < s.length) {
+        if (s[j] === "`") {
+          let m = 1;
+          while (s[j + m] === "`") m++;
+          if (m === n) {
+            close = j;
+            break;
+          }
+          j += m;
+        } else j++;
+      }
+      if (close === -1) {
+        cur += open;
+        i += n;
+      } else {
+        cur += open + s.slice(i + n, close).replace(/\\\|/g, "|") + open;
+        i = close + n;
+      }
+    } else if (ch === "|") {
+      cells.push(cur);
+      cur = "";
+      i++;
+      endedWithSep = true;
+    } else {
+      cur += ch;
+      i++;
+    }
+  }
+  if (!endedWithSep || cur !== "") cells.push(cur);
+  return cells.map((c) => c.trim());
 }
 
 function alignOf(cell: string): Align {

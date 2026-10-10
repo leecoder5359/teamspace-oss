@@ -12,6 +12,8 @@ import {
   type DbRow,
   type Role,
 } from "../DatabaseView";
+import { getPages } from "@/lib/pagesClient";
+import { relativeTime, summarizeSessions, type SessionLike, type SessionSummary } from "@/lib/sessionSummary";
 
 /* 대시보드 — 전체 현황 요약 (Saebit dashboard.jsx 포팅 → 제네릭 DB 모델 매핑) */
 
@@ -89,6 +91,67 @@ function ActivityFeed() {
             </div>
           ))}
         </div>
+      )}
+    </DashPanel>
+  );
+}
+
+function SessionCard() {
+  const router = useRouter();
+  // null = 로딩, "error" = 실패
+  const [sum, setSum] = useState<SessionSummary | "error" | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch("/api/sessions", { cache: "no-store" });
+      if (!r.ok) return setSum("error");
+      const { sessions } = (await r.json()) as { sessions: SessionLike[] };
+      setSum(summarizeSessions(sessions ?? [], new Date()));
+    } catch {
+      setSum("error");
+    }
+  }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+  useAutoRefresh(load);
+
+  const now = new Date();
+  return (
+    <DashPanel
+      title="에이전트 세션"
+      action={
+        <button className="ws-link" onClick={() => router.push("/settings")}>
+          라이브 세션 관리
+        </button>
+      }
+    >
+      {sum === null ? (
+        <div style={emptyNote}>불러오는 중…</div>
+      ) : sum === "error" ? (
+        <div style={emptyNote}>세션을 불러오지 못했어요.</div>
+      ) : sum.top.length === 0 ? (
+        <div style={emptyNote}>아직 연결된 에이전트 세션이 없어요.</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginBottom: 4 }}>
+            활성 {sum.active} · 24시간 {sum.recent}
+            {sum.lastActivityAt && ` · 마지막 활동 ${relativeTime(sum.lastActivityAt, now)}`}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {sum.top.map((t, i) => (
+              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderTop: i ? "1px solid var(--border-subtle)" : "none" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: t.status === "active" ? "var(--color-primary)" : "var(--text-muted)", flex: "0 0 auto" }}>
+                  {t.status === "active" ? "활성" : "종료"}
+                </span>
+                <span style={{ fontSize: 12.5, color: "var(--text-body)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: 11.5, color: "var(--text-muted)", flex: "0 0 auto" }}>
+                  항목 {t.itemCount} · {relativeTime(t.updatedAt, now)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </DashPanel>
   );
@@ -252,9 +315,9 @@ export default function Dashboard({ userName }: { userName: string }) {
 
   const load = useCallback(async () => {
     // 사이드바와 동일한 방식: 첫 데이터베이스 페이지 = 태스크 DB
-    const pagesRes = await fetch("/api/pages", { cache: "no-store" });
+    const pagesRes = await getPages();
     if (!pagesRes.ok) return;
-    const { pages } = (await pagesRes.json()) as { pages: { id: string; kind: string }[] };
+    const { pages } = pagesRes.data as { pages: { id: string; kind: string }[] };
     const db = pages.find((p) => p.kind === "database");
     if (!db) {
       setTaskDbId(null);
@@ -580,6 +643,11 @@ export default function Dashboard({ userName }: { userName: string }) {
       {/* 최근 활동 (W6 활동 피드) */}
       <div style={{ marginTop: 12 }}>
         <ActivityFeed />
+      </div>
+
+      {/* 에이전트 세션 (F7) */}
+      <div style={{ marginTop: 12 }}>
+        <SessionCard />
       </div>
 
       {/* 알림 요약 (슬랙 연동 예정) */}

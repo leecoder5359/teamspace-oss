@@ -237,9 +237,9 @@ export default function Slack() {
 }
 
 /* ── 자동 알림 규칙 (도메인 이벤트 → 슬랙) ── */
-type Project = { id: string; name: string };
+type Project = { id: string; name: string; archivedAt: string | null };
 type Rule = { id: string; event: string; target: string; targetId: string; enabled: boolean; projectId: string | null };
-const EVENT_LABEL: Record<string, string> = { task_created: "태스크 생성", task_status: "상태 변경", task_assigned: "담당자 배정", task_due: "마감 임박", comment_added: "댓글 작성", doc_saved: "문서 저장" };
+const EVENT_LABEL: Record<string, string> = { task_created: "태스크 생성", task_status: "상태 변경", task_assigned: "담당자 배정", task_due: "마감 임박", comment_added: "댓글 작성", doc_saved: "문서 저장", weekly_digest: "주간 다이제스트" };
 
 function NotifRules() {
   const [rules, setRules] = useState<Rule[] | null>(null);
@@ -257,10 +257,11 @@ function NotifRules() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
     void (async () => {
-      const r = await fetch("/api/projects", { cache: "no-store" });
+      // 규칙 칩 라벨은 보관 프로젝트 규칙에도 이름이 떠야 해서 보관 포함(선택지는 활성만)
+      const r = await fetch("/api/projects?archived=all", { cache: "no-store" });
       if (r.ok) {
-        const d = (await r.json()) as { projects: Project[] };
-        setProjects(d.projects);
+        const d = (await r.json()) as { projects: (Omit<Project, "archivedAt"> & { archivedAt?: string | null })[] };
+        setProjects(d.projects.map((p) => ({ id: p.id, name: p.name, archivedAt: p.archivedAt ?? null })));
       }
     })();
   }, []);
@@ -299,7 +300,7 @@ function NotifRules() {
         </select>
         <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, width: "auto", marginTop: 0 }} aria-label="프로젝트">
           <option value="">전체 프로젝트(기본)</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {projects.filter((p) => !p.archivedAt || p.id === projectId).map((p) => <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>)}
         </select>
         <input value={channel} onChange={(e) => setChannel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} placeholder="채널 선택 또는 #qa-알림/C0123" list="ws-slack-channels" style={{ ...inputStyle, marginTop: 0, flex: "1 1 200px" }} aria-label="채널" />
         <button onClick={() => void add()} disabled={busy || !channel.trim()} style={{ ...secondaryBtn, marginTop: 0 }}>규칙 추가</button>

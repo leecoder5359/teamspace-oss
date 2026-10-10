@@ -234,6 +234,32 @@ describe("parseMarkdown — 코드·표·구분선", () => {
     expect(tb.rows[0][0].c).toEqual([{ t: "strong", c: [t("A")] }]);
   });
 
+  describe("표 셀 분리 — 코드 스팬·이스케이프", () => {
+    const cells = (row: string) => {
+      const tb = parseMarkdown([row, "|--|--|--|", row].join("\n")).blocks[0];
+      if (tb.t !== "table") throw new Error("table");
+      return tb.head.map((c) => inlineText(c.c));
+    };
+    it("코드 스팬 안의 | 는 분리하지 않는다", () => {
+      expect(cells("| a | `x|y` | c |")).toEqual(["a", "x|y", "c"]);
+    });
+    it("더블 백틱 안의 | 와 단일 백틱", () => {
+      expect(cells("| a | ``x|y`` | c |")).toHaveLength(3);
+    });
+    it("\\| 는 리터럴 |", () => {
+      expect(cells("| a \\| b | c |")).toEqual(["a | b", "c"]);
+    });
+    it("닫히지 않은 백틱은 일반 글자로 분리", () => {
+      expect(cells("| a | `x | c |")).toEqual(["a", "`x", "c"]);
+    });
+    it("길이가 다른 백틱 런은 닫지 못한다", () => {
+      expect(cells("| ``a | b` | c |")).toEqual(["``a", "b`", "c"]);
+    });
+    it("빈 셀과 바깥 파이프 없는 행", () => {
+      expect(cells("| a | | c |")).toEqual(["a", "", "c"]);
+    });
+  });
+
   it("구분선", () => {
     expect(parseMarkdown("---").blocks[0]).toEqual({ t: "hr" });
   });

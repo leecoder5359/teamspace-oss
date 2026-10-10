@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requireProject, canManageProjectGrants } from "@/lib/pageGuard";
 import { recordActivity, pushNotification } from "@/lib/activity";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const GrantBody = z.object({
+  userId: z.string().nullable().optional(),
+  teamId: z.string().nullable().optional(),
+  level: z.string().optional(),
+  visibility: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -14,13 +23,6 @@ export const runtime = "nodejs";
    페이지 부여가 프로젝트 잠금보다 우선하므로, 잠근 프로젝트 안에서 문서 하나만
    따로 공유하는 것도 된다.
    ===================================================================== */
-
-type Body = {
-  userId?: string | null;
-  teamId?: string | null;
-  level?: "view" | "edit";
-  visibility?: "inherit" | "restricted";
-};
 
 async function gate(id: string, min: "view" | "edit") {
   const guard = await requireCtx(min === "edit" ? "editor" : "viewer");
@@ -63,7 +65,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   const g = await gate(id, "edit");
   if ("err" in g) return g.err;
-  const body = (await req.json().catch(() => ({}))) as Body;
+  const parsed = await readBody(req, GrantBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   if (body.visibility !== "inherit" && body.visibility !== "restricted") {
     return NextResponse.json({ error: "visibility 는 inherit 또는 restricted 입니다." }, { status: 400 });
   }
@@ -98,7 +102,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const g = await gate(id, "edit");
   if ("err" in g) return g.err;
   const { workspaceId } = g.guard;
-  const body = (await req.json().catch(() => ({}))) as Body;
+  const parsed = await readBody(req, GrantBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const level = body.level === "edit" ? "edit" : "view";
   const userId = body.userId?.trim() || null;
   const teamId = body.teamId?.trim() || null;

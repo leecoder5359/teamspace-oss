@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx, WS_COOKIE } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const SwitchBody = z.object({
+  workspaceId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -13,7 +19,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
   const { userId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { workspaceId?: string };
+  const parsed = await readBody(request, SwitchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const workspaceId = body.workspaceId;
   if (!workspaceId) return NextResponse.json({ error: "workspaceId가 필요합니다." }, { status: 400 });
 

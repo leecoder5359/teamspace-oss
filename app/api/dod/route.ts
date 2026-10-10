@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const DodBody = z.object({
+  text: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -16,7 +22,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const b = (await request.json().catch(() => ({}))) as { text?: string };
+  const parsed = await readBody(request, DodBody);
+  if (!parsed.ok) return parsed.res;
+  const b = parsed.data;
   const text = b.text?.trim();
   if (!text) return NextResponse.json({ error: "항목을 입력해 주세요." }, { status: 400 });
   const last = await prisma.dodItem.findFirst({ where: { workspaceId }, orderBy: { position: "desc" }, select: { position: true } });

@@ -175,3 +175,16 @@ describe("buildTitleIndex — 별칭", () => {
     expect(g.edges).toEqual([{ from: "x", to: "y" }]);
   });
 });
+
+describe("computeLint.rootDocs", () => {
+  it("프로젝트 뿌리에 바로 놓인 문서(태스크 설명·폴더 제외)", () => {
+    const r = computeLint([
+      { id: "a", title: "폴더", markdown: "", parentId: null, projectId: "p", docType: null },
+      { id: "e", title: "뿌리 문서", markdown: "", parentId: null, projectId: "p", docType: "design" },
+      { id: "b", title: "폴더 안", markdown: "", parentId: "a", projectId: "p", docType: null },
+      { id: "c", title: "[태스크 설명] x", markdown: "", parentId: null, projectId: "p", docType: "task_note" },
+      { id: "d", title: "미분류 뿌리", markdown: "", parentId: null, projectId: null, docType: null },
+    ]);
+    expect(r.rootDocs.map((x) => x.id)).toEqual(["e"]);
+  });
+});

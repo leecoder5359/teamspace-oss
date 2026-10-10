@@ -44,24 +44,51 @@ function bodyText(b: Record<string, unknown>): string {
 
 type Ctx = { markdown: string; counts: Record<string, number> };
 
+export function LoadErrorNotice({ onRetry, message = "세션 목록을 불러오지 못했어요." }: { onRetry: () => void; message?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 4px", fontSize: 13, color: "var(--text-sub)" }}>
+      <span>{message}</span>
+      <button className="ws-btn-soft" onClick={onRetry}>다시 시도</button>
+    </div>
+  );
+}
+
 export default function AiConnect() {
   const [list, setList] = useState<Session[] | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [ctx, setCtx] = useState<Ctx | null>(null);
   const [copied, setCopied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // 컨텍스트 실패는 따로 — 실패해도 세션 목록은 보이고, 이 섹션만 안내+다시 시도(스켈레톤이 영원히 돌지 않게).
+  const [ctxError, setCtxError] = useState(false);
+  const [ctxAttempt, setCtxAttempt] = useState(0);
 
+  // 세션 목록과 컨텍스트는 서로 기다리지 않는다 — 먼저 오는 쪽이 먼저 그려진다.
   useEffect(() => {
     void (async () => {
-      const [sRes, cRes] = await Promise.all([
-        fetch("/api/sessions", { cache: "no-store" }),
-        fetch("/api/context?format=json", { cache: "no-store" }),
-      ]);
-      const data = (await sRes.json()) as { sessions: Session[] };
-      setList(data.sessions);
-      if (cRes.ok) setCtx((await cRes.json()) as Ctx);
+      try {
+        const sRes = await fetch("/api/sessions", { cache: "no-store" });
+        if (!sRes.ok) throw new Error(`sessions ${sRes.status}`);
+        const data = (await sRes.json()) as { sessions: Session[] };
+        setList(data.sessions);
+      } catch {
+        setLoadError(true);
+      }
     })();
-  }, []);
+  }, [attempt]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cRes = await fetch("/api/context?format=json", { cache: "no-store" });
+        if (!cRes.ok) throw new Error(`context ${cRes.status}`);
+        setCtx((await cRes.json()) as Ctx);
+      } catch {
+        setCtxError(true);
+      }
+    })();
+  }, [ctxAttempt]);
 
   async function copyContext() {
     if (!ctx) return;
@@ -96,10 +123,8 @@ export default function AiConnect() {
     }
   }
 
-  if (list === null) return <div className="ws-db" style={{ padding: 40 }} />;
-
   // ── 상세 ──
-  if (detail || loadingDetail) {
+  if (list !== null && (detail || loadingDetail)) {
     return (
       <div className="ws-db" style={{ maxWidth: 820 }}>
         <button className="ws-btn-soft" onClick={() => setDetail(null)} style={{ marginBottom: 16 }}>
@@ -172,8 +197,14 @@ export default function AiConnect() {
             <Icon name="arrowRight" size={13} /> .md 내보내기
           </button>
         </div>
-        {!ctx ? (
-          <div className="ws-empty-hint">불러오는 중…</div>
+        {!ctx && ctxError ? (
+          <LoadErrorNotice message="컨텍스트를 불러오지 못했어요." onRetry={() => { setCtxError(false); setCtxAttempt((n) => n + 1); }} />
+        ) : !ctx ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }} aria-busy="true">
+            <div className="ws-skeleton" style={{ height: 24, width: "60%", borderRadius: 999 }} />
+            <div className="ws-skeleton" style={{ height: 140, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+            <div className="ws-skeleton" style={{ height: 140, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+          </div>
         ) : (
           <>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
@@ -200,7 +231,15 @@ export default function AiConnect() {
       <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", margin: "28px 0 4px" }}>Claude 작업 세션</h2>
       <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>cwd→워크스페이스로 매핑된 세션. 실시간 인입은 agentmemory 훅 → <code style={mono}>/api/ingest</code>.</p>
 
-      {list.length === 0 ? (
+      {list === null && loadError ? (
+        <LoadErrorNotice onRetry={() => { setLoadError(false); setAttempt((n) => n + 1); }} />
+      ) : list === null ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }} aria-busy="true">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="ws-skeleton" style={{ height: 63, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+          ))}
+        </div>
+      ) : list.length === 0 ? (
         <div className="ws-empty" style={{ marginTop: 24 }}>
           <div style={{ width: 52, height: 52, borderRadius: 14, background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
             <Icon name="logo" />

@@ -1,14 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
 import { filterDocs, NO_PROJECT } from "@/lib/docFilter";
+import { DOCS_PAGE, GROUP_PAGE, groupDocs } from "@/lib/docsGroup";
+import { DOC_TYPE_LABEL, DOC_TYPES, type DocType } from "@/lib/docOrganize";
+import { TEMPLATES, TEMPLATE_NAMES, isTemplateName } from "@/lib/docTemplates";
+import { findDuplicateTitles } from "@/lib/docTitles";
+import { isTaskNote } from "@/lib/taskNotes";
 import { useIsMobile } from "@/lib/useIsMobile";
 import MarkdownPreview from "../MarkdownPreview";
+import DocToc from "../DocToc";
 import DatabaseView from "../DatabaseView";
 import DecisionsSurface from "./DecisionsSurface";
 import LessonsSurface from "./LessonsSurface";
@@ -21,6 +27,7 @@ import DodSurface from "./DodSurface";
 import OnboardingSurface from "./OnboardingSurface";
 import GraphSurface from "./GraphSurface";
 import LintSurface from "./LintSurface";
+import { getPages } from "@/lib/pagesClient";
 
 /* 문서 허브 (design app/docs.jsx 포팅) — 카테고리 레일 + 프로젝트 전환기 + surface.
    '문서'(mddocs) 카테고리는 file-first Page 데이터로 2-pane 동작.
@@ -32,11 +39,16 @@ type DocItem = {
   kind: "doc" | "database";
   icon: string | null;
   projectId: string | null;
+  parentId: string | null;
   updatedAt: string;
   /** D3 후속: 모두에게 열려 있지 않다(조상·프로젝트 상속 포함) */
   restricted?: boolean;
+  docType?: DocType | null;
+  /** 보관된 문서(F2) — 보관함/‘보관 포함’ 모드에서만 내려온다 */
+  archived?: boolean;
 };
-type ProjectLite = { id: string; name: string; boardPageId: string | null };
+type ArchivedView = "active" | "all" | "only";
+type ProjectLite = { id: string; name: string; boardPageId: string | null; archivedAt: string | null };
 
 type Cat = { key: string; label: string; sub: string; icon: IconName; color: string; scope: "project" | "common" };
 const DOC_CATS: Cat[] = [
@@ -67,7 +79,7 @@ function fmtEditedLong(value: string): string {
 }
 
 /* ---------- 문서 행 ---------- */
-function DocRow({ doc, onOpen }: { doc: DocItem; onOpen: (d: DocItem) => void }) {
+function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocItem) => void; dupCount?: number }) {
   return (
     <div className="ws-doc-row" onClick={() => onOpen(doc)} role="button" tabIndex={0}>
       <div className="ws-doc-ico">
@@ -82,6 +94,40 @@ function DocRow({ doc, onOpen }: { doc: DocItem; onOpen: (d: DocItem) => void })
               <Icon name="lock" size={12} />
             </span>
           )}
+          {doc.archived && (
+            <span
+              title="보관된 문서 — 사이드바·검색에는 나오지 않아요"
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: "var(--text-muted)",
+                background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
+                padding: "1px 6px",
+                borderRadius: 999,
+                flexShrink: 0,
+                lineHeight: 1.7,
+              }}
+            >
+              보관됨
+            </span>
+          )}
+          {dupCount > 0 && (
+            <span
+              title={`같은 프로젝트에 같은 제목 문서가 ${dupCount}건 더 있어요`}
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: "var(--text-muted)",
+                background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
+                padding: "1px 6px",
+                borderRadius: 999,
+                flexShrink: 0,
+                lineHeight: 1.7,
+              }}
+            >
+              제목 중복
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{fmtEditedShort(doc.updatedAt)}</div>
       </div>
@@ -90,24 +136,128 @@ function DocRow({ doc, onOpen }: { doc: DocItem; onOpen: (d: DocItem) => void })
   );
 }
 
+/* ---------- 그룹·더 보기 본문 ----------
+   접힘·더 보기 상태는 이 컴포넌트가 들고, 부모가 필터 입력을 key 로 넘겨 필터가 바뀌면 초기화된다. */
+function GroupedDocRows({
+  docs,
+  projectId,
+  projects,
+  query,
+  onOpen,
+  dupIds,
+}: {
+  docs: DocItem[];
+  projectId: string;
+  projects: ProjectLite[];
+  query: string;
+  onOpen: (d: DocItem) => void;
+  dupIds: Map<string, string[]>;
+}) {
+  const { mode, groups } = useMemo(
+    () => groupDocs(docs, { projectId, projects, query }),
+    [docs, projectId, projects, query],
+  );
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const [shown, setShown] = useState<Record<string, number>>({});
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const card: CSSProperties = { background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "4px 10px" };
+  const first = mode === "flat" ? DOCS_PAGE : GROUP_PAGE;
+  const step = mode === "flat" ? DOCS_PAGE : 2 * GROUP_PAGE;
+
+  const renderBody = (key: string, list: DocItem[]) => {
+    const limit = shown[key] ?? first;
+    const rest = list.length - limit;
+    return (
+      <>
+        {list.slice(0, limit).map((d, idx) => (
+          <div key={d.id} style={idx > 0 ? { borderTop: "1px solid var(--border-subtle)" } : undefined}>
+            <DocRow doc={d} onOpen={onOpen} dupCount={dupIds.get(d.id)?.length ?? 0} />
+          </div>
+        ))}
+        {rest > 0 && (
+          <div style={{ padding: "8px 0", textAlign: "center", borderTop: "1px solid var(--border-subtle)" }}>
+            <button className="ws-btn-soft" onClick={() => setShown((s) => ({ ...s, [key]: limit + step }))}>
+              {rest}건 더 보기
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  if (mode === "flat") return <div style={card}>{renderBody(groups[0].key, groups[0].docs)}</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {groups.map((g) => {
+        const open = !collapsed[g.key];
+        const panelId = `${uid}-grp-${g.key}`;
+        return (
+          <section key={g.key}>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={open ? panelId : undefined}
+              onClick={() => setCollapsed((c) => ({ ...c, [g.key]: open }))}
+              style={{ ...railLabel, display: "flex", alignItems: "center", gap: 6, width: "100%", background: "none", border: 0, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}
+            >
+              <span style={{ display: "inline-flex", transform: open ? "rotate(90deg)" : undefined }}>
+                <Icon name="chevronRight" size={12} />
+              </span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {g.label} · {g.docs.length}
+              </span>
+            </button>
+            {open && <div id={panelId} style={card}>{renderBody(g.key, g.docs)}</div>}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ---------- '문서' surface (리스트) ---------- */
 function DocsList({
   docs,
+  projects,
   loading,
   projectId,
   onOpen,
   onCreate,
   creating,
+  archivedView,
+  onArchivedView,
 }: {
+  archivedView: ArchivedView;
+  onArchivedView: (v: ArchivedView) => void;
   docs: DocItem[];
+  projects: ProjectLite[];
   loading: boolean;
   projectId: string;
   onOpen: (d: DocItem) => void;
-  onCreate: () => void;
+  onCreate: (template?: string, title?: string) => void;
   creating: boolean;
 }) {
   const [q, setQ] = useState("");
-  const filtered = useMemo(() => filterDocs(docs, { query: q, projectId }), [docs, q, projectId]);
+  const [template, setTemplate] = useState(""); // "" = 빈 문서
+  const [newTitle, setNewTitle] = useState(""); // 비어 있으면 Untitled
+  const create = () => {
+    onCreate(template || undefined, newTitle.trim() || undefined);
+    setNewTitle("");
+  };
+  // 태스크 설명([태스크 설명]·docType=task_note)은 기본 숨김 — 태스크 드로어에서 계속 열 수 있다.
+  const [showTaskNotes, setShowTaskNotes] = useState(false);
+  const [docType, setDocType] = useState<DocType | "">("");
+  // 중복 판정은 필터 전 전체 목록 기준 — 필터로 짝이 가려져도 배지는 유지한다.
+  const dupIds = useMemo(() => findDuplicateTitles(docs), [docs]);
+  const filtered = useMemo(
+    () =>
+      filterDocs(docs, { query: q, projectId }).filter(
+        (d) => (showTaskNotes || !isTaskNote(d)) && (!docType || d.docType === docType),
+      ),
+    [docs, q, projectId, showTaskNotes, docType],
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -116,8 +266,62 @@ function DocsList({
           <Icon name="search" size={15} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="문서 검색" aria-label="문서 검색" />
         </div>
+        <select
+          value={docType}
+          onChange={(e) => setDocType(e.target.value as DocType | "")}
+          aria-label="문서 종류 필터"
+          style={{ width: "auto", padding: "7px 10px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" }}
+        >
+          <option value="">전체 종류</option>
+          {DOC_TYPES.map((t) => (
+            <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>
+          ))}
+        </select>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          <input type="checkbox" checked={showTaskNotes} onChange={(e) => setShowTaskNotes(e.target.checked)} />
+          태스크 설명 포함
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          <input
+            type="checkbox"
+            checked={archivedView === "all"}
+            disabled={archivedView === "only"}
+            onChange={(e) => onArchivedView(e.target.checked ? "all" : "active")}
+          />
+          보관 포함
+        </label>
+        <button
+          className="ws-btn-soft"
+          aria-pressed={archivedView === "only"}
+          onClick={() => onArchivedView(archivedView === "only" ? "active" : "only")}
+        >
+          보관함
+        </button>
         <span style={{ flex: 1 }} />
-        <button className="ws-btn-soft" onClick={onCreate} disabled={creating}>
+        <select
+          aria-label="새 문서 템플릿"
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+          style={{ fontSize: 12.5 }}
+        >
+          <option value="">빈 문서</option>
+          {TEMPLATE_NAMES.map((n) => (
+            <option key={n} value={n}>{TEMPLATES[n].label}</option>
+          ))}
+        </select>
+        <input
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onKeyDown={(e) => {
+            // 한글 IME 조합 중 Enter 는 확정용이라 생성하지 않는다
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && !creating) create();
+          }}
+          placeholder="제목"
+          aria-label="새 문서 제목"
+          maxLength={200}
+          style={{ fontSize: 12.5, width: 160 }}
+        />
+        <button className="ws-btn-soft" onClick={create} disabled={creating}>
           <Icon name="plus" size={15} />
           새 문서
         </button>
@@ -128,26 +332,28 @@ function DocsList({
           {loading ? (
             <div className="ws-empty-hint">불러오는 중…</div>
           ) : filtered.length > 0 ? (
-            <div style={{ background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "4px 10px" }}>
-              {filtered.map((d, idx) => (
-                <div key={d.id} style={idx > 0 ? { borderTop: "1px solid var(--border-subtle)" } : undefined}>
-                  <DocRow doc={d} onOpen={onOpen} />
-                </div>
-              ))}
-            </div>
+            <GroupedDocRows
+              key={`${q}|${projectId}|${docType}|${showTaskNotes}|${archivedView}`}
+              docs={filtered}
+              projectId={projectId}
+              projects={projects}
+              query={q}
+              onOpen={onOpen}
+              dupIds={dupIds}
+            />
           ) : (
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}>
                 <Icon name="doc" size={34} />
               </span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>
-                {q.trim() ? "검색 결과가 없어요" : "문서가 없어요"}
+                {q.trim() ? "검색 결과가 없어요" : archivedView === "only" ? "보관한 문서가 없어요" : "문서가 없어요"}
               </div>
               <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
                 {q.trim() ? "다른 검색어로 시도해 보세요." : "새 문서를 만들어 마크다운으로 기록을 시작하세요."}
               </div>
               {!q.trim() && (
-                <button className="ws-btn-soft" style={{ marginTop: 16 }} onClick={onCreate} disabled={creating}>
+                archivedView !== "only" && <button className="ws-btn-soft" style={{ marginTop: 16 }} onClick={create} disabled={creating}>
                   <Icon name="plus" size={15} />
                   새 문서
                 </button>
@@ -203,8 +409,9 @@ function EmbedCard({
     background: "var(--surface-sunken)",
   };
 
+  // data-toc-skip: 호스트 문서의 목차(DocToc)가 임베드된 문서의 헤딩을 모으지 않게
   return (
-    <div style={box}>
+    <div style={box} data-toc-skip="">
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>임베드</span>
         {href ? (
@@ -225,6 +432,7 @@ function EmbedCard({
         <MarkdownPreview
           markdown={md ?? ""}
           resolveLink={resolve}
+          headingIds={false}
           renderEmbed={(t) => <EmbedCard target={t} resolve={resolve} chain={[...chain, id]} />}
         />
       ) : null}
@@ -237,8 +445,12 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
   const router = useRouter();
   const [md, setMd] = useState("");
   const [title, setTitle] = useState(doc.title);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveErr, setArchiveErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState(true);
+  // 목차(U5)가 헤딩을 모을 본문 영역 — 마크다운 원문 모드엔 헤딩이 없어 목차가 저절로 숨는다
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [backlinks, setBacklinks] = useState<{ id: string; title: string }[]>([]);
   const [histOpen, setHistOpen] = useState(false);
   const [revs, setRevs] = useState<{ rev: number; title: string; authorName: string | null; createdAt: string }[] | null>(null);
@@ -372,6 +584,32 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
     };
   }, [doc.id, loadComments]);
 
+  // 보관/해제(F2) — 성공하면 목록으로 돌아간다(보관된 문서는 기본 목록에서 빠지므로)
+  async function toggleArchive() {
+    if (archiving) return;
+    setArchiving(true);
+    setArchiveErr(null);
+    try {
+      const r = await fetch("/api/pages/archive", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: doc.id, archived: !doc.archived }),
+      });
+      if (r.ok) {
+        window.dispatchEvent(new Event("pages:changed"));
+        onBack();
+      } else {
+        // 실패를 삼키면 눌렀는데 아무 일도 없는 것처럼 보인다 — 서버 메시지를 그대로 보여 준다.
+        const j = (await r.json().catch(() => null)) as { error?: string } | null;
+        setArchiveErr(j?.error || `보관 상태를 바꾸지 못했습니다 (${r.status})`);
+      }
+    } catch {
+      setArchiveErr("네트워크 오류로 보관 상태를 바꾸지 못했습니다");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
@@ -395,14 +633,28 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
           <Icon name="settings" size={14} />
           편집
         </button>
+        <button
+          className="ws-btn-soft"
+          onClick={() => void toggleArchive()}
+          disabled={archiving}
+          aria-label={doc.archived ? "문서 보관 해제" : "문서 보관"}
+        >
+          {doc.archived ? "보관 해제" : "보관"}
+        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "32px 24px 80px" }}>
-        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <div style={{ display: "flex", gap: 24, justifyContent: "center", alignItems: "flex-start" }}>
+        <div style={{ flex: "1 1 auto", maxWidth: 760, minWidth: 0 }}>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.02em", margin: "0 0 4px" }}>
             {title || "제목 없음"}
           </h1>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>마지막 수정 {fmtEditedLong(doc.updatedAt)}</div>
+          {archiveErr && (
+            <div role="alert" style={{ fontSize: 12.5, color: "var(--danger, #c0392b)", marginBottom: 12 }}>
+              {archiveErr}
+            </div>
+          )}
 
           {histOpen && (
             <div style={{ marginBottom: 18, border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "12px 14px" }}>
@@ -431,6 +683,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
             </div>
           )}
 
+          <div ref={bodyRef}>
           {loading ? (
             <div className="ws-empty-hint">불러오는 중…</div>
           ) : preview ? (
@@ -472,6 +725,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
               {md || "(빈 문서)"}
             </pre>
           )}
+          </div>
 
           {/* 코멘트 (W6) */}
           <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
@@ -585,6 +839,8 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
               </div>
             </div>
           )}
+        </div>
+        <DocToc rootRef={bodyRef} />
         </div>
       </div>
     </div>
@@ -718,31 +974,44 @@ export default function Docs() {
   const [project, setProject] = useState("");
   const [selected, setSelected] = useState<DocItem | null>(null);
   const [creating, setCreating] = useState(false);
+  const [archivedView, setArchivedView] = useState<ArchivedView>("active");
   const [showBoard, setShowBoard] = useState(true);
   // 실제 '데이터베이스' 종류 페이지 id 집합 — 태스크 보드 패널을 진짜 DB일 때만 띄우기 위함
   // (boardPageId 는 DB가 없으면 문서 페이지로 폴백되므로 그대로 임베드하면 빈 보드가 뜬다)
   const [dbPageIds, setDbPageIds] = useState<Set<string>>(new Set());
 
+  // 보관 보기를 빠르게 바꿀 때 늦게 온 이전 응답이 최신 결과를 덮지 않도록 요청 번호로 거른다.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const [pagesRes, projectsRes] = await Promise.all([
-      fetch("/api/pages", { cache: "no-store" }),
-      fetch("/api/projects", { cache: "no-store" }),
+      // 기본 모드는 공유 캐시(getPages), 보관 모드는 쿼리가 달라 직접 받는다(F2)
+      archivedView === "active"
+        ? getPages({ fresh: true })
+        : fetch(`/api/pages?archived=${archivedView === "only" ? "1" : "all"}`, { cache: "no-store" }).then(
+            async (r) => ({ ok: r.ok, status: r.status, data: r.ok ? ((await r.json()) as unknown) : null }),
+          ),
+      // 그룹 라벨용으로 보관 프로젝트까지 한 번에 받는다(전환 select 는 아래에서 활성만 거른다)
+      fetch("/api/projects?archived=all", { cache: "no-store" }),
     ]);
+    if (seq !== loadSeq.current) return;
     if (!pagesRes.ok) {
       setLoading(false);
       return;
     }
-    const data = (await pagesRes.json()) as { pages: DocItem[] };
+    const data = pagesRes.data as { pages: DocItem[] };
     setDocs(data.pages.filter((p) => p.kind === "doc").sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)));
-    setDbPageIds(new Set(data.pages.filter((p) => p.kind === "database").map((p) => p.id)));
+    // 보관함 모드엔 활성 DB 가 빠져 있어 보드 패널 판정을 덮어쓰지 않는다
+    if (archivedView !== "only") setDbPageIds(new Set(data.pages.filter((p) => p.kind === "database").map((p) => p.id)));
     if (projectsRes.ok) {
       const pj = (await projectsRes.json()) as {
-        projects: { id: string; name: string; boardPageId: string | null }[];
+        projects: { id: string; name: string; boardPageId: string | null; archivedAt?: string | null }[];
       };
-      setProjects(pj.projects.map((p) => ({ id: p.id, name: p.name, boardPageId: p.boardPageId })));
+      if (seq !== loadSeq.current) return;
+      setProjects(pj.projects.map((p) => ({ id: p.id, name: p.name, boardPageId: p.boardPageId, archivedAt: p.archivedAt ?? null })));
     }
     setLoading(false);
-  }, []);
+  }, [archivedView]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -753,13 +1022,13 @@ export default function Docs() {
   }, [load]);
   useAutoRefresh(load); // W6: 30초 폴링+포커스 갱신
 
-  const onCreate = useCallback(async () => {
+  const onCreate = useCallback(async (template?: string, title?: string) => {
     setCreating(true);
     try {
       const res = await fetch("/api/pages", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Untitled" }),
+        body: JSON.stringify({ title: title?.trim() || "Untitled", ...(isTemplateName(template) ? { template } : {}) }),
       });
       if (res.ok) {
         const { page } = (await res.json()) as { page: { id: string } };
@@ -798,9 +1067,11 @@ export default function Docs() {
       style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid var(--border-default)", borderRadius: 9, background: "var(--surface-card)", color: "var(--text-body)", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", outline: "none", opacity: switcherDisabled ? 0.5 : 1 }}
     >
       <option value="">전체 프로젝트</option>
-      {projects.map((p) => (
-        <option key={p.id} value={p.id}>{p.name}</option>
-      ))}
+      {projects
+        .filter((p) => p.archivedAt === null || p.id === project) // 선택 중인 보관 프로젝트는 남겨 화면이 비지 않게
+        .map((p) => (
+          <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>
+        ))}
       <option value={NO_PROJECT}>미분류</option>
     </select>
   );
@@ -850,7 +1121,7 @@ export default function Docs() {
           selected ? (
             <DocReader key={selected.id} doc={selected} docs={docs} onBack={() => setSelected(null)} onOpen={setSelected} />
           ) : (
-            <DocsList docs={docs} loading={loading} projectId={project} onOpen={setSelected} onCreate={onCreate} creating={creating} />
+            <DocsList docs={docs} projects={projects} loading={loading} projectId={project} onOpen={setSelected} onCreate={onCreate} creating={creating} archivedView={archivedView} onArchivedView={(v) => { setLoading(true); setArchivedView(v); }} />
           )
         ) : active === "decisions" ? (
           <DecisionsSurface project={project} />

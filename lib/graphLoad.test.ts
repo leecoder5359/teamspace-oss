@@ -228,3 +228,56 @@ describe("loadGraph — 뷰어별 TTL 캐시", () => {
     vi.useRealTimers();
   });
 });
+
+describe("loadGraph — 보관(F2)", () => {
+  beforeEach(() => {
+    invalidateGraphCache();
+    vi.resetAllMocks();
+    m(loadAccess).mockResolvedValue({});
+    m(visibleOnly).mockImplementation((_i: unknown, rows: unknown[]) => rows);
+    m(pageAccess).mockReturnValue("view");
+    m(projectAccess).mockReturnValue("view");
+    for (const k of ["decision", "lesson", "risk", "dbRow", "dbProperty", "graphEdge"] as const) m(prisma[k].findMany).mockResolvedValue([]);
+    m(prisma.project.findMany).mockResolvedValue([{ id: ID("proj"), name: "보관 프로젝트" }]);
+  });
+
+  it("보관 문서와 보관 조상의 하위 문서는 노드에서 빠지고 프로젝트는 남는다", async () => {
+    const at = new Date();
+    m(prisma.page.findMany).mockResolvedValue([
+      { id: ID("p"), title: "보관 부모", markdown: "", parentId: null, projectId: null, archivedAt: at },
+      { id: ID("kid"), title: "하위", markdown: "", parentId: ID("p"), projectId: null, archivedAt: null },
+      { id: ID("live"), title: "활성", markdown: "", parentId: null, projectId: ID("proj"), archivedAt: null },
+    ]);
+    const ids = new Set((await loadGraph(ctx)).nodes.map((n) => n.id));
+    expect(ids.has(ID("p"))).toBe(false);
+    expect(ids.has(ID("kid"))).toBe(false);
+    expect(ids.has(ID("live"))).toBe(true);
+    expect(ids.has(ID("proj"))).toBe(true);
+  });
+
+  it("보관 보드 밑 문서·보관 보드의 행(과 행 본문)은 빠지고 활성 보드는 남는다", async () => {
+    const at = new Date();
+    const docs = [
+      { id: ID("kid"), title: "보관보드 하위", markdown: "", parentId: ID("bArch"), projectId: null, archivedAt: null },
+      { id: ID("body1"), title: "보관 행 본문", markdown: "", parentId: null, projectId: null, archivedAt: null },
+      { id: ID("body2"), title: "활성 행 본문", markdown: "", parentId: null, projectId: null, archivedAt: null },
+      { id: ID("live"), title: "활성 문서", markdown: "", parentId: ID("bLive"), projectId: null, archivedAt: null },
+    ];
+    m(prisma.page.findMany).mockResolvedValue([
+      { id: ID("bArch"), title: "보관 보드", markdown: "", parentId: null, projectId: null, archivedAt: at, kind: "database" },
+      { id: ID("bLive"), title: "활성 보드", markdown: "", parentId: null, projectId: null, archivedAt: null, kind: "database" },
+      ...docs.map((d) => ({ ...d, kind: "doc" })),
+    ]);
+    m(prisma.dbRow.findMany).mockResolvedValue([
+      { id: ID("r1"), databasePageId: ID("bArch"), contentPageId: ID("body1"), props: {} },
+      { id: ID("r2"), databasePageId: ID("bLive"), contentPageId: ID("body2"), props: {} },
+    ]);
+    const ids = new Set((await loadGraph(ctx)).nodes.map((n) => n.id));
+    expect(ids.has(ID("kid"))).toBe(false);
+    expect(ids.has(ID("body1"))).toBe(false);
+    expect(ids.has(ID("r1"))).toBe(false);
+    expect(ids.has(ID("live"))).toBe(true);
+    expect(ids.has(ID("body2"))).toBe(true);
+    expect(ids.has(ID("r2"))).toBe(true);
+  });
+});

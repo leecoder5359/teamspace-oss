@@ -4,6 +4,12 @@ import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
 import { complete } from "@/lib/llm";
 import { buildOnboardingPrompt, parseOnboardingJson, diffOnboarding } from "@/lib/extract";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ExtractBody = z.object({
+  pageId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -14,7 +20,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { pageId?: string };
+  const parsed = await readBody(request, ExtractBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const pageId = body.pageId?.trim();
   if (!pageId) return NextResponse.json({ error: "pageId가 필요합니다." }, { status: 400 });
   // D3: 못 보는 문서를 LLM 파이프라인에 넣어 요약·추출로 우회 열람할 수 없다.
@@ -27,7 +35,7 @@ export async function POST(request: Request) {
   });
   if (!page) return NextResponse.json({ error: "문서를 찾을 수 없습니다." }, { status: 404 });
 
-  const raw = await complete(buildOnboardingPrompt(page.title, page.markdown ?? ""));
+  const raw = await complete(buildOnboardingPrompt(page.title, page.markdown ?? ""), { feature: "onboarding-extract", workspaceId });
   if (raw === null) {
     return NextResponse.json(
       { ok: false, error: "LLM 미설정/실패. ASK_LLM_PROVIDER(api|cli) 또는 키를 확인하세요.", proposals: [] },

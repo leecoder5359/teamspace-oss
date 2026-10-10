@@ -4,6 +4,22 @@ import { resolveMemberRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { requireProject } from "@/lib/pageGuard";
 import { normalizeStack } from "@/lib/lessonInject";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ProjectPatchBody = z.object({
+  name: z.string().optional(),
+  short: z.string().nullable().optional(),
+  color: z.string().optional(),
+  description: z.string().nullable().optional(),
+  leadId: z.string().nullable().optional(),
+  repoUrl: z.string().nullable().optional(),
+  repoPath: z.string().nullable().optional(),
+  repoBranch: z.string().nullable().optional(),
+  docsDir: z.string().nullable().optional(),
+  archived: z.boolean().optional(),
+  stack: z.union([z.array(z.string()), z.string()]).nullable().optional(),
+});
 
 const COLORS = ["blue", "orange", "purple", "green", "red", "gray"];
 
@@ -22,18 +38,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as {
-    name?: string;
-    short?: string | null;
-    color?: string;
-    description?: string | null;
-    leadId?: string | null;
-    repoUrl?: string | null;
-    repoPath?: string | null;
-    repoBranch?: string | null;
-    docsDir?: string | null;
-    stack?: string[] | string | null;
-  };
+  const parsed = await readBody(req, ProjectPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
 
   const data: Record<string, unknown> = {};
   if (body.stack !== undefined) {
@@ -42,6 +49,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!st.ok) return NextResponse.json({ error: st.error }, { status: 400 });
     data.stack = st.stack;
   }
+  // 보관(F10): true=지금 시각(이미 보관이면 원래 시각 유지) · false=해제. 기존 쓰기 게이트(edit) 그대로.
+  if (body.archived !== undefined) data.archivedAt = body.archived ? (project.archivedAt ?? new Date()) : null;
   if (typeof body.name === "string") {
     const name = body.name.trim();
     if (!name) return NextResponse.json({ error: "이름은 비울 수 없습니다." }, { status: 400 });

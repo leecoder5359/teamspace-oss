@@ -31,6 +31,8 @@ export default function Projects({
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 보관 포함(F10) — 서버가 내려준 초기 목록은 활성만이라, 켜면 ?archived=all 로 다시 읽는다.
+  const [showArchived, setShowArchived] = useState(false);
   const [form, setForm] = useState({ name: "", short: "", color: "blue", leadId: "", description: "", repoUrl: "", repoPath: "" });
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,8 +75,8 @@ export default function Projects({
     if (p.boardPageId) router.push(`/p/${p.boardPageId}?view=kanban`);
   }
 
-  async function refresh() {
-    const res = await fetch("/api/projects", { cache: "no-store" });
+  async function refresh(withArchived = showArchived) {
+    const res = await fetch(withArchived ? "/api/projects?archived=all" : "/api/projects", { cache: "no-store" });
     if (res.ok) {
       const data = (await res.json()) as { projects: ProjectStat[] };
       setProjects(data.projects);
@@ -125,6 +127,20 @@ export default function Projects({
     await refresh();
   }
 
+  async function handleArchive(p: ProjectStat, archived: boolean) {
+    const res = await fetch(`/api/projects/${p.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archived }),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      flashErr(data.error ?? (archived ? "보관 실패" : "보관 해제 실패"));
+      return;
+    }
+    await refresh();
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* 헤더 툴바 */}
@@ -133,8 +149,19 @@ export default function Projects({
           <Icon name="folder" size={16} />
         </span>
         <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>프로젝트</span>
-        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{projects.length}개</span>
+        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{showArchived ? `활성 ${projects.filter((p) => !p.archivedAt).length} · 보관 ${projects.filter((p) => p.archivedAt).length}` : `${projects.length}개`}</span>
         <span style={{ flex: 1 }} />
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => {
+              setShowArchived(e.target.checked);
+              void refresh(e.target.checked);
+            }}
+          />
+          보관 포함
+        </label>
         <button className="ws-btn-soft" onClick={() => (formOpen ? closeForm() : openCreate())}>
           <Icon name={formOpen ? "close" : "plus"} size={14} />
           {formOpen ? "취소" : "새 프로젝트"}
@@ -312,6 +339,7 @@ export default function Projects({
                   onOpen={() => openBoard(p)}
                   onEdit={() => openEdit(p)}
                   onDelete={() => void handleDelete(p)}
+                  onArchive={() => void handleArchive(p, !p.archivedAt)}
                 />
               ))}
             </div>
@@ -328,11 +356,13 @@ function ProjectCard({
   onOpen,
   onEdit,
   onDelete,
+  onArchive,
 }: {
   p: ProjectStat;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onArchive: () => void;
 }) {
   const accent = colorFor(p.color);
   const distTotal = p.statusBuckets.reduce((s, b) => s + b.count, 0);
@@ -360,6 +390,7 @@ function ProjectCard({
         borderRadius: 14,
         padding: "16px 16px 14px",
         cursor: p.boardPageId ? "pointer" : "default",
+        opacity: p.archivedAt ? 0.62 : 1, // 보관 카드는 흐리게(F10)
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -400,6 +431,17 @@ function ProjectCard({
           </>
         ) : (
           <>
+            <button
+              className="ws-btn-soft"
+              onClick={(e) => {
+                stop(e);
+                onArchive();
+              }}
+              title={p.archivedAt ? "보관 해제 — 사이드바 그룹과 선택 목록에 다시 나와요" : "보관 — 선택 목록에서 빠지고 사이드바에는 (보관) 으로 남아요"}
+              style={{ padding: "0 8px", height: 26 }}
+            >
+              {p.archivedAt ? "해제" : "보관"}
+            </button>
             <button
               className="ws-icon-btn"
               onClick={(e) => {
@@ -446,6 +488,22 @@ function ProjectCard({
         >
           {p.name}
         </span>
+        {p.archivedAt && (
+          <span
+            style={{
+              flexShrink: 0,
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "var(--text-muted)",
+              background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
+              padding: "1px 6px",
+              borderRadius: 999,
+              lineHeight: 1.7,
+            }}
+          >
+            보관됨
+          </span>
+        )}
         {p.short && (
           <span
             style={{

@@ -30,8 +30,27 @@ describe("MarkdownPreview 표·헤딩·코드펜스", () => {
 
   it("h4 를 헤딩으로 렌더한다(#### 리터럴 아님)", () => {
     const { container } = render(<MarkdownPreview markdown={"#### 소제목"} />);
-    expect(container.querySelector("h4")?.textContent).toBe("소제목");
+    // 끝의 '#' 은 hover 앵커(U5) — 헤딩 글자 자체는 첫 자식이다
+    expect(container.querySelector("h4")?.firstChild?.textContent).toBe("소제목");
     expect(container.textContent).not.toContain("####");
+  });
+
+  it("헤딩마다 id 와 '#' 앵커 — 같은 제목은 -2, 인용 안 헤딩도 같은 순번", () => {
+    const { container } = render(<MarkdownPreview markdown={"## 설치 방법\n\n> ## 설치 방법\n\n### 맥"} />);
+    const hs = Array.from(container.querySelectorAll("h2,h3"));
+    expect(hs.map((h) => h.id)).toEqual(["설치-방법", "설치-방법-2", "맥"]);
+    const anchor = hs[1].querySelector("a.ws-heading-anchor");
+    expect(anchor?.getAttribute("href")).toBe("#설치-방법-2");
+    expect(anchor?.getAttribute("aria-label")).toBe("이 절 링크");
+    expect(hs[1].lastElementChild).toBe(anchor);
+  });
+
+  it("headingIds={false} 면 헤딩에 id·'#' 앵커를 붙이지 않는다(임베드용)", () => {
+    const { container } = render(<MarkdownPreview markdown={"## 개요\n\n### 맥"} headingIds={false} />);
+    const hs = Array.from(container.querySelectorAll("h2,h3"));
+    expect(hs.map((h) => h.textContent)).toEqual(["개요", "맥"]);
+    expect(hs.map((h) => h.hasAttribute("id"))).toEqual([false, false]);
+    expect(container.querySelector("a.ws-heading-anchor")).toBeNull();
   });
 
   it("코드펜스 안의 내용을 원본 그대로 보존한다", () => {

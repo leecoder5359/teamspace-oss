@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
@@ -35,11 +37,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string; p
   const prop = await loadProp(id, propId, guard.workspaceId);
   if (!prop) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as {
-    name?: string;
-    addOption?: { name?: string; color?: string };
-    renameOption?: { id?: string; name?: string };
-  };
+  const parsedBody = await readBody(
+    req,
+    z.object({
+      name: z.string().optional(),
+      addOption: z.object({ name: z.string().optional(), color: z.string().optional() }).optional(),
+      renameOption: z.object({ id: z.string().optional(), name: z.string().optional() }).optional(),
+    }),
+  );
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
 
   const data: { name?: string; config?: object } = {};
   if (body.name !== undefined) {

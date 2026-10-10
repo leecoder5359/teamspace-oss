@@ -15,6 +15,7 @@
    ===================================================================== */
 
 import { createHash } from "node:crypto";
+import { archivedPageIds } from "@/lib/pageArchive";
 import { prisma } from "@/lib/prisma";
 import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { pageAccess, projectAccess, type AccessIndex } from "@/lib/pageAccess";
@@ -74,10 +75,11 @@ function getRaw(workspaceId: string): { gen: number; raw: Promise<Raw> } {
 }
 
 async function loadRaw(workspaceId: string) {
-  const [pages, projects, decisions, lessons, risks, rows, titleProps, stored] = await Promise.all([
+  const [allPages, projects, decisions, lessons, risks, rows, titleProps, stored] = await Promise.all([
+    // 보관은 보드(database)에도 걸리므로 문서와 보드를 한 번에 읽는다(보관 집합용 id·parentId·archivedAt·kind).
     prisma.page.findMany({
-      where: { workspaceId, kind: "doc", deletedAt: null },
-      select: { id: true, title: true, markdown: true, parentId: true, projectId: true },
+      where: { workspaceId, kind: { in: ["doc", "database"] }, deletedAt: null },
+      select: { id: true, title: true, markdown: true, parentId: true, projectId: true, archivedAt: true, kind: true },
     }),
     prisma.project.findMany({ where: { workspaceId }, select: { id: true, name: true } }),
     prisma.decision.findMany({ where: { workspaceId }, select: { id: true, title: true, context: true, decision: true, projectId: true } }),
@@ -94,7 +96,14 @@ async function loadRaw(workspaceId: string) {
     }),
     prisma.graphEdge.findMany({ where: { workspaceId, kind: "related" }, select: { fromId: true, toId: true, kind: true } }),
   ]);
-  return { pages, projects, decisions, lessons, risks, rows, titleProps, stored };
+  // 보관(F2)은 조상 규칙까지 적용한다. 보드(database)도 보관되므로 문서뿐 아니라 보드까지 넣어 집합을 만든다.
+  // 보관 보드 밑의 문서와 보관 보드의 행(및 행 본문 문서)도 뺀다. 프로젝트는 보관돼도 유지한다.
+  const archived = archivedPageIds(allPages);
+  const pages = allPages.filter((p) => p.kind !== "database");
+  const activeRows = rows.filter((r) => !archived.has(r.databasePageId) && !(r.contentPageId && archived.has(r.contentPageId)));
+  const droppedBodies = new Set(rows.filter((r) => r.contentPageId && archived.has(r.databasePageId)).map((r) => r.contentPageId as string));
+  const activePages = pages.filter((p) => !archived.has(p.id) && !droppedBodies.has(p.id)).map((p) => ({ id: p.id, title: p.title, markdown: p.markdown, parentId: p.parentId, projectId: p.projectId }));
+  return { pages: activePages, projects, decisions, lessons, risks, rows: activeRows, titleProps, stored };
 }
 
 /** 권한으로 거른 입력의 지문 — 보이는 노드 집합과 권한에 따라 지워지는 연결(projectId·contentPageId)을 담는다. */

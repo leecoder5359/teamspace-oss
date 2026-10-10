@@ -3,40 +3,80 @@ import { isRestrictedPage } from "@/lib/pageGuard";
 import { pushNotification, userIdsByNames } from "@/lib/activity";
 import { postMessage } from "@/lib/slack";
 import type { NotifEvent } from "@/app/generated/prisma/enums";
+import {
+  selectRules,
+  statusOf,
+  taskAssignedMessage,
+  taskCreatedMessage,
+  taskDueInboxMessage,
+  taskDueMessage,
+  taskStatusMessage,
+  titleOf,
+  type PropLite,
+} from "./notify.pure";
 
-/** 프로젝트 규칙이 있으면 그것만, 없으면 전역(projectId=null) 규칙. 가장 구체적 우선. */
-export function selectRules<T extends { projectId: string | null }>(rules: T[], projectId: string | null): T[] {
-  if (projectId != null) {
-    const scoped = rules.filter((r) => r.projectId === projectId);
-    if (scoped.length > 0) return scoped;
-  }
-  return rules.filter((r) => r.projectId === null);
-}
+// 알림 IO(DB 조회·슬랙 발송). 규칙 선택·행 속성 해석·메시지 조립은 lib/notify.pure.ts 로 분리했고,
+// 아래 re-export 로 기존 import 경로(@/lib/notify)를 유지한다.
+export * from "./notify.pure";
+
+/** fireNotif 결과 — 기존 호출부(void fireNotif(...))는 무시해도 된다. */
+export type NotifResult = {
+  /** 성공적으로 보낸 채널 수 */
+  delivered: number;
+  /** 실패한 발송 수(슬랙 오류·예외) */
+  failed: number;
+  /** 첫 실패 사유(슬랙 error 코드 또는 예외 메시지) */
+  error?: string;
+  /** 보낼 곳이 없었다 — 매칭 규칙 없음(폴백 없을 때), 또는 폴백했는데 Slack 미연결·기본 채널 없음 */
+  noTarget?: boolean;
+};
 
 /**
  * 도메인 이벤트 발생 시 매칭되는 NotifRule(활성·target=channel)로 슬랙 알림 발송.
- * 발송은 postMessage 경유라 NotifLog(kind: notification)에 자동 기록된다.
- * 알림 실패가 도메인 작업(태스크 생성/변경)을 막지 않도록 모두 안전 처리.
+ * 규칙 선택은 selectRules — 프로젝트 규칙이 있으면 그것만, 없으면 전역(projectId=null) 규칙.
+ * `fallbackToDefault` 면 매칭 규칙이 하나도 없을 때 SlackInstall 기본 채널로 보낸다(주간 다이제스트 —
+ * 규칙을 만들기 전에도 종전처럼 기본 채널로 가야 한다). text 는 가공하지 않고 그대로 postMessage 에 넘긴다
+ * (자르기·이스케이프 없음 — 다이제스트 mrkdwn 이 그대로 간다).
+ * 발송은 postMessage 경유라 NotifLog(kind: opts.kind ?? "notification")에 자동 기록된다.
+ * 알림 실패가 도메인 작업(태스크 생성/변경)을 막지 않도록 throw 하지 않는다 — 결과만 돌려준다.
  */
-export async function fireNotif(workspaceId: string, event: NotifEvent, text: string, projectId?: string | null): Promise<void> {
+export async function fireNotif(
+  workspaceId: string,
+  event: NotifEvent,
+  text: string,
+  projectId?: string | null,
+  opts: { kind?: string; fallbackToDefault?: boolean } = {},
+): Promise<NotifResult> {
+  const kind = opts.kind ?? "notification";
   try {
     const rules = await prisma.notifRule.findMany({
       where: { workspaceId, event, enabled: true, target: "channel" },
     });
     const selected = selectRules(rules, projectId ?? null);
-    await Promise.all(
+    if (selected.length === 0) {
+      if (!opts.fallbackToDefault) return { delivered: 0, failed: 0, noTarget: true };
+      const r = await postMessage(workspaceId, { text, kind });
+      if (r.ok) return { delivered: 1, failed: 0 };
+      if (r.error === "no_channel" || r.error === "not_connected") return { delivered: 0, failed: 0, noTarget: true, error: r.error };
+      return { delivered: 0, failed: 1, error: r.error };
+    }
+    const results = await Promise.all(
       selected.map((r) =>
-        postMessage(workspaceId, { channel: r.targetId, text, kind: "notification" }).catch(() => undefined),
+        postMessage(workspaceId, { channel: r.targetId, text, kind }).catch((e: unknown) => ({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        })),
       ),
     );
-  } catch {
-    /* 알림은 베스트에포트 */
+    const bad = results.filter((r) => !r.ok);
+    return { delivered: results.length - bad.length, failed: bad.length, ...(bad.length ? { error: bad[0].error ?? "post_failed" } : {}) };
+  } catch (e) {
+    /* 알림은 베스트에포트 — 규칙 조회 실패 등 */
+    return { delivered: 0, failed: 1, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
 /* ── 태스크(보드 행) 이벤트 헬퍼 ── */
-type PropLite = { id: string; name: string; type: string; config: unknown };
-
 async function loadBoard(databasePageId: string): Promise<{ workspaceId: string | null; projectId: string | null; props: PropLite[] }> {
   const page = await prisma.page.findUnique({ where: { id: databasePageId }, select: { workspaceId: true, projectId: true } });
   const props = (await prisma.dbProperty.findMany({ where: { databasePageId } })) as unknown as PropLite[];
@@ -51,22 +91,11 @@ async function loadBoard(databasePageId: string): Promise<{ workspaceId: string 
   }
   return { workspaceId: page?.workspaceId ?? null, projectId: page?.projectId ?? null, props };
 }
-function titleOf(props: PropLite[], rowProps: Record<string, unknown>): string {
-  const tp = props.find((p) => p.type === "text") ?? props[0];
-  const v = tp ? rowProps[tp.id] : undefined;
-  return (typeof v === "string" && v) || "(제목 없음)";
-}
-function statusOf(props: PropLite[], rowProps: Record<string, unknown>): string | null {
-  const sp = props.find((p) => p.type === "select" && /상태|status/i.test(p.name)) ?? props.find((p) => p.type === "select");
-  if (!sp) return null;
-  const opts = ((sp.config as { options?: { id: string; name: string }[] })?.options) ?? [];
-  return opts.find((o) => o.id === rowProps[sp.id])?.name ?? null;
-}
 
 export async function notifyTaskCreated(databasePageId: string, rowProps: Record<string, unknown>): Promise<void> {
   try {
     const { workspaceId, projectId, props } = await loadBoard(databasePageId);
-    if (workspaceId) await fireNotif(workspaceId, "task_created", `🆕 새 태스크: ${titleOf(props, rowProps)}`, projectId);
+    if (workspaceId) await fireNotif(workspaceId, "task_created", taskCreatedMessage(titleOf(props, rowProps)), projectId);
   } catch {
     /* best-effort */
   }
@@ -79,7 +108,7 @@ export async function notifyTaskStatus(databasePageId: string, oldProps: Record<
     const oldS = statusOf(props, oldProps);
     const newS = statusOf(props, newProps);
     if (oldS === newS) return;
-    await fireNotif(workspaceId, "task_status", `🔄 ${titleOf(props, newProps)} · 상태: ${oldS ?? "—"} → ${newS ?? "—"}`, projectId);
+    await fireNotif(workspaceId, "task_status", taskStatusMessage(titleOf(props, newProps), oldS, newS), projectId);
   } catch {
     /* best-effort */
   }
@@ -101,7 +130,7 @@ export async function notifyTaskAssigned(
     await fireNotif(
       workspaceId,
       "task_assigned",
-      `👤 ${title} · 담당: ${oldAssignee ? `${oldAssignee} → ` : ""}${newAssignee}`,
+      taskAssignedMessage(title, oldAssignee, newAssignee),
       projectId,
     );
   } catch {
@@ -153,7 +182,7 @@ export async function notifyTasksDue(todayISO?: string): Promise<{ notified: num
         await fireNotif(
           board.workspaceId,
           "task_due",
-          `${overdue ? "⏰ 마감 지남" : "📅 오늘 마감"}: ${titleOf(props, rp)} (마감 ${due})`,
+          taskDueMessage(titleOf(props, rp), due, overdue),
           board.projectId,
         );
         await prisma.notifLog
@@ -163,7 +192,7 @@ export async function notifyTasksDue(todayISO?: string): Promise<{ notified: num
         const assignee = assigneeProp ? ((rp[assigneeProp.id] as string | undefined)?.trim() ?? "") : "";
         if (assignee) {
           const ids = await userIdsByNames(board.workspaceId, [assignee]);
-          await pushNotification(board.workspaceId, ids, "due", `${overdue ? "⏰ 마감 지남" : "📅 오늘 마감"}: ${titleOf(props, rp)}`, `/p/${board.id}`);
+          await pushNotification(board.workspaceId, ids, "due", taskDueInboxMessage(titleOf(props, rp), overdue), `/p/${board.id}`);
         }
         notified++;
       }

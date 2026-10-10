@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const EntityPatchBody = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  fields: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -14,7 +22,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const found = await prisma.entity.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as { name?: string; description?: string; fields?: string };
+  const parsed = await readBody(req, EntityPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   if (body.name !== undefined && !body.name.trim()) return NextResponse.json({ error: "엔티티 이름을 입력해 주세요." }, { status: 400 });
   await prisma.entity.update({
     where: { id },

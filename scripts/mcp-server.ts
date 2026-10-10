@@ -14,6 +14,9 @@ import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { fetchWithRetry } from "../lib/retryAfter";
+import { isTaskNote } from "../lib/taskNotes";
+import { DOC_TYPES } from "../lib/docOrganize";
 import { bundleFromPath } from "../lib/sites/pathBundle";
 
 function config(): { base: string; token: string } {
@@ -32,7 +35,7 @@ function config(): { base: string; token: string } {
 const { base, token } = config();
 
 async function api(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<unknown> {
-  const res = await fetch(`${base}${path}`, {
+  const doFetch = (signal?: AbortSignal) => fetch(`${base}${path}`, {
     method,
     headers: {
       "x-ws-token": token,
@@ -42,6 +45,10 @@ async function api(method: string, path: string, body?: unknown, idempotencyKey?
       ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
+  });
+  const { res } = await fetchWithRetry(doFetch, {
+    onRetry: (wait) => console.error(`429 — ${Math.ceil(wait / 1000)}s 뒤 재시도`),
   });
   const text = await res.text();
   let data: unknown;
@@ -65,20 +72,29 @@ const server = new McpServer({ name: "teamspace", version: "1.0.0" });
 server.registerTool(
   "context_get",
   {
-    description: "워크스페이스 컨텍스트 스냅샷(팀 레슨·열린 태스크·문서·결정·리스크·용어). cwd 를 주면 프로젝트 스코프.",
-    inputSchema: { cwd: z.string().optional() },
+    description:
+      "워크스페이스 컨텍스트 스냅샷(팀 레슨·열린 태스크·문서·결정·리스크·용어). cwd 를 주면 프로젝트 스코프. 기본은 압축본(≈10KB). full=true 는 전체(100KB+) — 꼭 필요할 때만.",
+    inputSchema: { cwd: z.string().optional(), full: z.boolean().optional() },
   },
-  async ({ cwd }) => jsonResult(await api("GET", `/api/context?format=json${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ""}`)),
+  async ({ cwd, full }) =>
+    jsonResult(await api("GET", `/api/context?format=json${full ? "" : "&compact=1"}${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ""}`)),
 );
 
 server.registerTool(
   "task_list",
   {
-    description: "태스크 목록. assignee='me' 면 내 담당만, board 로 특정 보드 지정.",
-    inputSchema: { board: z.string().optional(), assignee: z.string().optional() },
+    description: "태스크 목록. 기본은 열린 태스크 50건. 전체는 status='all', 더 보려면 limit(최대 200). assignee='me' 면 내 담당만, board 로 특정 보드 지정. 응답 {total,shown,tasks} — total 은 status·assignee 필터 뒤·limit 앞의 건수(status=open 이면 완료·취소 제외), shown 은 실제로 담긴 수.",
+    inputSchema: {
+      board: z.string().optional(),
+      assignee: z.string().optional(),
+      status: z.enum(["open", "all"]).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+    },
   },
-  async ({ board, assignee }) => {
+  async ({ board, assignee, status, limit }) => {
     const q = new URLSearchParams();
+    if (status) q.set("status", status);
+    if (limit) q.set("limit", String(limit));
     if (board) q.set("board", board);
     if (assignee) q.set("assignee", assignee);
     return jsonResult(await api("GET", `/api/tasks${q.size ? `?${q}` : ""}`));
@@ -150,10 +166,33 @@ server.registerTool(
 
 server.registerTool(
   "doc_list",
-  { description: "문서 목록(kind=doc).", inputSchema: {} },
-  async () => {
-    const r = (await api("GET", "/api/pages")) as { pages: { id: string; title: string; kind: string; projectId: string | null }[] };
-    return jsonResult(r.pages.filter((p) => p.kind === "doc"));
+  {
+    description:
+      "문서 목록(kind=doc). 태스크 설명([태스크 설명]/docType=task_note)은 기본 제외(includeTaskNotes=true 로 포함). 보관된 문서도 기본 제외(archived=only 는 보관함만, archived=all 은 둘 다). updatedAt 내림차순, limit 기본 30. { total, shown, docs } 반환 — total>shown 이면 projectId·folder·docType 으로 좁혀라.",
+    inputSchema: {
+      projectId: z.string().optional(),
+      folder: z.string().optional(),
+      docType: z.string().optional(),
+      includeTaskNotes: z.boolean().optional(),
+      archived: z.enum(["only", "all"]).optional(),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ projectId, folder, docType, includeTaskNotes, archived, limit }) => {
+    type P = { id: string; title: string; kind: string; projectId: string | null; docType?: string | null; parentId?: string | null; updatedAt?: string };
+    const r = (await api("GET", `/api/pages${archived === "only" ? "?archived=1" : archived === "all" ? "?archived=all" : ""}`)) as { pages: P[] };
+    const byId = new Map(r.pages.map((p) => [p.id, p]));
+    const filtered = r.pages
+      .filter((p) => p.kind === "doc")
+      .filter((p) => includeTaskNotes || !isTaskNote(p))
+      .filter((p) => !projectId || p.projectId === projectId)
+      .filter((p) => !docType || p.docType === docType)
+      .filter((p) => !folder || (p.parentId ? byId.get(p.parentId)?.title === folder : false))
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+    const docs = filtered.slice(0, limit ?? 30).map((p) => ({
+      id: p.id, title: p.title, projectId: p.projectId, docType: p.docType ?? null, parentId: p.parentId ?? null, updatedAt: p.updatedAt ?? null,
+    }));
+    return jsonResult({ total: filtered.length, shown: docs.length, docs });
   },
 );
 
@@ -175,8 +214,15 @@ server.registerTool(
 server.registerTool(
   "doc_create",
   {
-    description: "새 문서 생성(TeamSpace 가 문서의 단일 저장소 — 레포 md 대신 항상 이걸 사용).",
-    inputSchema: { title: z.string(), projectId: z.string().optional(), parentId: z.string().optional() },
+    description:
+      "새 문서 생성(TeamSpace 가 문서의 단일 저장소 — 레포 md 대신 항상 이걸 사용). 새 문서는 folder(부모 폴더 제목, 없으면 생성)를 지정한다. 태스크 설명은 docType task_note.",
+    inputSchema: {
+      title: z.string(),
+      projectId: z.string().optional(),
+      parentId: z.string().optional(),
+      folder: z.string().optional(),
+      docType: z.enum(DOC_TYPES).optional(),
+    },
   },
   async (args) => jsonResult(await api("POST", "/api/pages", { ...args, kind: "doc" })),
 );
@@ -190,15 +236,29 @@ server.registerTool(
 server.registerTool(
   "lesson_list",
   {
-    description: "팀 작업규칙·레슨 목록(id·제목·범위만 — 전문은 lesson_get). projectId 를 주면 전역+그 프로젝트.",
-    inputSchema: { projectId: z.string().optional() },
+    description:
+      "팀 작업규칙·레슨 목록(id·제목·범위만 — 전문은 lesson_get). projectId 를 주면 전역+그 프로젝트. q 는 제목 부분일치(대소문자 무시), limit 기본 100(최대 300). 응답 {total,shown,lessons} — total 은 q·projectId 필터 뒤·limit 앞의 건수.",
+    inputSchema: {
+      projectId: z.string().optional(),
+      q: z.string().optional(),
+      limit: z.number().int().min(1).max(300).optional(),
+    },
   },
-  async ({ projectId }) => {
+  async ({ projectId, q, limit }) => {
     // 본문까지 돌려주면 수십~백 KB 가 되어 도구 결과로 쓸 수 없다 — 목록은 색인만.
-    const { lessons } = (await api("GET", `/api/lessons${projectId ? `?projectId=${projectId}` : ""}`)) as {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set("projectId", projectId);
+    if (q) qs.set("q", q);
+    qs.set("limit", String(limit ?? 100));
+    const { lessons, total } = (await api("GET", `/api/lessons?${qs}`)) as {
       lessons: { id: string; title: string; projectId: string | null; stack: string | null }[];
+      total: number;
     };
-    return jsonResult(lessons.map((l) => ({ id: l.id, title: l.title, scope: l.projectId ?? (l.stack ? `stack:${l.stack}` : "global") })));
+    return jsonResult({
+      total,
+      shown: lessons.length,
+      lessons: lessons.map((l) => ({ id: l.id, title: l.title, scope: l.projectId ?? (l.stack ? `stack:${l.stack}` : "global") })),
+    });
   },
 );
 
@@ -238,8 +298,14 @@ server.registerTool(
 
 server.registerTool(
   "inbox_list",
-  { description: "내 알림 인박스(배정·멘션·승인·마감).", inputSchema: { unread: z.boolean().optional() } },
-  async ({ unread }) => jsonResult(await api("GET", `/api/notifications${unread ? "?unread=1" : ""}`)),
+  { description: "내 알림 인박스(배정·멘션·승인·마감). group:true 면 같은 종류·링크 24h 묶음(groups)으로.", inputSchema: { unread: z.boolean().optional(), group: z.boolean().optional(), type: z.string().optional().describe("쉼표 구분: approval,assigned,mention,due,proposal,shared") } },
+  async ({ unread, group, type }) => {
+    const qs = new URLSearchParams();
+    if (unread) qs.set("unread", "1");
+    if (group) qs.set("group", "1");
+    if (type) qs.set("type", type);
+    return jsonResult(await api("GET", `/api/notifications${qs.size ? `?${qs}` : ""}`));
+  },
 );
 
 server.registerTool(

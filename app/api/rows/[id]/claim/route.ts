@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
@@ -17,7 +19,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
-  const body = (await req.json().catch(() => ({}))) as { force?: boolean };
+  const parsedBody = await readBody(req, z.object({ force: z.boolean().optional() }));
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
 
   const row = await prisma.dbRow.findUnique({
     where: { id },

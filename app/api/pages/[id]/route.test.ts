@@ -89,3 +89,32 @@ describe("pages/[id] — A5 그래프 캐시 무효화", () => {
     expect(invalidateGraphCache).toHaveBeenCalledWith("w1");
   });
 });
+
+describe("pages/[id] — 깨진 JSON 은 400(readBody)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "editor", actor: { name: "U" } });
+    m(requirePage).mockResolvedValue({ page: { id: "p1" } });
+    m(prisma.page.findUnique).mockResolvedValue(page);
+  });
+  const raw = (method: string, body: string) => new Request("http://t/api/pages/p1", { method, body });
+
+  it("PUT·PATCH 깨진 JSON → 400, 저장·변경 안 함", async () => {
+    for (const [fn, method] of [[PUT, "PUT"], [PATCH, "PATCH"]] as const) {
+      const res = await fn(raw(method, "{markdown: oops"), ctx);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("본문이 올바른 JSON 이 아닙니다.");
+    }
+    expect(prisma.page.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("PUT 타입이 틀린 필드(markdown 숫자) → 400", async () => {
+    expect((await PUT(put({ markdown: 1 }), ctx)).status).toBe(400);
+  });
+
+  it("PUT baseRev 가 숫자가 아니면 검사만 건너뛴다(opt-in 유지)", async () => {
+    m(prisma.$transaction).mockResolvedValue([]);
+    expect((await PUT(put({ title: "x", baseRev: "nope" }), ctx)).status).toBe(200);
+  });
+});

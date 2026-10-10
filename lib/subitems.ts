@@ -38,8 +38,14 @@ export function wouldCycle(rowId: string, newParentId: string | null, parentOf: 
  * 표에 그릴 순서로 편다: 부모 바로 뒤에 자식이 오고 depth 가 붙는다.
  *
  * @param collapsed 접힌 부모 id — 그 자손은 결과에서 빠진다.
+ * @param opts.rootCompare 최상위 행 순서(기본 position). 서브아이템은 항상 부모 아래 position 순서다 —
+ *   "열린 것만" 의 수정 시각 정렬이 트리를 평평하게 펴지 않게(2A 후속).
  */
-export function buildRowTree<T extends TreeRow>(rows: T[], collapsed?: Set<string>): LaidOutRow<T>[] {
+export function buildRowTree<T extends TreeRow>(
+  rows: readonly T[],
+  collapsed?: ReadonlySet<string>,
+  opts: { rootCompare?: (a: T, b: T) => number } = {},
+): LaidOutRow<T>[] {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const children = new Map<string, T[]>();
   const roots: T[] = [];
@@ -57,7 +63,7 @@ export function buildRowTree<T extends TreeRow>(rows: T[], collapsed?: Set<strin
   }
 
   const byPos = (a: T, b: T) => (a.position ?? 0) - (b.position ?? 0);
-  roots.sort(byPos);
+  roots.sort(opts.rootCompare ? (a, b) => opts.rootCompare!(a, b) || byPos(a, b) : byPos);
   for (const list of children.values()) list.sort(byPos);
 
   const out: LaidOutRow<T>[] = [];

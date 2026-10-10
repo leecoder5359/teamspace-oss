@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { Icon } from "./ws/icons";
 import { parseMarkdown } from "@/lib/md/parse";
+import { headingIdMap } from "@/lib/md/headings";
+import MermaidBlock from "./MermaidBlock";
 import type { Align, Block, Inline, ListItem } from "@/lib/md/ast";
 
 /* =====================================================================
@@ -30,6 +32,8 @@ export type MarkdownPreviewProps = {
   onTagClick?: (tag: string) => void;
   /** ![[문서]] 임베드 렌더 위임(B2). 없으면 링크 카드로 대체. */
   renderEmbed?: (target: string) => ReactNode;
+  /** 헤딩에 id·# 앵커를 붙일지(기본 true). 임베드 안의 미리보기는 false — 호스트 문서의 id 와 겹치지 않게. */
+  headingIds?: boolean;
 };
 
 /* ---------- 링크 안전화 ---------- */
@@ -46,7 +50,10 @@ const isExternal = (href: string) => /^https?:/i.test(href);
 
 /* ---------- 인라인 ---------- */
 
-type Ctx = Pick<MarkdownPreviewProps, "resolveLink" | "onCreateLink" | "onTagClick">;
+type Ctx = Pick<MarkdownPreviewProps, "resolveLink" | "onCreateLink" | "onTagClick"> & {
+  /** 헤딩 블록 → id. 문서 전체를 한 번에 계산해야 중복 제목이 -2, -3 을 받는다(lib/md/headings). */
+  headingIds?: Map<Block, string>;
+};
 
 function renderInline(nodes: Inline[], ctx: Ctx, keyPrefix = ""): ReactNode[] {
   return nodes.map((n, i) => {
@@ -271,9 +278,16 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
     switch (b.t) {
       case "heading": {
         const H = `h${b.level}` as "h1";
+        const id = ctx.headingIds?.get(b);
         return (
-          <H key={key} style={H_STYLE[b.level]}>
+          <H key={key} id={id} style={H_STYLE[b.level]}>
             {renderInline(b.c, ctx, key + "-")}
+            {/* 앵커는 마지막 자식이어야 한다 — DocToc 이 헤딩 글자에서 끝의 '#' 을 떼어낸다 */}
+            {id && (
+              <a href={`#${id}`} className="ws-heading-anchor" aria-label="이 절 링크">
+                #
+              </a>
+            )}
           </H>
         );
       }
@@ -326,8 +340,8 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
         );
       }
 
-      case "code":
-        return (
+      case "code": {
+        const pre = (
           <pre
             key={key}
             style={{ overflowX: "auto", margin: "10px 0", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "12px 14px" }}
@@ -340,6 +354,10 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
             </code>
           </pre>
         );
+        // ```mermaid 는 다이어그램으로 — 로딩 중·실패 시엔 위 원문 블록을 그대로 보인다
+        if (b.lang?.toLowerCase() === "mermaid") return <MermaidBlock key={key} code={b.v} fallback={pre} />;
+        return pre;
+      }
 
       case "table":
         return (
@@ -429,7 +447,7 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
 
 /* ---------- 공개 컴포넌트 ---------- */
 
-export default function MarkdownPreview({ markdown, resolveLink, onCreateLink, onTagClick, renderEmbed }: MarkdownPreviewProps) {
+export default function MarkdownPreview({ markdown, resolveLink, onCreateLink, onTagClick, renderEmbed, headingIds = true }: MarkdownPreviewProps) {
   if (!markdown.trim()) {
     return (
       <div className="ws-doc-prose">
@@ -438,6 +456,6 @@ export default function MarkdownPreview({ markdown, resolveLink, onCreateLink, o
     );
   }
   const doc = parseMarkdown(markdown);
-  const ctx: Ctx = { resolveLink, onCreateLink, onTagClick };
+  const ctx: Ctx = { resolveLink, onCreateLink, onTagClick, headingIds: headingIds ? headingIdMap(doc.blocks) : undefined };
   return <div className="ws-doc-prose">{renderBlocks(doc.blocks, ctx, "", renderEmbed)}</div>;
 }

@@ -103,7 +103,7 @@ export function scoreItem(item: PaletteItem, query: string): Scored | null {
  * 동점이면 제목이 짧은 것 → 사전순으로 갈라 **매번 같은 순서**가 나오게 한다
  * (순서가 흔들리면 근육 기억이 안 생기고, 그게 팔레트를 못 쓰게 만든다).
  */
-export function rankItems(items: PaletteItem[], query: string, limit = 30): Scored[] {
+export function rankItems(items: readonly PaletteItem[], query: string, limit = 30): Scored[] {
   const out: Scored[] = [];
   for (const it of items) {
     const s = scoreItem(it, query);

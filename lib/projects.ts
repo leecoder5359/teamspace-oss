@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ArchivedMode } from "@/lib/pagesList";
 
 /* 프로젝트 카드용 집계 — projects 화면(서버 라우트)과 /api/projects(GET)가 공유.
    프로젝트에 소속된 database 페이지(태스크 보드)의 DbRow에서 지표를 파생한다.
@@ -19,6 +20,8 @@ export type ProjectStat = {
   repoPath: string | null;
   repoBranch: string | null;
   docsDir: string | null;
+  /** 보관 시각(ISO) — null=활성(F10). */
+  archivedAt: string | null;
   lead: { id: string; name: string | null; image: string | null } | null;
   boardPageId: string | null; // 카드 클릭 시 이동할 첫 보드
   taskCount: number;
@@ -44,6 +47,7 @@ export type RawProject = {
   repoPath?: string | null;
   repoBranch?: string | null;
   docsDir?: string | null;
+  archivedAt?: Date | null;
   lead: { id: string; name: string | null; image: string | null } | null;
   pages: {
     id: string;
@@ -84,9 +88,13 @@ function isDoneName(name: string): boolean {
   return /완료|done|close|닫|해결|resolved/i.test(name);
 }
 
-export async function getProjectsWithStats(workspaceId: string): Promise<ProjectStat[]> {
+/** archived: active(기본)=보관 제외 · only=보관함 · all=둘 다 (F10) */
+export async function getProjectsWithStats(workspaceId: string, archived: ArchivedMode = "active"): Promise<ProjectStat[]> {
   const projects = await prisma.project.findMany({
-    where: { workspaceId },
+    where: {
+      workspaceId,
+      ...(archived === "active" ? { archivedAt: null } : archived === "only" ? { archivedAt: { not: null } } : {}),
+    },
     orderBy: { position: "asc" },
     include: {
       lead: { select: { id: true, name: true, image: true } },
@@ -172,6 +180,7 @@ export function buildProjectStats(projects: RawProject[]): ProjectStat[] {
       short: p.short,
       color: p.color,
       description: p.description,
+      archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
       repoUrl: p.repoUrl ?? null,
       repoPath: p.repoPath ?? null,
       repoBranch: p.repoBranch ?? null,

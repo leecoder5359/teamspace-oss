@@ -22,6 +22,8 @@ const API_ROOT = join(__dirname, "..", "app", "api");
 //   site-intake — 퍼블리시 페이지의 폼 제출. /pub 프록시가 쿠키·authorization 을 떼어 내므로 세션으로는 올 수 없다.
 //     프록시 서명(x-teamspace-proxy-sig, AUTH_SECRET 파생 MAC) + siteAccessById 초대 재판정이 자체 인증 게이트.
 //     쓰기 전용(POST 만) — 게스트가 읽어 갈 경로가 없다.
+//   csp-report — 브라우저가 CSP 위반을 자격 증명 없이 POST 한다. 쓰기 전용(로그만, 저장·읽기 경로 없음) ·
+//     본문 2KB 상한 + 미들웨어 IP 당 1/분 레이트리밋(csp 정책)이 방어선.
 const WHITELIST = new Set([
   "auth/[...nextauth]/route.ts",
   "health/route.ts",
@@ -32,6 +34,7 @@ const WHITELIST = new Set([
   "pair/[code]/route.ts",
   "pair/[code]/route-rule/route.ts",
   "site-intake/route.ts",
+  "csp-report/route.ts",
 ]);
 
 function collectRoutes(dir: string, prefix = ""): string[] {

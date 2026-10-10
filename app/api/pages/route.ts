@@ -1,54 +1,45 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
 import { loadAccess, visibleOnly, projectAccess, gatePage } from "@/lib/pageGuard";
-import { effectiveRestricted } from "@/lib/pageAccess";
 import { withIdempotency } from "@/lib/idempotency";
 import { recordActivity } from "@/lib/activity";
 import { invalidateGraphCache } from "@/lib/graphLoad";
 import { pageFilePath, writeContent } from "@/lib/content";
+import { DOC_TYPES } from "@/lib/docOrganize";
+import { listPagesForSidebar } from "@/lib/pagesList";
+import { findSameTitleDocs } from "@/lib/docTitles";
+import { TEMPLATES, TEMPLATE_NAMES, renderTemplate } from "@/lib/docTemplates";
 import { writeDoc, docFolderFor, listDocFolder, uniqueFileName } from "@/lib/docFiles";
+
+const CreateBody = z.object({
+  title: z.string().optional(),
+  parentId: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  kind: z.enum(["doc", "database"]).optional(),
+  docType: z.enum(DOC_TYPES).optional(),
+  folder: z.string().trim().min(1).max(80).optional(),
+  // 문서 템플릿(F9) — 지정하면 초기 본문이 템플릿이고 docType 기본값도 템플릿 것.
+  template: z.enum(TEMPLATE_NAMES).optional(),
+  // true 면 같은 프로젝트에 같은 제목 문서가 이미 있을 때 409 로 거절한다(기본은 경고만).
+  ifUnique: z.boolean().optional(),
+});
 
 // fs を使うルートは nodejs ランタイム必須
 export const runtime = "nodejs";
 
 // GET /api/pages → ワークスペースページ一覧 (ツリー構成用フラット配列)
-export async function GET() {
+// 본문은 lib/pagesList — (ws) 레이아웃이 첫 페인트용으로 같은 목록을 주입한다(U7).
+// ?archived=1 → 보관된 문서만(보관함) · ?archived=all → 둘 다 (F2). 기본은 보관 제외.
+export async function GET(request?: Request) {
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
-  const { workspaceId } = guard;
-  const pages = await prisma.page.findMany({
-    where: { workspaceId, deletedAt: null },
-    orderBy: [{ parentId: "asc" }, { position: "asc" }],
-    select: { id: true, title: true, icon: true, parentId: true, position: true, kind: true, projectId: true, updatedAt: true, visibility: true },
-  });
-  // D3: 사이드바·팔레트·검색 후보가 전부 이 목록을 쓴다 — 여기서 새면 제목이 통째로 샌다.
-  const idx = await loadAccess(guard);
-  const visible = visibleOnly(idx, pages);
-
-  /* D3 후속: 화면에 자물쇠를 그릴 수 있게 '비공개인지'를 함께 준다.
-     접근 판정과는 목적이 다르다 — 볼 수 있는 사람에게도 "이건 모두에게 열려
-     있지 않다"를 알려야, 잠근 줄 모르고 쓰거나 잠긴 줄 모르고 공유를 기대하는
-     일이 없다. `restrictedSelf` 는 잠금이 이 페이지에서 시작됐는지(트리에서
-     자손마다 자물쇠를 겹쳐 그리지 않으려고). */
-  const projects = await prisma.project.findMany({
-    where: { workspaceId },
-    select: { id: true, visibility: true },
-  });
-  const nodes = visible.map((p) => ({
-    id: p.id,
-    parentId: p.parentId,
-    projectId: p.projectId,
-    createdById: "",
-    visibility: p.visibility,
-  }));
-  const all = effectiveRestricted(nodes, projects);
-  const own = effectiveRestricted(nodes, projects, { ownOnly: true });
-
-  return NextResponse.json({
-    pages: visible.map((p) => ({ ...p, restricted: all.has(p.id), restrictedSelf: own.has(p.id) })),
-  });
+  const a = request ? new URL(request.url).searchParams.get("archived") : null;
+  const archived = a === "1" ? "only" : a === "all" ? "all" : "active";
+  return NextResponse.json({ pages: await listPagesForSidebar(guard, undefined, { archived }) });
 }
 
 // POST /api/pages → 新規ページ作成
@@ -58,24 +49,18 @@ export async function POST(request: Request) {
   const { workspaceId, userId } = guard;
   // 멱등성(W8): Idempotency-Key 재요청 시 저장 응답 반환 — 재시도 이중 생성 방지
   return withIdempotency(request, guard, async () => {
-  const body = (await request.json().catch(() => ({}))) as {
-    title?: string;
-    parentId?: string | null;
-    kind?: string;
-    projectId?: string | null;
-  };
+  const parsed = await readBody(request, CreateBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const title = body.title?.trim() || "Untitled";
   // kind が明示的に "database" の場合のみ database。それ以外はすべて doc (スキーマデフォルト)
   const kind = body.kind === "database" ? "database" : "doc";
 
-  const last = await prisma.page.findFirst({
-    where: { workspaceId, parentId: body.parentId ?? null },
-    orderBy: { position: "desc" },
-    select: { position: true },
-  });
-  const position = (last?.position ?? -1) + 1;
-
-  const initialMd = `# ${title}\n`;
+  const initialMd = body.template && kind === "doc"
+    // 템플릿 날짜는 한국 날짜 — UTC 로 자르면 KST 00:00~08:59 에 만든 문서가 전날로 찍힌다.
+    ? renderTemplate(body.template, title, new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }))
+    : `# ${title}\n`;
+  const docType = body.docType ?? (body.template ? TEMPLATES[body.template].docType : null);
 
   // 참조 검증 — PATCH(app/api/pages/[id]/route.ts)는 이미 400 으로 거절하는데
   // POST 만 무검증이었다(D6). 남의 워크스페이스 프로젝트를 지정하면 그 프로젝트의
@@ -103,8 +88,28 @@ export async function POST(request: Request) {
     if ("err" in parentGate) return parentGate.err;
   }
 
+  // 같은 제목 문서 경고(B5) — doc 만. ifUnique 면 거절, 아니면 응답에 warnings 로 알린다.
+  // 가시성(D3): 못 보는 문서는 중복으로 치지 않는다(존재·제목 노출 방지). 필터 후 10건으로 자른다.
+  const dups =
+    kind === "doc"
+      ? visibleOnly(access, await findSameTitleDocs(prisma, { workspaceId, projectId: refProjectId, title })).slice(0, 10)
+      : [];
+  if (body.ifUnique && dups.length > 0) {
+    return NextResponse.json({ error: "같은 제목 문서가 이미 있습니다.", duplicates: dups }, { status: 409 });
+  }
+
+  const nextPosition = async (parentId: string | null) => {
+    const last = await prisma.page.findFirst({
+      where: { workspaceId, parentId },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    });
+    return (last?.position ?? -1) + 1;
+  };
+
   if (kind === "database") {
     // database ページ: ファイルなし (unchanged)
+    const position = await nextPosition(body.parentId ?? null);
     const page = await prisma.page.create({
       data: {
         workspaceId,
@@ -140,20 +145,58 @@ export async function POST(request: Request) {
     });
   }
 
-  const folder = docFolderFor(project);
-  const existing = await listDocFolder(folder);
+  const dir = docFolderFor(project);
+  const existing = await listDocFolder(dir);
+
+  // folder: 같은 위치(워크스페이스·프로젝트·최상위)의 같은 제목 폴더 문서를 찾아 부모로 쓰고, 없으면 먼저 만든다.
+  let parentId = body.parentId ?? null;
+  if (body.folder && !parentId) {
+    const folderTitle = body.folder.trim();
+    const found = await prisma.page.findFirst({
+      where: { workspaceId, projectId: refProjectId, parentId: null, kind: "doc", deletedAt: null, title: folderTitle },
+      select: { id: true },
+    });
+    if (found) {
+      const folderGate = gatePage(access, found.id, "edit");
+      if ("err" in folderGate) return folderGate.err;
+      parentId = found.id;
+    } else {
+      const folderMd = `# ${folderTitle}\n`;
+      const folderFile = uniqueFileName(existing, folderTitle);
+      const folderPath = `${dir}/${folderFile}`;
+      const folderPage = await prisma.page.create({
+        data: {
+          workspaceId,
+          parentId: null,
+          title: folderTitle,
+          position: await nextPosition(null),
+          kind: "doc",
+          projectId: refProjectId,
+          createdById: userId,
+          markdown: folderMd,
+          filePath: folderPath,
+        },
+      });
+      await writeDoc(folderPath, folderMd);
+      existing.push(folderFile);
+      parentId = folderPage.id;
+    }
+  }
+
+  const position = await nextPosition(parentId);
   const filename = uniqueFileName(existing, title);
-  const filePath = `${folder}/${filename}`;
+  const filePath = `${dir}/${filename}`;
 
   // 행을 먼저 만들고 파일을 쓴다 — 순서가 반대였을 땐 create 가 실패해도
   // 이미 쓴 .md 가 고아로 남았다(D6).
   const page = await prisma.page.create({
     data: {
       workspaceId,
-      parentId: body.parentId ?? null,
+      parentId,
       title,
       position,
       kind: "doc",
+      docType,
       projectId: refProjectId,
       createdById: userId,
       markdown: initialMd,
@@ -167,6 +210,7 @@ export async function POST(request: Request) {
   recordActivity(guard, "created", "doc", page.title, page.id);
   return NextResponse.json({
     page: { id: page.id, title: page.title, parentId: page.parentId, position, kind: page.kind },
+    ...(dups.length > 0 ? { warnings: [{ code: "duplicate_title", pages: dups }] } : {}),
   });
   });
 }

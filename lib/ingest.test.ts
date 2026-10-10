@@ -62,3 +62,20 @@ describe("resolveRouteByCwd (프로젝트 스코프 포함)", () => {
     expect(resolveRouteByCwd(undefined, rules)).toBeNull();
   });
 });
+
+import { resolveRouteByCwd as resolveRouteFrozen } from "./ingest";
+
+describe("cwd 규칙 해석 — 입력 불변", () => {
+  it("동결한 규칙 배열로 호출해도 throw 없고 순서가 그대로다", () => {
+    const rules = [
+      { cwdPrefix: "/a", workspaceId: "w1", priority: 0 },
+      { cwdPrefix: "/a/b", workspaceId: "w2", priority: 0 },
+      { cwdPrefix: "/a/b/c", workspaceId: "w3", priority: 5 },
+    ];
+    const before = rules.map((r) => r.cwdPrefix);
+    Object.freeze(rules);
+    expect(resolveWorkspaceByCwd("/a/b/c/d", rules)).toBe("w3");
+    expect(resolveRouteFrozen("/a/b/x", rules)?.workspaceId).toBe("w2");
+    expect(rules.map((r) => r.cwdPrefix)).toEqual(before);
+  });
+});

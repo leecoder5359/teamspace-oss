@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const DecisionPatchBody = z.object({
+  title: z.string().optional(),
+  context: z.string().optional(),
+  decision: z.string().optional(),
+  status: z.string().optional(),
+  projectId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -16,13 +26,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const found = await prisma.decision.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as {
-    title?: string;
-    context?: string;
-    decision?: string;
-    status?: string;
-    projectId?: string;
-  };
+  const parsed = await readBody(req, DecisionPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   // 종전엔 projectId 를 아예 읽지 않아 --project 가 조용히 무시됐다(400 도 아니고 무반응).
   let projectPatch: { projectId: string | null } | Record<string, never> = {};
   if (body.projectId !== undefined) {

@@ -1,0 +1,10 @@
+{
+  "<projectId>": [
+    {"folder": "태스크 설명", "keywords": ["[태스크 설명]"], "docType": "task_note"},
+    {"folder": "설계·계획", "keywords": ["설계", "구현 계획", "^RFC-[0-9]+ "]},
+    {"folder": "배포·운영", "keywords": ["배포", "런북", "env"]}
+  ],
+  "__none__": [
+    {"folder": "설계·계획", "keywords": ["^W[0-9]+-[0-9]+ "], "project": "<projectId>"}
+  ]
+}

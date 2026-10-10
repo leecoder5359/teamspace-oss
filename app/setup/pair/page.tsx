@@ -25,7 +25,7 @@ export default async function PairPage({
     <main style={{ padding: 40, maxWidth: 480 }}>
       <h1>새 기기 연결 승인</h1>
       <p>이 브라우저 계정({session.user.email})으로 새 머신에 에이전트 토큰을 발급합니다.</p>
-      <ApproveButton code={code} />
+      <ApproveButton code={code} label="이 기기 승인" />
     </main>
   );
 }

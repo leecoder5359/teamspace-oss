@@ -21,6 +21,7 @@ export async function GET() {
       status: true,
       startedAt: true,
       endedAt: true,
+      lastSeenAt: true, // 대시보드 '최근 활동' = lastSeenAt ?? endedAt ?? startedAt
       _count: { select: { items: true } },
     },
   });

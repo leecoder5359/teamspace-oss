@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts", "**/*.test.tsx"],
-    exclude: ["node_modules", ".next", "app/generated"],
+    // .claude/worktrees: 진행 중인 서브에이전트 워크트리의 테스트를 메인 게이트가 주워 빨갛게 만들던 것 차단
+    exclude: ["**/node_modules/**", ".next", "app/generated", ".claude/worktrees/**"],
   },
 });

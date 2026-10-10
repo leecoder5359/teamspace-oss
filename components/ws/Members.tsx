@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Avatar } from "./ui";
+import { splitMembers } from "@/lib/membersSplit";
+import Link from "next/link";
 import { Icon } from "./icons";
 
 /* =====================================================================
@@ -33,6 +35,9 @@ export type MemberItem = {
   teamId: string | null;
   status: string; // active | invited
   user: MemberUser;
+  kind: "human" | "agent";
+  /** 에이전트 계정이면 가장 최근 토큰 요약(없으면 null/undefined). */
+  agentToken?: { id: string; name: string; lastUsedAt: string | null; revokedAt: string | null } | null;
 };
 
 export type TeamItem = {
@@ -44,6 +49,13 @@ export type TeamItem = {
 
 const TEAM_COLORS = ["blue", "orange", "purple", "green", "red", "gray"];
 const teamColor = (c: string) => (c === "blue" ? "#2F62FF" : c === "orange" ? "#F5A623" : c === "purple" ? "#7165E3" : c === "green" ? "#12B886" : c === "red" ? "#F0494E" : "#9AA0A6");
+
+/* 마지막 사용일: SSR/클라이언트 간 하이드레이션 불일치를 막으려고 시간대를 고정한다. */
+function fmtAgentLastUsed(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("ko-KR", { month: "short", day: "numeric", timeZone: "Asia/Seoul" });
+}
 
 /* admin 멤버가 이 member 1명뿐인지 확인 */
 function isLastAdmin(members: MemberItem[], memberId: string): boolean {
@@ -72,6 +84,7 @@ export default function Members({
   const [teamName, setTeamName] = useState("");
   const [teamColorSel, setTeamColorSel] = useState("blue");
   const [feedback, setFeedback] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const { humans, agents } = splitMembers(members);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* 팀 생성 */
@@ -175,7 +188,7 @@ export default function Members({
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-          {members.length}명
+          {humans.length}명
         </span>
       </div>
 
@@ -277,10 +290,10 @@ export default function Members({
           {/* ── 멤버 목록 ── */}
           <section style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
             <div style={listHeadStyle}>
-              워크스페이스 멤버&ensp;·&ensp;{members.length}명
+              워크스페이스 멤버&ensp;·&ensp;{humans.length}명
             </div>
 
-            {members.length === 0 ? (
+            {humans.length === 0 ? (
               <div
                 className="ws-empty-hint"
                 style={{ padding: "28px 20px", textAlign: "center" }}
@@ -288,7 +301,7 @@ export default function Members({
                 아직 멤버가 없어요.
               </div>
             ) : (
-              members.map((member, idx) => {
+              humans.map((member, idx) => {
                 const isMe = member.user.id === currentUserId;
                 const locked = isLastAdmin(members, member.id);
                 const displayName = member.user.name ?? member.user.email;
@@ -441,6 +454,59 @@ export default function Members({
                     >
                       <Icon name="close" size={13} />
                     </button>
+                  </div>
+                );
+              })
+            )}
+          </section>
+
+          {/* ── 에이전트 (토큰 계정, 읽기 전용) ── */}
+          <section style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+            <div style={{ ...listHeadStyle, display: "flex", alignItems: "center", gap: 8 }}>
+              <span>에이전트&ensp;·&ensp;{agents.length}</span>
+              <span style={{ flex: 1 }} />
+              <Link href="/settings#agent-tokens" style={{ fontSize: 12, fontWeight: 600, textTransform: "none", letterSpacing: 0, color: "var(--color-primary)" }}>
+                설정 › 에이전트 토큰에서 관리
+              </Link>
+            </div>
+            {agents.length === 0 ? (
+              <div className="ws-empty-hint" style={{ padding: "28px 20px", textAlign: "center" }}>
+                에이전트 토큰이 없어요.
+              </div>
+            ) : (
+              agents.map((member, idx) => {
+                const tok = member.agentToken;
+                const displayName = member.user.name ?? member.user.email;
+                return (
+                  <div
+                    key={member.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "12px 16px",
+                      ...(idx > 0 ? { borderTop: "1px solid var(--border-subtle)" } : {}),
+                    }}
+                  >
+                    <span aria-hidden style={{ width: 36, height: 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-sunken, var(--border-subtle))", fontSize: 18, flexShrink: 0 }}>
+                      🤖
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {displayName}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {tok ? `${tok.name} · 마지막 사용 ${tok.lastUsedAt ? fmtAgentLastUsed(tok.lastUsedAt) : "없음"}` : "토큰 정보 없음"}
+                      </div>
+                    </div>
+                    {tok?.revokedAt && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-danger)", background: "color-mix(in srgb, var(--color-danger) 12%, var(--surface-card))", padding: "1px 6px", borderRadius: 999, flexShrink: 0, lineHeight: 1.7 }}>
+                        회수됨
+                      </span>
+                    )}
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-sub)", border: "1px solid var(--border-default)", padding: "2px 9px", borderRadius: 999, flexShrink: 0 }}>
+                      {ROLE_LABELS[member.role]}
+                    </span>
                   </div>
                 );
               })

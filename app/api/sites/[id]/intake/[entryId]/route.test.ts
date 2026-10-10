@@ -22,7 +22,7 @@ const KEY = randomBytes(32).toString("base64");
 const params = { params: Promise.resolve({ id: "cs1", entryId: "e1" }) };
 const ctx = { workspaceId: "w1", userId: "u1", role: "admin", actor: { type: "user", id: "u1", name: "나" } };
 /** AUTH_OPEN_API=true 로 세션 없이 얻은 admin (lib/workspace.resolveLegacyCtx). */
-const bootstrapCtx = { workspaceId: "w1", userId: "u9", role: "admin", actor: { type: "agent", id: "u9", name: "legacy-cli" } };
+const bootstrapCtx = { workspaceId: "w1", userId: "u9", role: "admin", actor: { type: "agent", id: "u9", name: "legacy-cli" }, bootstrap: true };
 const FIELDS = [{ label: "계정 이메일", value: "ops@partner.com" }, { label: "비밀번호", value: " 앞뒤공백유지 " }];
 const AAD = { siteId: "cs1", submittedBy: "vendor@partner.com", service: "Supabase" };
 

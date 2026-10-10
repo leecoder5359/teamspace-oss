@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const RouteRuleBody = z.object({
+  cwdPrefix: z.string().optional(),
+  projectId: z.string().nullable().optional(),
+  priority: z.number().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -22,11 +30,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
-  const body = (await req.json().catch(() => ({}))) as {
-    cwdPrefix?: string;
-    projectId?: string | null;
-    priority?: number;
-  };
+  const parsed = await readBody(req, RouteRuleBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const cwdPrefix = body.cwdPrefix?.trim() ?? "";
   if (!cwdPrefix.startsWith("/")) {
     return NextResponse.json({ error: "cwdPrefix 는 절대경로 접두사여야 합니다." }, { status: 400 });

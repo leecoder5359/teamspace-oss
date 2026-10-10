@@ -65,7 +65,7 @@ export async function GET(request: Request) {
   }
 
   // LLM 키가 있으면 합성, 실패/부재 시 추출형으로 폴백.
-  const llm = await synthesizeAnswer(question, sources);
+  const llm = await synthesizeAnswer(question, sources, { feature: "ask", workspaceId });
   const answer = llm ?? buildExtractiveAnswer(sources);
   return NextResponse.json({ question, answer, mode: llm ? "llm" : "extractive", sources });
 }

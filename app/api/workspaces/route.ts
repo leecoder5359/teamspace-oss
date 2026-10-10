@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx, WS_COOKIE } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const WorkspaceBody = z.object({
+  name: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -32,7 +38,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
   const { userId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { name?: string };
+  const parsed = await readBody(request, WorkspaceBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "워크스페이스 이름을 입력해 주세요." }, { status: 400 });
 

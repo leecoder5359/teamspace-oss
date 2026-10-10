@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const GlossaryBody = z.object({
+  term: z.string().optional(),
+  definition: z.string().optional(),
+  sourcePageId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -18,7 +26,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { term?: string; definition?: string; sourcePageId?: string };
+  const parsed = await readBody(request, GlossaryBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const term = body.term?.trim();
   const definition = body.definition?.trim();
   const sourcePageId = body.sourcePageId?.trim() || null;

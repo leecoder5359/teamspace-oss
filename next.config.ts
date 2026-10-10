@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./lib/securityHeaders";
 
 const nextConfig: NextConfig = {
   // 폰 등 내부망(예: tailscale)에서 dev 서버 접속 시 cross-origin 차단 방지.
@@ -7,6 +8,11 @@ const nextConfig: NextConfig = {
   // 예: ALLOWED_DEV_ORIGINS="100.64.0.1,my-host.example.ts.net"
   allowedDevOrigins:
     process.env.ALLOWED_DEV_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? [],
+  // 전역 보안 헤더(CSP 는 Report-Only). /pub/* 는 라우트가 자체 sandbox CSP 를 내므로
+  // 제외 — 둘이 겹치면 CSP 가 교집합으로 적용돼 의도와 달라진다.
+  async headers() {
+    return [{ source: "/((?!pub/).*)", headers: securityHeaders({ reportOnly: true }) }];
+  },
   // curl 설치기 원라이너: /setup.sh, /setup/hooks/<name> 을 API 라우트로 매핑.
   async rewrites() {
     return {

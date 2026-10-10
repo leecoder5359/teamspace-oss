@@ -21,7 +21,7 @@ export type RouteRuleFull = RouteRule & { projectId: string | null };
  */
 export function resolveRouteByCwd<T extends RouteRule>(
   cwd: string | null | undefined,
-  rules: T[],
+  rules: readonly T[],
 ): T | null {
   if (!cwd) return null;
   const matches = rules.filter((r) => cwd.startsWith(r.cwdPrefix));
@@ -34,7 +34,7 @@ export function resolveRouteByCwd<T extends RouteRule>(
  * cwd → workspaceId. cwd 가 cwdPrefix 로 시작하는 규칙 중
  * 우선순위(priority) 높은 것, 동률이면 더 긴(구체적) 접두사 우선. 없으면 null.
  */
-export function resolveWorkspaceByCwd(cwd: string | null | undefined, rules: RouteRule[]): string | null {
+export function resolveWorkspaceByCwd(cwd: string | null | undefined, rules: readonly RouteRule[]): string | null {
   if (!cwd) return null;
   const matches = rules.filter((r) => cwd.startsWith(r.cwdPrefix));
   if (matches.length === 0) return null;

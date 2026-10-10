@@ -101,3 +101,17 @@ describe("buildProjectStats", () => {
     expect(stat.dueSoonCount).toBe(1);
   });
 });
+
+describe("buildProjectStats archivedAt (F10)", () => {
+  const base = { short: null, color: "blue", description: null, lead: null, pages: [] };
+  it("보관 시각은 ISO 문자열, 활성은 null", () => {
+    const [a, b, c] = buildProjectStats([
+      { id: "a", name: "A", ...base, archivedAt: new Date("2026-10-09T00:00:00.000Z") },
+      { id: "b", name: "B", ...base, archivedAt: null },
+      { id: "c", name: "C", ...base },
+    ]);
+    expect(a.archivedAt).toBe("2026-10-09T00:00:00.000Z");
+    expect(b.archivedAt).toBeNull();
+    expect(c.archivedAt).toBeNull();
+  });
+});

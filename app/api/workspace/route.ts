@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const WorkspacePatchBody = z.object({
+  name: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -37,7 +43,9 @@ export async function PATCH(request: Request) {
   if (member?.role !== "admin") {
     return NextResponse.json({ error: "관리자만 변경할 수 있습니다." }, { status: 403 });
   }
-  const body = (await request.json().catch(() => ({}))) as { name?: string };
+  const parsed = await readBody(request, WorkspacePatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "이름을 입력해 주세요." }, { status: 400 });
 

@@ -37,6 +37,8 @@ model User {
 
   rowComments RowComment[]
   pairings    Pairing[]
+  favorites   PageFavorite[]
+  visits      PageVisit[]
 
   publishedSites PublishedSite[] @relation("SiteCreatedBy")
 }
@@ -55,6 +57,7 @@ model Workspace {
   notifLogs      NotifLog[]
   schedules      Schedule[]
   claudeSessions ClaudeSession[]
+  pushLocks      PushLock[]
   routeRules     WorkspaceRouteRule[]
   agentTokens    AgentToken[]
   approvals      Approval[]
@@ -70,6 +73,10 @@ model Workspace {
   pairings       Pairing[]
   publishedSites PublishedSite[]
   graphEdges     GraphEdge[]
+  envVars        EnvVar[]
+  envOps         EnvOp[]
+  envTargets     EnvTarget[]
+  envAccessLogs  EnvAccessLog[]
 }
 
 enum Role {
@@ -152,21 +159,27 @@ model Project {
   position    Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  // 보관(F10) — null=활성. 삭제와 달리 페이지·지표는 그대로 두고 목록 기본 노출만 뺀다.
+  archivedAt  DateTime?
 
   // 프로젝트 단위 권한 (격차 D3) — 이 프로젝트의 페이지 전체에 적용된다.
   visibility Visibility     @default(inherit)
   grants     ProjectGrant[]
 
-  pages       Page[] // 이 프로젝트에 소속된 보드/문서
-  decisions   Decision[]
-  risks       Risk[]
-  qaScenarios QaScenario[]
+  pages            Page[] // 이 프로젝트에 소속된 보드/문서
+  decisions        Decision[]
+  risks            Risk[]
+  changelogEntries ChangelogEntry[]
+  qaScenarios      QaScenario[]
 
   lessons        Lesson[]
   approvals      Approval[]
   notifRules     NotifRule[]
   proposals      Proposal[]
   publishedSites PublishedSite[]
+  envVars        EnvVar[]
+  envOps         EnvOp[]
+  envTargets     EnvTarget[]
 
   @@index([workspaceId])
 }
@@ -178,18 +191,24 @@ enum PageKind {
 }
 
 model Page {
-  id          String    @id @default(cuid())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id          String         @id @default(cuid())
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
-  parent      Page?     @relation("PageTree", fields: [parentId], references: [id])
+  parent      Page?          @relation("PageTree", fields: [parentId], references: [id])
   parentId    String?
-  children    Page[]    @relation("PageTree")
-  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  children    Page[]         @relation("PageTree")
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectId   String?
-  kind        PageKind  @default(doc)
-  title       String    @default("Untitled")
+  kind        PageKind       @default(doc)
+  title       String         @default("Untitled")
   icon        String?
-  position    Int       @default(0)
+  /**
+   * 문서 종류(사이드바 아이콘·목록 필터). 폴더 기준이 아니다 — 폴더는 parentId.
+   */
+  docType     DocType?
+  favorites   PageFavorite[]
+  visits      PageVisit[]
+  position    Int            @default(0)
 
   // 본문의 소스오브트루스는 content/ 아래 md 파일이다 — 확정(결정 cmshmhos2, 2026-08-06).
   //
@@ -202,8 +221,10 @@ model Page {
   markdown    String? // 파생 캐시(검색·슬랙·세션 주입). 파일 저장 시 함께 갱신된다.
   contentHash String? // 파일 SHA. **현재 캐시 무효화에 쓰이지 않는다** — 저장 시 채워만 두고
   // 아무도 비교하지 않는다(전수조사 D17). 쓰거나 지우거나 결정 필요.
+  archivedAt  DateTime? // 보관(F2) — 휴지통과 달리 지워진 게 아니라 '치워둔' 상태. 사이드바·목록·검색 기본 제외
   deletedAt   DateTime? // 소프트 삭제(휴지통) — DELETE /api/pages 는 소프트, 영구 삭제는 /api/trash purge
   rev         Int       @default(0) // 본문 저장마다 +1 (낙관적 잠금 baseRev 비교 대상)
+  inferTriedAt DateTime? // 그래프 연관 추론(POST /api/graph/infer)을 시도한 시각 — 1회만. --retry 로 다시
 
   createdBy   User     @relation("PageCreatedBy", fields: [createdById], references: [id])
   createdById String
@@ -225,6 +246,7 @@ model Page {
 
   @@index([workspaceId, parentId])
   @@index([projectId])
+  @@index([workspaceId, inferTriedAt])
   // 검색 트라이그램 인덱스(격차 G1)를 **스키마에 선언해 둔다.**
   // 마이그레이션 20260808140000 에서 raw SQL 로만 만들었더니, 다음 `prisma migrate dev`
   // 가 "스키마에 없는 인덱스" 로 보고 조용히 DROP 하는 diff 를 만들어 냈다(D3 작업 중 실제로 발생).
@@ -504,6 +526,7 @@ enum NotifEvent {
   task_due
   comment_added
   doc_saved
+  weekly_digest // 프로젝트 주간 다이제스트(F6) — 워커·POST /api/digest 가 fireNotif 로 보낸다
 }
 
 enum NotifTarget {
@@ -533,7 +556,7 @@ model NotifLog {
   workspaceId String
   channel     String // "#qa-알림" 또는 대상
   text        String
-  kind        String    @default("manual") // manual | approval | reminder | test | notification | due_marker
+  kind        String    @default("manual") // manual | approval | reminder | test | notification | due_marker | digest | digest_marker
   // (앞의 넷만 적혀 있어 실제로 쓰이는 뒤 둘이 누락돼 있었다 — D17)
   state       String // sent | failed
   error       String?
@@ -627,6 +650,9 @@ model ChangelogEntry {
   id          String    @id @default(cuid())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
+  // 제품(프로젝트)별 변경 이력 — null = 공용. 프로젝트 삭제 시 이력은 남기고 공용으로 돌린다.
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
   version     String? // 예: v1.2.0
   title       String
   body        String?
@@ -634,6 +660,7 @@ model ChangelogEntry {
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId])
+  @@index([workspaceId, projectId])
 }
 
 // ---------- 문서 허브: 리스크(risks) / QA — 프로젝트 문서 ----------
@@ -780,12 +807,41 @@ model ClaudeSession {
   endedAt      DateTime?
   status       SessionStatus @default(active)
   lastSyncedAt DateTime?
+  // 라이브 세션 보드(Console 4): SessionStart 훅이 저장소 정보를 보내고, 하트비트·잠금 CLI 가 lastSeenAt 을 갱신한다.
+  branch       String?
+  repo         String? // 본체 레포 이름(워크트리면 본체 기준)
+  worktreePath String? // 연결된 워크트리일 때만(본체 체크아웃이면 null)
+  lastSeenAt   DateTime?
+  agentName    String? // 인입한 에이전트 토큰 이름(태스크 담당자와 같은 값)
 
   items SessionItem[]
 
   @@unique([workspaceId, externalId])
   @@index([workspaceId])
   @@index([externalId])
+  @@index([workspaceId, status])
+}
+
+// 공유 브랜치 푸시·배포 예약 잠금(Console 4). 이름당 한 행 — 만료(expiresAt<now)·해제(releasedAt)면 빈 잠금이다.
+// 잡기는 조건부 updateMany(내 것·빈 것만)라 동시에 잡아도 한쪽만 이긴다. 푸시를 막지 않는다(pre-push 는 경고만).
+model PushLock {
+  id             String    @id @default(cuid())
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId    String
+  name           String // 예: banjang/develop · teamspace/main · deploy:teamspace
+  holderName     String // 에이전트 토큰 이름(사람이면 사용자 이름)
+  holderUserId   String? // 알림 수신자(토큰의 시스템 User)
+  holderSession  String? // Claude 세션 id(있으면 같은 토큰의 다른 세션과 구분)
+  cwd            String?
+  branch         String?
+  note           String?
+  takenAt        DateTime  @default(now())
+  expiresAt      DateTime
+  releasedAt     DateTime?
+  lastNotifiedAt DateTime? // pre-push 경고 알림 5분 1회 제한
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([workspaceId, name])
 }
 
 model SessionItem {
@@ -1016,4 +1072,237 @@ model GraphEdge {
 
   @@unique([fromId, toId, kind])
   @@index([workspaceId])
+}
+
+// ---------- env 금고(설계: env 금고(Env Vault) 설계 · P1) ----------
+// 값은 AES-256-GCM 암호문("v1:iv:tag:ct")으로만 저장한다. AAD = workspaceId:projectId:env:key
+// (암호문을 다른 행으로 옮겨 붙이는 공격 차단). 마스터 키 = ENV_VAULT_KEY, 없으면 기능 비활성.
+model EnvVar {
+  id          String          @id @default(cuid())
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  env         String // local | dev | prod | 자유 문자열
+  key         String
+  sealed      String
+  keyVersion  Int             @default(1)
+  version     Int             @default(1)
+  valueLength Int             @default(0) // 화면 마스킹 길이용(값 자체는 아님)
+  note        String?
+  syncGroup   String? // 같은 값이어야 하는 키 묶음 이름(P3 불일치 경고용)
+  updatedById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  versions    EnvVarVersion[]
+
+  @@unique([projectId, env, key])
+  @@index([workspaceId])
+}
+
+// 덮어쓰기 직전의 암호문 이력(되돌리기용). AAD 는 원 행과 같다.
+model EnvVarVersion {
+  id          String   @id @default(cuid())
+  var         EnvVar   @relation(fields: [varId], references: [id], onDelete: Cascade)
+  varId       String
+  version     Int
+  sealed      String
+  updatedById String?
+  createdAt   DateTime @default(now())
+
+  @@index([varId])
+}
+
+// CLI 쓰기 작업(import)의 대기열 — 사람이 고위험 승인을 눌러야 적용된다.
+// sealedPayload 는 vars 전체 JSON 을 AAD "op:<id>" 로 봉인한 것, 적용 후 비운다.
+model EnvOp {
+  id            String     @id @default(cuid())
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  env           String
+  kind          String     @default("import") // import | push
+  mode          String     @default("merge") // merge | overwrite | push
+  // import: vars 전체 JSON · push: 요청 시 {versions}, claim 뒤 {digests}(값 아님) — 모두 AAD "op:<id>" 봉인
+  sealedPayload String?
+  keys          String[]   @default([])
+  approvalId    String?
+  // import: pending | applied | rejected | expired
+  // push:   pending | claimed | done | partial | failed | rejected | expired
+  status        String     @default("pending")
+  target        EnvTarget? @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  targetId      String?
+  createdById   String
+  createdAt     DateTime   @default(now())
+  expiresAt     DateTime
+  appliedAt     DateTime?
+  claimedAt     DateTime?
+
+  @@index([workspaceId])
+  @@index([approvalId])
+  @@index([targetId])
+}
+
+// push 대상(로컬 .env·AWS SSM·Vercel·GitHub Actions). config·account 는 비밀이 아니다(경로·이름·기대 계정).
+// 원격 반영은 CLI 가 로컬 로그인(aws·vercel·gh)으로 한다 — 서버는 클라우드 권한을 갖지 않는다.
+// lastPushed = 키 → 반영 당시 값의 HMAC 지문(valueDigest). 읽을 수 없는 대상(Vercel sensitive·GHA)의 동기 판정용.
+model EnvTarget {
+  id           String    @id @default(cuid())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId    String
+  env          String
+  kind         String // dotenv | ssm | vercel | gha
+  identity     String // 종류별 config 의 정체 문자열(같은 곳을 두 번 등록하지 않게)
+  config       Json
+  account      Json      @default("{}")
+  lastPushedAt DateTime?
+  lastPushed   Json?
+  // P3a 드리프트 점검 결과 — 키 → match|differs|missing_remote|remote_only|present (값·해시 없음, CLI 가 비교)
+  lastDriftAt  DateTime?
+  lastDrift    Json?
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  ops          EnvOp[]
+
+  @@unique([projectId, env, kind, identity])
+  @@index([workspaceId])
+}
+
+// 값 접근 감사 로그. 키 이름만 남기고 값은 절대 남기지 않는다.
+model EnvAccessLog {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  projectId   String?
+  env         String?
+  actorType   String // user | agent
+  actorId     String
+  actorName   String
+  action      String // list | reveal | set | delete | import_request | import_apply | pull | push_request | push | push_result | target_add | target_update | target_delete | drift | drift_read | meta
+  targetId    String?
+  keys        String[]  @default([])
+  viaFunnel   Boolean   @default(false)
+  at          DateTime  @default(now())
+
+  @@index([workspaceId, at])
+}
+
+enum DocType {
+  design
+  plan
+  brief
+  report
+  handoff
+  task_note
+  other
+}
+
+/// 사람별 즐겨찾기(사이드바 ⭐). 페이지가 휴지통에 가도 행은 남기고 화면에서만 숨긴다.
+model PageFavorite {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId    String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, pageId])
+  @@index([userId, position])
+}
+
+/// 사람별 최근 열람(사이드바 🕘). 사람당 20개만 유지 — lib/favorites.recordVisit 이 정리한다.
+model PageVisit {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId    String
+  visitedAt DateTime @default(now())
+
+  @@unique([userId, pageId])
+  @@index([userId, visitedAt])
+}
+
+/// TeamSpace 자신의 LLM 호출 기록(lib/llm.ts 가 호출마다 1행, 기록 실패는 호출측에 영향 없음).
+/// 프롬프트·응답 본문은 저장하지 않는다 — 기능·경로·모델·성패·시간·토큰만. 90일 뒤 정리(lib/aiRoutes/llmCalls.ts).
+/// workspaceId 는 관계 없이 문자열만 둔다(워크스페이스 밖 호출도 남길 수 있고, 삭제 순서에 묶이지 않게).
+model LlmCall {
+  id           String   @id @default(cuid())
+  workspaceId  String?
+  feature      String // ask·clip·graph-infer·qa-extract … (호출측 라벨)
+  provider     String // "api" | "cli" | "cache"(응답 캐시 적중 — 실제 호출 없음)
+  model        String
+  ok           Boolean
+  errorKind    String? // no_key·http_429·timeout·not_installed·exit·empty·network …
+  durationMs   Int
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+/// LLM 응답 캐시 — 같은 프롬프트(모델·system 포함)는 다시 부르지 않는다(A-5). 본문은 응답 텍스트만, 프롬프트는 해시만.
+model LlmCache {
+  id        String   @id @default(cuid())
+  key       String   @unique // sha256(provider·model·system·prompt[·workspaceId]) — workspaceId 가 있으면 키에 섞는다
+  workspaceId String? // 쓴 워크스페이스(없으면 서버 공용/구 행). 워크스페이스 삭제 시 deleteLlmCacheForWorkspace 로 정리
+  feature   String
+  model     String
+  text      String
+  createdAt DateTime @default(now())
+  lastHitAt DateTime @default(now())
+
+  @@index([lastHitAt])
+  @@index([workspaceId])
+}
+
+/// 레슨 주입 기록(레슨 주입 점검 화면) — /api/context?compact=1(세션 훅 주입)마다 1행.
+/// 레슨 본문은 저장하지 않는다 — 어떤 id 가 요약·제목만·'외 N개' 로 들어갔는지와 글자 수만. 90일 뒤 정리(lib/lessonInspect/log.ts).
+/// workspaceId·projectId 는 관계 없이 문자열만 둔다(LlmCall 과 같은 이유 — 삭제 순서에 묶이지 않게).
+model LessonInjection {
+  id          String   @id @default(cuid())
+  workspaceId String
+  actorName   String? // 에이전트 토큰 이름 또는 사람 이름
+  cwd         String?
+  projectId   String? // cwd → route-rule 로 해석된 프로젝트(없으면 null)
+  via         String // SessionStart | PostToolUse | unknown (훅이 &via= 로 보냄)
+  mode        String   @default("compact") // compact(새 세션 ~9KB) | brief(이어가기·압축 ~2.5KB — 요약 없이 제목만)
+  gistIds     String[] // 제목+요약으로 들어간 레슨
+  titleIds    String[] // 제목만 들어간 레슨
+  omittedIds  String[] // '외 N개' 로만 센 레슨
+  chars       Int // 컨텍스트 전체 글자 수
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+/// 레슨 전문 조회 기록 — 에이전트가 GET /api/lessons/<id>(MCP lesson_get) 로 읽을 때 1행. 90일 보관.
+model LessonRead {
+  id          String   @id @default(cuid())
+  workspaceId String
+  lessonId    String
+  actorName   String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([lessonId])
+}
+
+/// 주간 지표 스냅샷(피드백 루프 ①) — 워커가 매주 1행. 비교는 CLI/API 가 한다.
+model MetricSnapshot {
+  id          String   @id @default(cuid())
+  workspaceId String
+  weekKey     String   // ISO 주 "2026-W41"
+  data        Json
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, weekKey])
 }

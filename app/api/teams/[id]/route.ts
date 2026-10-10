@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const TeamPatchBody = z.object({
+  name: z.string().optional(),
+  color: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -16,7 +23,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!team || team.workspaceId !== workspaceId) {
     return NextResponse.json({ error: "팀을 찾을 수 없습니다." }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as { name?: string; color?: string };
+  const parsed = await readBody(req, TeamPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const data: { name?: string; color?: string } = {};
   if (body.name !== undefined) {
     const name = body.name.trim();

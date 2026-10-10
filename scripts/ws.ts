@@ -22,9 +22,20 @@
  */
 
 import "dotenv/config";
+import { defaultPrefix, parseReviewTables, planReviewImport, reviewTaskBody } from "../lib/reviewImport";
 import { findAssigneeProp, findDateProp, findStatusProp, optionIdByName } from "../lib/taskProps"; // .env 자동 로드 — WS_TOKEN/AUTH_CLI_TOKEN 인증 (감사 agent-1)
+import { TEMPLATES } from "../lib/docTemplates";
+import { draftFromCommits, gitRangeArg, parseGitLog, pickAnchorSource } from "../lib/changelogDraft";
+import { fetchWithRetry } from "../lib/retryAfter";
+import { clampLimitArg } from "../lib/taskFilter";
+import { pickRouteRule, resolveDraftProject } from "../lib/cwdProject";
+import { extractRehearsalBlock } from "../lib/rehearsalRecord";
+import { formatTokens } from "../lib/opsFormat";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { lockExtend, lockInstallHook, lockLs, lockPath, lockRelease, lockTake, sessionsLive } from "./wsLock";
+import { envDrift, envGroups, envImport, envLs, envPull, envPush, envTargetAdd, envTargetLs, envTargetRm, resolveProject } from "./wsEnv";
 
 // 토큰 체인: WS_TOKEN > ~/.claude/teamspace.json(에이전트 토큰). AUTH_CLI_TOKEN 폴백은
 // 서버에서 그 경로를 제거해(D12) 함께 뺐다 — 남겨두면 401 을 "토큰이 없다"로 오인하게 만든다.
@@ -40,23 +51,41 @@ const BASE = process.env.WS_BASE ?? FILE_CFG.base ?? "http://localhost:3002";
 const TOKEN = process.env.WS_TOKEN ?? FILE_CFG.token;
 
 // ── HTTP ──────────────────────────────────────────────────────────────────
-async function api(method: string, path: string, body?: unknown): Promise<unknown> {
+async function api(method: string, path: string, body?: unknown, opts: { timeoutMs?: number } = {}): Promise<unknown> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["content-type"] = "application/json";
   if (TOKEN) headers["x-ws-token"] = TOKEN;
+  // timeoutMs 는 응답 본문까지 포함한다(신호가 res.text() 도 끊는다). 기본은 무제한(종전 동작).
+  const timedOut = (err: unknown) => err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
   let res: Response;
+  let signal: AbortSignal | undefined;
   try {
-    res = await fetch(`${BASE}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  } catch {
+    ({ res, signal } = await fetchWithRetry(
+      (sig) =>
+        fetch(`${BASE}${path}`, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: sig,
+        }),
+      {
+        timeoutMs: opts.timeoutMs,
+        onRetry: (wait) => console.error(`429 — ${Math.ceil(wait / 1000)}s 뒤 재시도`),
+      },
+    ));
+  } catch (err) {
+    if (signal && timedOut(err)) throw new Error(`${method} ${path} 시간 초과(${opts.timeoutMs}ms)`);
     throw new Error(
       `${BASE} 에 연결할 수 없습니다. dev 서버를 먼저 띄우세요: pnpm exec next dev -p 3002`,
     );
   }
-  const text = await res.text();
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err) {
+    if (signal && timedOut(err)) throw new Error(`${method} ${path} 시간 초과(${opts.timeoutMs}ms)`);
+    throw err;
+  }
   let data: unknown;
   try {
     data = text ? JSON.parse(text) : undefined;
@@ -68,7 +97,7 @@ async function api(method: string, path: string, body?: unknown): Promise<unknow
       data && typeof data === "object" && data !== null && "error" in data
         ? String((data as { error: unknown }).error)
         : text;
-    throw new Error(`${method} ${path} → ${res.status}: ${msg}`);
+    throw Object.assign(new Error(`${method} ${path} → ${res.status}: ${msg}`), { status: res.status, body: data });
   }
   return data;
 }
@@ -296,7 +325,7 @@ add({
 });
 add({
   name: "task ls",
-  usage: "task ls [--board <id>] [--assignee <이름|me>]",
+  usage: "task ls [--board <id>] [--assignee <이름|me>] [--all] [--limit <n>]   (기본 열린 것 50건)",
   ep: ["tasks/route.ts"],
   run: async (a) => {
     const q = new URLSearchParams();
@@ -304,11 +333,17 @@ add({
     const asgn = flag(a, "assignee");
     if (b) q.set("board", b);
     if (asgn) q.set("assignee", asgn);
+    if (bool(a, "all")) q.set("status", "all");
+    const lim = flag(a, "limit");
+    if (lim) q.set("limit", String(clampLimitArg(lim)));
     const qs = q.toString();
     const r = (await api("GET", `/api/tasks${qs ? `?${qs}` : ""}`)) as {
+      total: number;
+      shown: number;
       tasks: { id: string; title: string; status: string | null; due: string | null; assignee: string | null }[];
     };
     for (const t of r.tasks) out(`${t.id}\t${t.status ?? "-"}\t${t.assignee ?? "-"}\t${t.due ?? "-"}\t${t.title}`);
+    out(`총 ${r.total}건 중 ${r.shown}건`);
   },
 });
 add({
@@ -321,6 +356,67 @@ add({
     const b = await loadBoard(flag(a, "board"));
     const props = buildProps(b, a, title);
     out(await api("POST", `/api/databases/${b.page.id}/rows`, { props }));
+  },
+});
+add({
+  name: "review import",
+  usage:
+    'review import <docId> [--prefix "[리뷰 10/08]"] [--board <id>] [--dry-run]   (리뷰 문서의 `## N.` 표 중 첫 열이 B1·U3·A-5 같은 코드인 행을 보드 태스크로 등록. 이미 `<접두어> <코드>` 제목이 있으면 건너뜀. 심각도→우선순위, 본문은 태스크 댓글)',
+  ep: ["pages/[id]/route.ts", "pages/route.ts", "databases/[id]/route.ts", "databases/[id]/rows/route.ts", "rows/[id]/comments/route.ts"],
+  run: async (a) => {
+    const docId = a.pos[0];
+    if (!docId) throw new Error("docId가 필요합니다: ws review import <docId> [--prefix ...] [--dry-run]");
+    const doc = (await api("GET", `/api/pages/${docId}`)) as { page?: { title?: string }; markdown?: string };
+    const rows = parseReviewTables(doc.markdown ?? "");
+    if (!rows.length) throw new Error("코드 행(B1·U3·A-5 …)이 있는 표를 찾지 못했습니다.");
+    const prefix = flag(a, "prefix") ?? defaultPrefix(doc.page?.title ?? "", new Date());
+    const dry = bool(a, "dry-run");
+    const b = await loadBoard(flag(a, "board"));
+    // 중복 판정은 보드 행 제목으로 한다 — /api/search 는 문서·결정만 색인하고 보드 행은 안 넣는다.
+    const titleProp = prop(b, /이름|name|title/i, "text") ?? b.properties.find((p) => p.type === "text");
+    const titles = b.rows.map((r) => (titleProp ? r.props[titleProp.id] : undefined)).filter((t): t is string => typeof t === "string");
+    // 심각도 → 우선순위 옵션 이름(기본 보드는 낮음/보통/높음 — '중간' 은 '보통' 으로).
+    const prioName: Record<string, string> = { 높음: "높음", 중간: "중간|보통", 낮음: "낮음" };
+    const plan = planReviewImport(rows, titles, prefix);
+    // 기본 보드는 "/api/pages 의 첫 database 페이지"라 어디에 쓰는지 먼저 보여 준다(dry-run 포함).
+    out(`대상 보드: ${b.page.title} · ${b.page.id}`);
+    const prioProp = prop(b, /우선순위|priority/i, "select");
+    // 셀 원문은 정규식 메타문자(높음(P1)·C++)를 담을 수 있다 — 매핑에 없는 값은 이스케이프해 정확 일치로.
+    const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const prioPattern = (sev: string) => prioName[sev] ?? `^${escapeRe(sev)}$`;
+    const warnedSev = new Set<string>();
+    let created = 0;
+    let failed = 0;
+    for (const { row: r, title } of plan.create) {
+      const pid = r.severity && prioProp ? optionId(prioProp, prioPattern(r.severity)) : undefined;
+      if (r.severity && prioProp && !pid && !warnedSev.has(r.severity)) {
+        warnedSev.add(r.severity);
+        out(`⚠ 우선순위 미매칭: '${r.severity}' — 우선순위 없이 등록`);
+      }
+      if (dry) {
+        out(`[dry-run] ${title}${r.severity ? `  (우선순위 ${r.severity})` : ""}`);
+        created++;
+        continue;
+      }
+      // 행마다 실패를 격리한다 — 한 행의 생성·댓글 실패가 나머지 행 처리를 막지 않게.
+      let rowId: string | undefined;
+      try {
+        const props = buildProps(b, { pos: [], flags: {} }, title);
+        if (prioProp && pid) props[prioProp.id] = pid;
+        const res = (await api("POST", `/api/databases/${b.page.id}/rows`, { props })) as { row?: { id: string } };
+        rowId = res.row?.id;
+        if (rowId) await api("POST", `/api/rows/${rowId}/comments`, { body: reviewTaskBody(docId, r) });
+        created++;
+        out(`${rowId ?? "-"}\t${title}`);
+      } catch (err) {
+        failed++;
+        const msg = err instanceof Error ? err.message : String(err);
+        // 행은 만들어졌는데 댓글만 실패하면, 재실행 시 제목 중복으로 건너뛰니 본문을 손으로 채워야 한다.
+        out(rowId ? `⚠ 댓글 실패 ${rowId}\t${title} — ${msg}` : `⚠ 생성 실패\t${title} — ${msg}`);
+      }
+    }
+    const skipped = plan.skipped.length;
+    out(`생성 ${created} · 건너뜀 ${skipped} · 실패 ${failed}${dry ? "  (dry-run — 아무것도 쓰지 않음)" : ""}`);
   },
 });
 add({
@@ -365,11 +461,22 @@ add({
 });
 add({
   name: "task mine",
-  usage: "task mine [--board <id>]   (내 담당 태스크 — assignee=me)",
+  usage: "task mine [--board <id>] [--limit <n>] [--all]   (내 담당 태스크 — assignee=me, 기본 열린 것 50건. --all=한도 없이 전부(열린 것만), --limit 1..200)",
   ep: ["tasks/route.ts"],
   run: async (a) => {
+    const q = new URLSearchParams({ assignee: "me" });
     const b = flag(a, "board");
-    out(await api("GET", `/api/tasks?assignee=me${b ? `&board=${b}` : ""}`));
+    if (b) q.set("board", b);
+    // --all = 페이징 없이 전부(라우트의 limit=all 옵트인). --limit 는 1..200 으로 자른다.
+    if (bool(a, "all")) q.set("limit", "all");
+    else if (flag(a, "limit")) q.set("limit", String(clampLimitArg(flag(a, "limit"))));
+    const r = (await api("GET", `/api/tasks?${q}`)) as {
+      total: number;
+      shown: number;
+      tasks: { id: string; title: string; status: string | null; due: string | null; assignee: string | null }[];
+    };
+    for (const t of r.tasks) out(`${t.id}\t${t.status ?? "-"}\t${t.assignee ?? "-"}\t${t.due ?? "-"}\t${t.title}`);
+    out(`총 ${r.total}건 (표시 ${r.shown})`);
   },
 });
 add({
@@ -479,20 +586,82 @@ add({
 // 문서
 add({
   name: "doc ls",
-  usage: "doc ls",
+  usage: "doc ls [--archived]   (--archived=보관함 문서만; 기본은 보관 제외)",
   ep: ["pages/route.ts"],
-  run: async () => {
-    const r = (await api("GET", "/api/pages")) as { pages: { id: string; title: string; kind: string }[] };
+  run: async (a) => {
+    const r = (await api("GET", `/api/pages${bool(a, "archived") ? "?archived=1" : ""}`)) as { pages: { id: string; title: string; kind: string }[] };
     for (const p of r.pages.filter((x) => x.kind !== "database")) out(`${p.id}\t${p.title}`);
   },
 });
 add({
+  name: "doc archive",
+  usage: "doc archive <id>   (보관 — 사이드바·목록·검색에서 빠짐. 되돌리기: doc unarchive)",
+  ep: ["pages/archive/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws doc archive <id>");
+    out(await api("POST", "/api/pages/archive", { id: a.pos[0], archived: true }));
+  },
+});
+add({
+  name: "doc unarchive",
+  usage: "doc unarchive <id>   (보관 해제)",
+  ep: ["pages/archive/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws doc unarchive <id>");
+    out(await api("POST", "/api/pages/archive", { id: a.pos[0], archived: false }));
+  },
+});
+add({
   name: "doc new",
-  usage: 'doc new <title> [--project <id>] [--parent <id>]',
+  usage: 'doc new <title> [--project <id>] [--parent <id>] [--folder "<이름>"] [--type design|plan|brief|report|handoff|task_note|other] [--template design|plan|report|handoff] [--unique]   (--unique=같은 프로젝트에 같은 제목 문서가 있으면 409 로 거절. 없이도 중복이면 경고를 stderr 에 출력)',
   ep: ["pages/route.ts"],
   run: async (a) => {
     if (!a.pos[0]) throw new Error("제목이 필요합니다: ws doc new <title>");
-    out(await api("POST", "/api/pages", { title: a.pos[0], kind: "doc", projectId: flag(a, "project"), parentId: flag(a, "parent") }));
+    let res: unknown;
+    try {
+      res = await api("POST", "/api/pages", { title: a.pos[0], kind: "doc", projectId: flag(a, "project"), parentId: flag(a, "parent"), folder: flag(a, "folder"), docType: flag(a, "type"), template: flag(a, "template"), ifUnique: bool(a, "unique") || undefined });
+    } catch (e) {
+      // --unique 409: 어떤 문서와 겹치는지 id·제목을 stderr 에 보여 준 뒤 그대로 다시 던진다(비-0 종료).
+      const err = e as { status?: number; body?: { duplicates?: { id: string; title: string }[] } };
+      if (err.status === 409) for (const d of err.body?.duplicates ?? []) console.error(`중복: ${d.id} ${d.title}`);
+      throw e;
+    }
+    out(res);
+    const warn = (res as { warnings?: { code: string; pages: { id: string; title: string }[] }[] } | undefined)?.warnings?.find((w) => w.code === "duplicate_title");
+    if (warn?.pages.length) console.error(`⚠ 같은 제목 문서 ${warn.pages.length}건: ${warn.pages.map((p) => `${p.id} ${p.title}`).join(", ")}`);
+  },
+});
+add({
+  name: "doc templates",
+  usage: "doc templates   (doc new --template 에 쓸 수 있는 템플릿 이름·라벨·docType)",
+  ep: ["pages/route.ts"],
+  run: async () => {
+    for (const [name, t] of Object.entries(TEMPLATES)) out(`${name}\t${t.label}\t${t.docType}`);
+  },
+});
+add({
+  name: "doc organize",
+  usage: "doc organize [--apply [--limit <n>]] [--undo <기록docId>] [--project <id>] [--base <url>]   (뿌리 문서를 트랙 폴더로 이관. 기본=드라이런, 기록 문서 1건 생성. --limit=리허설로 분류된 앞 n건만 적용)",
+  ep: ["pages/route.ts", "pages/[id]/route.ts"],
+  run: async (a) => {
+    const args: string[] = [];
+    if (a.flags.limit !== undefined && !flag(a, "limit")) throw new Error("--limit 에는 양의 정수가 필요합니다");
+    if (a.flags.undo !== undefined && !flag(a, "undo")) throw new Error("--undo 에는 기록 doc id 가 필요합니다");
+    if (bool(a, "apply")) args.push("--apply");
+    for (const f of ["undo", "project", "base", "limit"]) {
+      const v = flag(a, f);
+      if (v) args.push(`--${f}`, v);
+    }
+    (await import("node:child_process")).execFileSync("pnpm", ["exec", "tsx", "scripts/organize-docs.ts", ...args], { stdio: "inherit" });
+  },
+});
+add({
+  name: "doc type",
+  usage: "doc type <id> <design|plan|brief|report|handoff|task_note|other|none>",
+  ep: ["pages/[id]/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0] || !a.pos[1]) throw new Error("usage: ws doc type <id> <type>");
+    out(await api("PATCH", `/api/pages/${a.pos[0]}`, { docType: a.pos[1] === "none" ? null : a.pos[1] }));
   },
 });
 add({
@@ -592,12 +761,66 @@ add({
   run: async (a) => out(await api("PATCH", `/api/pages/${a.pos[0]}`, { projectId: flag(a, "project") ?? null })),
 });
 
+// 즐겨찾기·최근 열람 (사람별 — 호출한 토큰의 사용자 기준)
+add({
+  name: "fav ls",
+  usage: "fav ls   (내 즐겨찾기 목록 — 볼 수 없는 페이지 제외)",
+  ep: ["favorites/route.ts"],
+  run: async () => out(await api("GET", "/api/favorites")),
+});
+add({
+  name: "fav add",
+  usage: "fav add <pageId>",
+  ep: ["favorites/route.ts"],
+  run: async (a) => out(await api("POST", "/api/favorites", { pageId: a.pos[0] })),
+});
+add({
+  name: "fav rm",
+  usage: "fav rm <pageId>",
+  ep: ["favorites/route.ts"],
+  run: async (a) => out(await api("DELETE", `/api/favorites?pageId=${encodeURIComponent(a.pos[0])}`)),
+});
+add({
+  name: "fav order",
+  usage: "fav order <pageId> [<pageId> ...]   (나열한 순서대로 재배치)",
+  ep: ["favorites/route.ts"],
+  run: async (a) => out(await api("PATCH", "/api/favorites", { order: a.pos })),
+});
+add({
+  name: "visit ls",
+  usage: "visit ls [--limit 8]   (최근 열람, 최대 20)",
+  ep: ["visits/route.ts"],
+  run: async (a) => out(await api("GET", `/api/visits?limit=${encodeURIComponent(flag(a, "limit") ?? "8")}`)),
+});
+
 // 프로젝트
 add({
   name: "project ls",
-  usage: "project ls",
+  usage: "project ls [--archived [all]]   (기본=활성만 · --archived=보관함만 · --archived all=둘 다)",
   ep: ["projects/route.ts"],
-  run: async () => listItems(await api("GET", "/api/projects"), "projects"),
+  run: async (a) => {
+    const f = flag(a, "archived");
+    const q = f === "all" ? "?archived=all" : bool(a, "archived") || f !== undefined ? "?archived=1" : "";
+    listItems(await api("GET", `/api/projects${q}`), "projects");
+  },
+});
+add({
+  name: "project archive",
+  usage: "project archive <id>   (보관 — 선택 목록·GET /api/projects 기본에서 빠짐. 사이드바엔 '(보관)' 으로 남음)",
+  ep: ["projects/[id]/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws project archive <id>");
+    out(await api("PATCH", `/api/projects/${a.pos[0]}`, { archived: true }));
+  },
+});
+add({
+  name: "project unarchive",
+  usage: "project unarchive <id>   (보관 해제)",
+  ep: ["projects/[id]/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws project unarchive <id>");
+    out(await api("PATCH", `/api/projects/${a.pos[0]}`, { archived: false }));
+  },
 });
 add({
   name: "project add",
@@ -616,13 +839,14 @@ interface ResDef {
   listKey: string;
   fields: [string, string][]; // [첫=primary] [flag, bodyKey]
   proj?: boolean; // ?projectId= 필터 지원
+  projParam?: string; // 필터 쿼리 키(기본 projectId — changelog 는 project)
 }
 const RESOURCES: ResDef[] = [
   { group: "decision", path: "decisions", listKey: "decisions", proj: true, fields: [["title", "title"], ["context", "context"], ["decision", "decision"], ["status", "status"], ["project", "projectId"]] },
   { group: "risk", path: "risks", listKey: "risks", proj: true, fields: [["title", "title"], ["desc", "description"], ["severity", "severity"], ["status", "status"], ["project", "projectId"]] },
   { group: "qa", path: "qa", listKey: "scenarios", proj: true, fields: [["title", "title"], ["steps", "steps"], ["expected", "expected"], ["status", "status"], ["project", "projectId"]] },
   { group: "glossary", path: "glossary", listKey: "terms", fields: [["term", "term"], ["def", "definition"]] },
-  { group: "changelog", path: "changelog", listKey: "entries", fields: [["title", "title"], ["version", "version"], ["body", "body"]] },
+  { group: "changelog", path: "changelog", listKey: "entries", proj: true, projParam: "project", fields: [["title", "title"], ["version", "version"], ["body", "body"], ["project", "projectId"]] },
   { group: "entity", path: "entities", listKey: "entities", fields: [["name", "name"], ["desc", "description"], ["fields", "fields"]] },
   { group: "onboarding", path: "onboarding", listKey: "steps", fields: [["title", "title"], ["body", "body"]] },
   { group: "dod", path: "dod", listKey: "items", fields: [["text", "text"]] },
@@ -645,11 +869,11 @@ export const RESOURCE_CONTRACTS = RESOURCES.map((r) => ({
 for (const r of RESOURCES) {
   add({
     name: `${r.group} ls`,
-    usage: `${r.group} ls${r.proj ? " [--project <id>]" : ""}`,
+    usage: `${r.group} ls${r.proj ? " [--project <id>]" : ""}${r.projParam ? "   (--project none = 공용 항목만)" : ""}`,
     ep: [`${r.path}/route.ts`],
     run: async (a) => {
       const proj = r.proj ? flag(a, "project") : undefined;
-      listItems(await api("GET", `/api/${r.path}${proj ? `?projectId=${proj}` : ""}`), r.listKey);
+      listItems(await api("GET", `/api/${r.path}${proj ? `?${r.projParam ?? "projectId"}=${encodeURIComponent(proj)}` : ""}`), r.listKey);
     },
   });
   add({
@@ -688,6 +912,96 @@ for (const r of RESOURCES) {
     run: async (a) => out(await api("DELETE", `/api/${r.path}/${a.pos[0]}`)),
   });
 }
+add({
+  name: "changelog draft",
+  usage: "changelog draft [--since <ref|YYYY-MM-DD>] [--project <id|auto|none>] [--dry-run]   (--project 기본 auto = cwd→프로젝트 라우트 규칙, 매핑 없으면 공용 + 경고. 앵커·버전은 같은 프로젝트 항목만 보되, 프로젝트 항목이 0건이면 공용 항목으로 폴백(버전은 합집합). --dry-run 은 앵커 출처 표시. since 이후 feat/fix/perf 커밋 → 변경 이력 1건. 기본 since=마지막 자동 초안(버전 YYYY.MM.DD·제목 '배포 …')의 releasedAt, 없으면 7일 전. 불릿 50개 상한, 같은 버전이면 .2/.3)",
+  ep: ["changelog/route.ts", "route-rules/route.ts"],
+  run: async (a) => {
+    if (!TOKEN) return out("토큰 없음 — 초안 생략");
+    // 배포 훅(deploy.sh)에서 돈다 — 서버가 응답을 안 줘도 배포가 멈추지 않게 10초 상한, 실패는 한 줄 + exit 1.
+    const fail = (err: unknown): never => {
+      console.error(`changelog 초안 실패 — ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    };
+    const since0 = flag(a, "since");
+    let rangeArg: string | undefined;
+    if (since0 !== undefined) {
+      try {
+        rangeArg = gitRangeArg(since0);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+    type Ent = { version?: string | null; title?: string | null; releasedAt?: string };
+    let entries: Ent[] = [];
+    let shared: Ent[] = [];
+    let projectId: string | null;
+    try {
+      // 프로젝트 해석(auto 면 route-rules) → 같은 프로젝트 항목만 앵커·버전 후보로 쓴다.
+      let rules: { cwdPrefix: string; projectId: string | null; priority: number }[] = [];
+      const pf = flag(a, "project");
+      if (!pf || pf === "auto") {
+        rules = ((await api("GET", "/api/route-rules", undefined, { timeoutMs: 10_000 })) as { rules?: typeof rules }).rules ?? [];
+      }
+      const resolved = resolveDraftProject(pf, rules, process.cwd());
+      projectId = resolved.projectId;
+      if (resolved.warning) console.error(resolved.warning);
+      const list = (await api("GET", `/api/changelog?project=${encodeURIComponent(projectId ?? "none")}`, undefined, { timeoutMs: 10_000 })) as { entries?: typeof entries };
+      entries = list.entries ?? [];
+      // 이 프로젝트에 항목이 아직 없으면 공용 목록으로 앵커를 폴백한다(공용 초안이 이미 덮은 커밋 재나열 방지).
+      if (projectId && entries.length === 0) {
+        const sl = (await api("GET", "/api/changelog?project=none", undefined, { timeoutMs: 10_000 })) as { entries?: Ent[] };
+        shared = sl.entries ?? [];
+      }
+    } catch (err) {
+      return fail(err);
+    }
+    const picked = pickAnchorSource(entries, shared);
+    const since = since0 ?? picked.anchor ?? new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const anchorLabel = since0 !== undefined ? "--since" : picked.source === "project" ? (projectId ? "프로젝트 엔트리" : "공용 엔트리") : picked.source === "shared" ? "공용 엔트리(폴백)" : "7일";
+    const { execFileSync } = await import("node:child_process");
+    const logArgs = ["log", "--format=%h%x09%ad%x09%s", "--date=short", rangeArg ?? gitRangeArg(since)];
+    let raw: string;
+    try {
+      raw = execFileSync("git", logArgs, { encoding: "utf8", cwd: process.cwd(), stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return out("git 사용 불가 — 초안 생략");
+    }
+    const draft = draftFromCommits(parseGitLog(raw), {
+      since,
+      existingVersions: picked.existingVersions,
+    });
+    if (!draft) return out("변경 없음 — 초안 생략");
+    if (bool(a, "dry-run")) return out(`프로젝트: ${projectId ?? "(공용)"}\n앵커: ${anchorLabel}\n${draft.title} (${draft.version})\n${draft.body}`);
+    try {
+      const r = (await api("POST", "/api/changelog", { ...draft, projectId }, { timeoutMs: 10_000 })) as { id: string };
+      out(`${r.id}\t${draft.title} (${draft.version})`);
+    } catch (err) {
+      fail(err);
+    }
+  },
+});
+add({
+  name: "rehearsal record",
+  usage: "rehearsal record <output-file> [--project <id|auto|none>] [--dry-run]   (pnpm restore:rehearsal 출력을 저장한 파일에서 '---- TeamSpace 문서용 ----' 블록을 뽑아 문서 '백업 복원 리허설 <YYYY-MM-DD>'(docType report)를 만들고 id 를 출력. --project 기본 auto = cwd→프로젝트 라우트 규칙(changelog draft 와 같음). 예: pnpm restore:rehearsal | tee /tmp/r.txt; pnpm ws rehearsal record /tmp/r.txt)",
+  ep: ["pages/route.ts", "pages/[id]/route.ts", "route-rules/route.ts"],
+  run: async (a) => {
+    const file = a.pos[0];
+    if (!file) throw new Error("출력 파일이 필요합니다: ws rehearsal record <output-file>");
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    const block = extractRehearsalBlock(readFileSync(file, "utf8"), today);
+    if (!block) throw new Error("'---- TeamSpace 문서용 ----' 블록이 없습니다 — restore:rehearsal 출력 전체를 저장했는지 확인하세요");
+    const pf = flag(a, "project");
+    let rules: { cwdPrefix: string; projectId: string | null; priority: number }[] = [];
+    if (!pf || pf === "auto") rules = ((await api("GET", "/api/route-rules")) as { rules?: typeof rules }).rules ?? [];
+    const resolved = resolveDraftProject(pf, rules, process.cwd());
+    if (resolved.warning) console.error("프로젝트 매핑 없음 — 공용(미분류) 문서로 만듭니다");
+    if (bool(a, "dry-run")) return out(`프로젝트: ${resolved.projectId ?? "(공용)"}\n${block.title} (결과 ${block.result ?? "?"})\n${block.markdown}`);
+    const { page } = (await api("POST", "/api/pages", { title: block.title, kind: "doc", projectId: resolved.projectId ?? undefined, docType: "report" })) as { page: { id: string } };
+    await api("PUT", `/api/pages/${page.id}`, { markdown: block.markdown });
+    out(`${page.id}\t${block.title}${block.result ? ` (${block.result})` : ""}`);
+  },
+});
 add({
   name: "dod done",
   usage: "dod done <id> [--undo]",
@@ -913,8 +1227,8 @@ add({
   usage: "member ls",
   ep: ["members/route.ts"],
   run: async () => {
-    const r = (await api("GET", "/api/members")) as { members: { id: string; role: string; user: { email: string } }[] };
-    for (const m of r.members) out(`${m.id}\t${m.role}\t${m.user.email}`);
+    const r = (await api("GET", "/api/members")) as { members: { id: string; role: string; kind?: string; user: { email: string } }[] };
+    for (const m of r.members) out(`${m.id}\t${m.role}\t${m.kind ?? "human"}\t${m.user.email}`);
   },
 });
 add({
@@ -931,11 +1245,17 @@ add({
 });
 add({
   name: "lesson ls",
-  usage: "lesson ls [--project <id>]   (팀 작업규칙·레슨 — 컨텍스트 주입에 포함됨)",
+  usage: "lesson ls [--project <id>] [--q <제목 검색>] [--limit n]   (팀 작업규칙·레슨 — 컨텍스트 주입에 포함됨. limit 생략=전체, 최대 300)",
   ep: ["lessons/route.ts"],
   run: async (a) => {
+    const qs = new URLSearchParams();
     const pid = flag(a, "project");
-    out(await api("GET", `/api/lessons${pid ? `?projectId=${pid}` : ""}`));
+    const q = flag(a, "q");
+    const limit = flag(a, "limit");
+    if (pid) qs.set("projectId", pid);
+    if (q) qs.set("q", q);
+    if (limit) qs.set("limit", limit);
+    out(await api("GET", `/api/lessons${qs.size ? `?${qs}` : ""}`));
   },
 });
 add({
@@ -973,6 +1293,96 @@ add({
   ep: ["lessons/[id]/route.ts"],
   run: async (a) => out(await api("DELETE", `/api/lessons/${a.pos[0]}`)),
 });
+// ── 레슨 주입 점검(설정 › 레슨 주입 점검) — 시뮬레이터·연결 점검 / 주입 기록·정리 후보 ──
+const LESSON_STATUS_KO: Record<string, string> = { gist: "요약 포함", title: "제목만", omitted: "잘림('외 N개')", not_applicable: "해당 없음" };
+const LESSON_SCOPE_KO: Record<string, string> = { project: "프로젝트", stack: "스택", global: "전역" };
+add({
+  name: "lesson inspect",
+  usage: "lesson inspect [--cwd <path> | --project <id>] [--md]   (세션 주입 시뮬레이션: 레슨별 상태·섹션 예산·연결 점검, --md 는 레슨 섹션 미리보기 — 편집자 이상)",
+  ep: ["lessons/inspect/route.ts"],
+  run: async (a) => {
+    const q = new URLSearchParams();
+    const cwd = flag(a, "cwd");
+    const project = flag(a, "project");
+    if (cwd) q.set("cwd", cwd);
+    else if (project) q.set("projectId", project);
+    type Sec = { kind: string; tag: string | null; count: number; budget: number | null; used: number; gist: number; title: number; omitted: number };
+    const r = (await api("GET", `/api/lessons/inspect${q.size ? `?${q}` : ""}`)) as {
+      resolved: { resolution: string; cwd: string | null; projectName: string | null; projectStack: string[] };
+      budget: { contextBudget: number; lessonBudget: number | null; lessonChars: number; totalChars: number };
+      sections: Sec[];
+      preview: string;
+      statusCounts: Record<string, number>;
+      lessons: { id: string; title: string; scope: string; status: string }[];
+      linkChecks: {
+        windowDays: number;
+        unmappedCwds: { cwd: string; count: number }[];
+        emptyStackProjects: { name: string; mapped: boolean; missedStackLessons: number }[];
+        orphanStackLessons: { id: string; title: string; stack: string }[];
+        brokenRouteRules: { cwdPrefix: string; projectId: string }[];
+      };
+    };
+    if (bool(a, "md")) return out(r.preview);
+    const res = r.resolved;
+    const how: Record<string, string> = {
+      cwd: `cwd ${res.cwd}`,
+      project_rule: `프로젝트 규칙 cwd ${res.cwd}`,
+      project_unmapped: "cwd 매핑 없음 — 실제로는 주입되지 않음(매핑했다면의 추정)",
+      none: "cwd 없음(워크스페이스 기본)",
+    };
+    out(`■ 대상: ${res.projectName ?? "프로젝트 없음"}${res.projectStack.length ? ` [${res.projectStack.join(", ")}]` : ""} · ${how[res.resolution] ?? res.resolution}`);
+    const b = r.budget;
+    out(`■ 글자 수: 전체 ${b.totalChars.toLocaleString("ko-KR")} / ${b.contextBudget.toLocaleString("ko-KR")} · 레슨 ${b.lessonChars.toLocaleString("ko-KR")} (레슨 예산 ${b.lessonBudget?.toLocaleString("ko-KR") ?? "—"})`);
+    for (const s of r.sections) {
+      out(`  ${LESSON_SCOPE_KO[s.kind] ?? s.kind}${s.tag ? `:${s.tag}` : ""}\t${s.count}개 · 요약 ${s.gist} · 제목만 ${s.title} · 잘림 ${s.omitted} · ${s.used}/${s.budget ?? "—"}자`);
+    }
+    out(`■ 레슨 상태: ${Object.entries(r.statusCounts).map(([k, v]) => `${LESSON_STATUS_KO[k] ?? k} ${v}`).join(" · ")}`);
+    const omitted = r.lessons.filter((l) => l.status === "omitted");
+    if (omitted.length) {
+      out(`  잘린 레슨 ${omitted.length}개:`);
+      for (const l of omitted) out(`    ${l.id}  [${LESSON_SCOPE_KO[l.scope] ?? l.scope}] ${l.title}`);
+    }
+    const c = r.linkChecks;
+    const warn = c.unmappedCwds.length + c.emptyStackProjects.length + c.orphanStackLessons.length + c.brokenRouteRules.length;
+    out(`■ 연결 점검: ${warn ? `경고 ${warn}건` : "문제 없음"}`);
+    for (const x of c.unmappedCwds) out(`  ⚠ 최근 ${c.windowDays}일 주입 cwd 가 프로젝트에 안 붙음: ${x.cwd} (${x.count}회) → pnpm ws route-rule add`);
+    for (const x of c.emptyStackProjects) out(`  ⚠ stack 이 빈 프로젝트${x.mapped ? "" : "(매핑 없음)"}: ${x.name} — 스택 레슨 ${x.missedStackLessons}개를 못 받음`);
+    for (const x of c.orphanStackLessons) out(`  ⚠ 맞는 프로젝트가 없는 스택 레슨: ${x.id} [${x.stack}] ${x.title}`);
+    for (const x of c.brokenRouteRules) out(`  ⚠ 없는 프로젝트를 가리키는 route-rule: ${x.cwdPrefix} → ${x.projectId}`);
+  },
+});
+add({
+  name: "lesson injections",
+  usage: "lesson injections [--days 30]   (레슨 주입 기록: 프로젝트별 횟수·최근 주입·정리 후보 — 편집자 이상, 1~90일)",
+  ep: ["lessons/injections/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/lessons/injections?days=${encodeURIComponent(flag(a, "days") ?? "30")}`)) as {
+      days: number;
+      totals: { injections: number; last7: number; reads: number };
+      byProject: { projectName: string | null; projectId: string | null; last7: number; lastN: number }[];
+      recent: { at: string; actorName: string | null; projectName: string | null; cwd: string | null; via: string; mode: string; gist: number; titleOnly: number; omitted: number; chars: number }[];
+      lessons: { id: string; title: string; gist: number; titleOnly: number; omitted: number; reads: number }[];
+      cleanup: {
+        alwaysTruncated: { id: string; title: string }[];
+        neverInjected: { id: string; title: string }[];
+        similarTitles: { a: { id: string; title: string }; b: { id: string; title: string }; score: number }[];
+      };
+    };
+    out(`■ 최근 ${r.days}일 주입 ${r.totals.injections}회 (7일 ${r.totals.last7}회) · 에이전트 전문 조회 ${r.totals.reads}회`);
+    for (const p of r.byProject) out(`  ${p.projectName ?? (p.projectId ? p.projectId : "(프로젝트 미매핑)")}\t7일 ${p.last7} · ${r.days}일 ${p.lastN}`);
+    if (r.recent.length) {
+      out("■ 최근 주입");
+      for (const x of r.recent.slice(0, 10)) out(`  ${x.at.slice(0, 16).replace("T", " ")} ${x.via}/${x.mode} ${x.projectName ?? "—"} · 요약 ${x.gist} 제목 ${x.titleOnly} 잘림 ${x.omitted} · ${x.chars}자 · ${x.actorName ?? ""}`);
+    }
+    const read = r.lessons.filter((l) => l.reads > 0).sort((x, y) => y.reads - x.reads);
+    if (read.length) out(`■ 많이 조회된 레슨: ${read.slice(0, 5).map((l) => `${l.title}(${l.reads})`).join(", ")}`);
+    const c = r.cleanup;
+    out(`■ 정리 후보 — 늘 잘림 ${c.alwaysTruncated.length} · 주입 0회 ${c.neverInjected.length} · 제목 비슷한 쌍 ${c.similarTitles.length}`);
+    for (const l of c.alwaysTruncated) out(`  늘 잘림: ${l.id} ${l.title}`);
+    for (const l of c.neverInjected) out(`  주입 0회: ${l.id} ${l.title}`);
+    for (const p of c.similarTitles) out(`  비슷함(${p.score}): ${p.a.title} ↔ ${p.b.title}  (${p.a.id} · ${p.b.id})`);
+  },
+});
 add({
   name: "route-rule ls",
   usage: "route-rule ls   (cwd→프로젝트 매핑 — 컨텍스트 주입·세션 라우팅)",
@@ -993,12 +1403,35 @@ add({
 });
 add({
   name: "inbox ls",
-  usage: "inbox ls [--unread]   (내 알림 인박스)",
+  usage: "inbox ls [--unread] [--group] [--type approval,assigned,mention,due,proposal,shared]   (내 알림 인박스, --group 은 같은 종류·링크 24h 묶음, 모르는 종류는 400)",
   ep: ["notifications/route.ts"],
   run: async (a) => {
-    const r = (await api("GET", `/api/notifications${bool(a, "unread") ? "?unread=1" : ""}`)) as { notifications: { id: string; type: string; title: string; readAt: string | null; createdAt: string }[]; unread: number };
-    out(`미읽음 ${r.unread}건`);
+    const qs = new URLSearchParams();
+    if (bool(a, "unread")) qs.set("unread", "1");
+    const type = flag(a, "type");
+    if (type) qs.set("type", type);
+    if (bool(a, "group")) {
+      qs.set("group", "1");
+      const g = (await api("GET", `/api/notifications?${qs}`)) as { groups: { type: string; link: string | null; count: number; unread: number; latestAt: string; sample: string[] }[]; unread: number };
+      out(`미읽음 ${g.unread}건 · ${g.groups.length}묶음`);
+      for (const x of g.groups) out(`[${x.type}] ${x.count}건(미읽음 ${x.unread}) ${x.latestAt.slice(0, 16)}	${x.sample[0] ?? ""}${x.link ? `	${x.link}` : ""}`);
+      return;
+    }
+    const r = (await api("GET", `/api/notifications${qs.size ? `?${qs}` : ""}`)) as { notifications: { id: string; type: string; title: string; readAt: string | null; createdAt: string }[]; unread: number; byType?: Record<string, number> };
+    const parts = Object.entries(r.byType ?? {}).map(([k, v]) => `${k} ${v}`);
+    out(`미읽음 ${r.unread}건${parts.length ? ` (${parts.join(" · ")})` : ""}`);
     for (const n of r.notifications) out(`${n.readAt ? " " : "●"} ${n.id}	[${n.type}] ${n.title}`);
+  },
+});
+add({
+  name: "inbox digest",
+  usage: "inbox digest [--hours <n>]   (최근 n시간(기본 24) 내 알림 요약: 총·미읽음·종류별·상위 묶음 5)",
+  ep: ["notifications/digest/route.ts"],
+  run: async (a) => {
+    const h = flag(a, "hours");
+    const d = (await api("GET", `/api/notifications/digest${h ? `?hours=${encodeURIComponent(h)}` : ""}`)) as { since: string; until: string; total: number; unread: number; byType: Record<string, number>; topGroups: { type: string; count: number; unread: number; sample: string[] }[] };
+    out(`${d.since.slice(0, 16)} ~ ${d.until.slice(0, 16)}: 총 ${d.total}건 · 미읽음 ${d.unread}건 (${Object.entries(d.byType).map(([k, v]) => `${k} ${v}`).join(" · ") || "없음"})`);
+    for (const g of d.topGroups) out(`[${g.type}] ${g.count}건(미읽음 ${g.unread})	${g.sample[0] ?? ""}`);
   },
 });
 add({
@@ -1100,6 +1533,66 @@ add({
   usage: "session get <id>",
   ep: ["sessions/[id]/route.ts"],
   run: async (a) => out(await api("GET", `/api/sessions/${a.pos[0]}`)),
+});
+
+// 라이브 세션 보드 · 공유 브랜치 푸시/배포 잠금 (Console 4) — scripts/wsLock.ts. 잠금은 경고용, 푸시를 막지 않는다.
+const lockDeps = () => ({ api, apiRaw, log: (l: string) => console.log(l) });
+add({
+  name: "sessions live",
+  usage: "sessions live   (라이브 세션 — 레포·브랜치·워크트리·에이전트·진행 중 태스크·마지막 활동 + 살아 있는 잠금)",
+  ep: ["sessions/live/route.ts"],
+  run: async () => sessionsLive(lockDeps()),
+});
+add({
+  name: "session heartbeat",
+  usage: "session heartbeat [<claude 세션 id>]   (마지막 활동 갱신 — 보통 PostToolUse 훅이 10분마다 자동. 기본 env CLAUDE_CODE_SESSION_ID)",
+  ep: ["sessions/heartbeat/route.ts"],
+  run: async (a) => {
+    const sessionId = a.pos[0] ?? process.env.CLAUDE_SESSION_ID ?? process.env.CLAUDE_CODE_SESSION_ID;
+    if (!sessionId) throw new Error("세션 id 가 필요합니다: ws session heartbeat <id>");
+    out(await api("POST", "/api/sessions/heartbeat", { sessionId, cwd: process.env.INIT_CWD ?? process.cwd() }));
+  },
+});
+add({
+  name: "lock take",
+  usage:
+    "lock take <name> [--ttl 30m] [--note \"...\"] [--cwd <path>]   (공유 브랜치·배포 예약 — 예: banjang/develop · teamspace/main · deploy:teamspace. 기본 30분·최대 4h, 내 것이면 연장, 남의 것이면 보유자·메모·남은 시간과 함께 실패)",
+  ep: ["locks/[name]/route.ts"],
+  run: async (a) => lockTake(lockDeps(), a.pos[0], { ttl: flag(a, "ttl"), note: flag(a, "note"), cwd: flag(a, "cwd") }),
+});
+add({
+  name: "lock extend",
+  usage: "lock extend <name> [--ttl 30m]   (내 잠금 만료를 지금부터 다시 ttl 만큼)",
+  ep: ["locks/[name]/route.ts"],
+  run: async (a) => lockExtend(lockDeps(), a.pos[0], { ttl: flag(a, "ttl") }),
+});
+add({
+  name: "lock release",
+  usage: "lock release <name>   (내 잠금 해제. 남의 잠금은 관리자가 설정 › 라이브 세션·잠금 에서 강제 해제)",
+  ep: ["locks/[name]/route.ts"],
+  run: async (a) => lockRelease(lockDeps(), a.pos[0]),
+});
+add({
+  name: "lock ls",
+  usage: "lock ls   (살아 있는 잠금 — 이름·보유자·나이·남은 시간·브랜치·메모)",
+  ep: ["locks/route.ts"],
+  run: async () => lockLs(lockDeps()),
+});
+add({
+  name: "lock notify",
+  usage: "lock notify <name>   (남이 잡은 잠금 보유자에게 '푸시했다' 알림 — 보통 pre-push 훅이 자동, 잠금당 5분 1회)",
+  ep: ["locks/[name]/notify/route.ts"],
+  run: async (a) => {
+    const name = a.pos[0];
+    if (!name) throw new Error("잠금 이름이 필요합니다: ws lock notify <name>");
+    out(await api("POST", `${lockPath(name)}/notify`, { session: process.env.CLAUDE_SESSION_ID ?? process.env.CLAUDE_CODE_SESSION_ID }));
+  },
+});
+add({
+  name: "lock install-hook",
+  usage: "lock install-hook [--repo <path>]   (그 레포에 git pre-push 경고 훅 설치·갱신. 기존 pre-push 는 보존해 이어 부름, core.hooksPath 레포는 거부)",
+  ep: [],
+  run: async (a) => lockInstallHook(lockDeps(), { repo: flag(a, "repo"), hookSource: resolve(__dirname, "hooks", "git-pre-push.mjs") }),
 });
 add({
   name: "slack info",
@@ -1702,12 +2195,14 @@ add({
 });
 add({
   name: "graph",
-  usage: "graph [--types doc,project,…] [--kinds link,ref,…]   (지식 그래프 — 노드 6종·근거 태그 간선)",
+  usage: "graph [--types doc,project,…] [--kinds link,ref,…] [--project <id> [--hops 1|2]]   (지식 그래프 — 노드 6종·근거 태그 간선)",
   ep: ["graph/route.ts"],
   run: async (a) => {
     const q = new URLSearchParams();
     const t = flag(a, "types"); if (t) q.set("types", t);
     const k = flag(a, "kinds"); if (k) q.set("kinds", k);
+    const pj = flag(a, "project"); if (pj) q.set("project", pj);
+    const hp = flag(a, "hops"); if (hp) q.set("hops", hp);
     out(await api("GET", `/api/graph${q.size ? `?${q}` : ""}`));
   },
 });
@@ -1725,28 +2220,32 @@ add({
 });
 add({
   name: "graph infer",
-  usage: "graph infer [--limit 5] [--dry-run] [--all]   (근거 없는 문서에 LLM 연관 간선. --all 은 남은 게 없을 때까지 반복)",
+  usage: "graph infer [--limit 5] [--dry-run] [--all] [--retry]   (근거 없는 문서에 LLM 연관 간선. 문서당 1회만 — --retry 로 실행 시작 이전에 시도한 문서만 다시. --all 은 남은 게 없을 때까지 반복)",
   ep: ["graph/infer/route.ts"],
   run: async (a) => {
     const limit = Number(flag(a, "limit") ?? 5);
     const dryRun = bool(a, "dry-run");
-    const seen = new Set<string>();
+    const retry = bool(a, "retry");
     let noPick = 0;
+    let skipped: number | null = null; // 첫 응답 값만 — 이후 응답은 같은 문서를 다시 센다
+    // 실행 시작 시각을 한 번 잡아 매 호출에 보낸다 — 이번 실행에서 시도한 문서는 다시 안 뽑혀 --all 이 끝난다
+    const retryBefore = new Date().toISOString();
     for (;;) {
-      const r = (await api("POST", "/api/graph/infer", { limit, dryRun, exclude: [...seen] })) as {
-        processed: { id: string; title: string; related: { title: string; reason: string }[] }[]; remaining: number;
+      const r = (await api("POST", "/api/graph/infer", { limit, dryRun, ...(retry ? { retryBefore } : {}) })) as {
+        processed: { id: string; title: string; related: { title: string; reason: string }[] }[]; remaining: number; skippedTried?: number;
       };
-      let fresh = 0;
+      if (skipped === null) skipped = r.skippedTried ?? 0;
       for (const p of r.processed) {
-        if (!seen.has(p.id)) { fresh++; seen.add(p.id); }
         out(`■ ${p.title}`);
         for (const x of p.related) out(`   ~ ${x.title}${x.reason ? `  (${x.reason})` : ""}`);
         if (p.related.length === 0) { out("   (관련 없음)"); noPick++; }
       }
       out(`남은 대상 ${r.remaining}${dryRun ? " (dry-run: 저장 안 함)" : ""}`);
-      if (dryRun || !bool(a, "all") || r.remaining === 0 || fresh === 0) break;
+      // dry-run 은 표시를 안 남기므로 반복해도 같은 문서만 다시 나온다 — 한 번만
+      if (dryRun || !bool(a, "all") || r.remaining === 0 || r.processed.length === 0) break;
     }
-    if (bool(a, "all") && noPick > 0) out(`LLM 이 연관을 못 찾은 문서 ${noPick}개(이번 실행에서 제외)`);
+    out(`건너뛴(이미 시도) ${skipped ?? 0}`);
+    if (bool(a, "all") && noPick > 0) out(`LLM 이 연관을 못 찾은 문서 ${noPick}개`);
   },
 });
 add({
@@ -1789,7 +2288,7 @@ add({
 });
 add({
   name: "notif-rule add",
-  usage: "notif-rule add <event(task_created|task_status|task_assigned|task_due|comment_added|doc_saved)> <channel> [--project <projectId>]",
+  usage: "notif-rule add <event(task_created|task_status|task_assigned|task_due|comment_added|doc_saved|weekly_digest)> <channel> [--project <projectId>]",
   ep: ["notif-rules/route.ts"],
   run: async (a) => out(await api("POST", "/api/notif-rules", { event: a.pos[0], targetId: a.pos[1], projectId: flag(a, "project") })),
 });
@@ -1814,6 +2313,233 @@ add({
   run: async (a) => out(await api(bool(a, "preview") ? "GET" : "POST", "/api/cron/tick")),
 });
 
+// 운영 상태(관리자) — health·백업·디스크·오늘 AI 비용 + 경고. 화면: 설정 › 운영 상태
+add({
+  name: "ops status",
+  usage: "ops status   (운영 상태: DB·워커·마지막 백업·디스크 여유·오늘 AI 비용 + 경고 — 관리자)",
+  ep: ["ops/status/route.ts"],
+  run: async () => {
+    const r = (await api("GET", "/api/ops/status")) as {
+      status: {
+        checkedAt: string;
+        health: { db: boolean; worker: boolean; workerAgeSec: number | null };
+        backup: { dir: string; latest: string | null; ageHours: number | null; sizeBytes: number | null };
+        disk: { path: string; requestedPath?: string; freeBytes: number; totalBytes: number; freeRatio: number } | null;
+        llm: { todayTokens: number | null; todayUsd: number | null; budgetTokens: number; exceeded: boolean };
+        build: { version: string; buildId: string | null };
+      };
+      warnings: { level: "warn" | "crit"; code: string; message: string }[];
+    };
+    const s = r.status;
+    const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)}GB`;
+    out(`■ 상태 (${s.checkedAt}) · v${s.build.version}${s.build.buildId ? ` (${s.build.buildId})` : ""}`);
+    out(`  DB ${s.health.db ? "정상" : "끊김"} · 워커 ${s.health.worker ? "정상" : "지연"}${s.health.workerAgeSec === null ? "" : ` (하트비트 ${s.health.workerAgeSec}초 전)`}`);
+    out(`■ 마지막 백업: ${s.backup.latest ? `${s.backup.latest} · ${s.backup.ageHours === null ? "?" : Math.floor(s.backup.ageHours)}시간 전${s.backup.sizeBytes === null ? "" : ` · ${(s.backup.sizeBytes / 1024 ** 2).toFixed(1)}MB`}` : "없음"} (${s.backup.dir})`);
+    out(`■ 디스크: ${s.disk ? `여유 ${Math.round(s.disk.freeRatio * 1000) / 10}% (${gb(s.disk.freeBytes)} / ${gb(s.disk.totalBytes)}) · ${s.disk.path}${s.disk.requestedPath && s.disk.requestedPath !== s.disk.path ? ` (데이터 폴더 ${s.disk.requestedPath} 없음 — 상위 폴더로 측정)` : ""}` : "읽지 못함"}`);
+    out(`■ 오늘 AI 비용(추정): ${s.llm.todayUsd === null ? "—" : `$${s.llm.todayUsd.toFixed(2)}`} · 토큰 ${formatTokens(s.llm.todayTokens)}${s.llm.budgetTokens > 0 ? ` / ${s.llm.budgetTokens.toLocaleString("ko-KR")}` : ""}${s.llm.exceeded ? " (예산 초과)" : ""}`);
+    if (r.warnings.length === 0) out("■ 경고 없음");
+    else {
+      out("■ 경고");
+      for (const w of r.warnings) out(`  [${w.level === "crit" ? "위험" : "주의"}] ${w.code}: ${w.message}`);
+    }
+  },
+});
+
+// AI 실행 경로(관리자) — 사용처·사용량·외부 중계 상태. 화면: 설정 › AI 실행 경로
+add({
+  name: "ai-routes",
+  usage: "ai-routes [--days 7]   (AI 호출 사용처·기간 사용량·중계 상태 요약 — 에이전트 토큰 editor 이상(사람은 관리자), 기간 1~30일)",
+  ep: ["ai-routes/route.ts"],
+  run: async (a) => {
+    type A = { calls: number; ok: number; failed: number; inputTokens: number; outputTokens: number; avgMs: number | null; p95Ms: number | null };
+    const r = (await api("GET", `/api/ai-routes?days=${encodeURIComponent(flag(a, "days") ?? "7")}`)) as {
+      days: number;
+      relay: {
+        configured: boolean; label: string; usageError: string | null;
+        status: {
+          process: { state: string; pid: number | null; lastExitStatus: number | null };
+          health: { state: string; httpStatus: number | null; error: string | null };
+          watchdog: { state: string; at: string | null; text: string | null };
+          deploy: { state: string; version: string | null };
+          models: { list: string[]; defaultModel: string | null };
+        } | null;
+        usage: { totals: A & { okRate: number | null; healthChecks: number; otherRequests: number }; byDay: (A & { day: string })[]; failureCodes: { code: string; count: number }[] } | null;
+      };
+      teamspace: { provider: string; models: { synthesize: string; extract: string } | null; cacheHits: number; totals: A & { cacheHits: number }; byFeature: (A & { feature: string; cacheHits: number })[] };
+      cost?: { todayTokens: number; todayUsd: number | null; periodUsd: number | null; budgetTokens: number; exceeded: boolean; cacheHits: number };
+      routes: { name: string; calls: number; ok: number; inputTokens: number | null; outputTokens: number | null }[];
+    };
+    const n = (x: number | null | undefined) => (x === null || x === undefined ? "—" : x.toLocaleString("ko-KR"));
+    const ms = (x: number | null) => (x === null ? "—" : x >= 1000 ? `${(x / 1000).toFixed(1)}초` : `${x}ms`);
+    out(`■ 사용처 (최근 ${r.days}일)`);
+    for (const x of r.routes) out(`  ${x.name}\t호출 ${n(x.calls)} · 성공 ${n(x.ok)} · 입력 ${n(x.inputTokens)} / 출력 ${n(x.outputTokens)} 토큰`);
+    if (!r.relay.configured) out("■ 중계 서버: 설정 안 됨 (AI_RELAY_* env)");
+    else {
+      const s = r.relay.status;
+      if (s) {
+        out(`■ ${r.relay.label} 상태`);
+        out(`  프로세스 ${s.process.state}${s.process.pid ? ` (PID ${s.process.pid})` : ""}${s.process.lastExitStatus !== null ? ` · 마지막 종료 ${s.process.lastExitStatus}` : ""}`);
+        out(`  응답 ${s.health.state}${s.health.httpStatus ? ` (HTTP ${s.health.httpStatus})` : s.health.error ? ` (${s.health.error})` : ""}`);
+        out(`  공개 입구 ${s.watchdog.state}${s.watchdog.text ? ` — ${s.watchdog.text}` : ""}${s.watchdog.at ? ` @ ${s.watchdog.at}` : ""}`);
+        out(`  배포본 ${s.deploy.version ?? s.deploy.state} · 모델 ${s.models.list.length}개${s.models.defaultModel ? ` (기본 ${s.models.defaultModel})` : ""}`);
+      }
+      const u = r.relay.usage;
+      if (!u) out(`  사용량: 읽지 못함 (${r.relay.usageError})`);
+      else {
+        const t = u.totals;
+        out(`  사용량: ${n(t.calls)}회 · 성공률 ${t.okRate === null ? "—" : `${Math.round(t.okRate * 1000) / 10}%`} · 입력 ${n(t.inputTokens)} / 출력 ${n(t.outputTokens)} · 평균 ${ms(t.avgMs)} · p95 ${ms(t.p95Ms)} (health ${n(t.healthChecks)}회·기타 요청 ${n(t.otherRequests)}회 제외)`);
+        for (const d of u.byDay) if (d.calls) out(`    ${d.day}\t${n(d.calls)}회 · 실패 ${n(d.failed)} · 입력 ${n(d.inputTokens)} / 출력 ${n(d.outputTokens)} · p95 ${ms(d.p95Ms)}`);
+        if (u.failureCodes.length) out(`  실패 코드: ${u.failureCodes.map((c) => `${c.code} ${c.count}`).join(", ")}`);
+      }
+    }
+    out(`■ TeamSpace 자체 호출 — 경로 ${r.teamspace.provider}${r.teamspace.models ? ` · 합성 ${r.teamspace.models.synthesize} · 추출 ${r.teamspace.models.extract}` : ""} · ${n(r.teamspace.totals.calls)}회 (실패 ${n(r.teamspace.totals.failed)} · 캐시 적중 ${n(r.teamspace.cacheHits)})`);
+    for (const f of r.teamspace.byFeature) out(`  ${f.feature}\t${n(f.calls)}회 · 캐시 ${n(f.cacheHits ?? 0)} · 실패 ${n(f.failed)} · 평균 ${ms(f.avgMs)}`);
+    if (r.cost) {
+      const c = r.cost;
+      const d = (x: number | null) => (x === null ? "—" : `$${x.toFixed(x > 0 && x < 0.01 ? 4 : 2)}`);
+      out(`비용(추정) 오늘 ${d(c.todayUsd)} · 기간 ${d(c.periodUsd)} · 예산 ${c.budgetTokens > 0 ? `${n(c.todayTokens)}/${n(c.budgetTokens)}${c.exceeded ? " (초과 — 호출 중단)" : ""}` : `끔 (오늘 ${n(c.todayTokens)} 토큰)`}`);
+    }
+  },
+});
+
+// 주간 지표 스냅샷(피드백 루프 ①) — 워커가 매주 1행. 화면 없음, CLI/API 로만 본다.
+type MetricsData = { docs: number; docsBytes: number; tasksOpen: number; tasksDone: number; graphNodes: number; graphEdges: number; llm: { calls: number; cacheHits: number; inputTokens: number; outputTokens: number; usd: number | null }; injection: { count: number; chars: number }; llmCacheRows: number };
+add({
+  name: "metrics",
+  usage: "metrics [--weeks 8] | metrics snapshot   (editor 이상 · 비용 llm.usd 행은 admin 만 · 주간 지표 표: 키·지난주·이번주·Δ · snapshot 은 이번 주 스냅샷을 지금 1회 생성 — admin)",
+  ep: ["metrics/route.ts"],
+  run: async (a) => {
+    if (a.pos[0] === "snapshot") {
+      const r = (await api("POST", "/api/metrics")) as { created: boolean; weekKey: string };
+      out(r.created ? `${r.weekKey} 스냅샷을 만들었습니다.` : `${r.weekKey} 스냅샷이 이미 있습니다(그대로 둠).`);
+      return;
+    }
+    const r = (await api("GET", `/api/metrics?weeks=${encodeURIComponent(flag(a, "weeks") ?? "8")}`)) as {
+      weeks: { weekKey: string; data: MetricsData; createdAt: string }[];
+      diff: { key: string; prev: number | null; cur: number | null; delta: number | null }[];
+    };
+    if (r.weeks.length === 0) return out("스냅샷이 아직 없습니다. `pnpm ws metrics snapshot` 으로 만들거나 워커가 주 1회 채웁니다.");
+    const cur = r.weeks[0].weekKey;
+    const prev = r.weeks[1]?.weekKey ?? "—";
+    const f = (x: number | null | undefined) => (x == null ? "—" : x.toLocaleString("ko-KR"));
+    out(`■ 주간 지표 (지난주 ${prev} → 이번주 ${cur})`);
+    out("키\t지난주\t이번주\tΔ");
+    for (const d of r.diff) out(`${d.key}\t${f(d.prev)}\t${f(d.cur)}\t${d.delta == null ? "—" : `${d.delta > 0 ? "+" : ""}${d.delta.toLocaleString("ko-KR")}`}`);
+    if (r.weeks.length > 2) out(`이전 주: ${r.weeks.slice(2).map((w) => w.weekKey).join(", ")}`);
+  },
+});
+
+// 주간 다이제스트(F6) — 워커가 Asia/Seoul 월요일 9시대에 지난주(월~일)를 weekly_digest 규칙 채널(없으면 기본 채널)로 자동 발송. 여기선 미리보기·수동 발송.
+add({
+  name: "digest weekly",
+  usage: "digest weekly [--project <id|이름>] [--days 7 | --week] [--dry-run | --send]   (--project 없으면 cwd→프로젝트 라우트 규칙 · --days = 지금부터 n일 롤링(기본 7) · --week = 지난주 월~일(Asia/Seoul, 워커와 같은 창) · 기본 --dry-run = 마크다운 미리보기(editor) · --send = weekly_digest 규칙 채널(없으면 기본 채널)로 지금 발송(admin, 아니면 403) — 못 보내면 exit 1)",
+  ep: ["digest/route.ts", "route-rules/route.ts", "projects/route.ts"],
+  run: async (a) => {
+    const days = flag(a, "days") ?? "7";
+    const week = bool(a, "week");
+    let projectId: string;
+    const pf = flag(a, "project");
+    if (pf) projectId = (await resolveProject(api, pf)).id;
+    else {
+      const rules = ((await api("GET", "/api/route-rules")) as { rules?: { cwdPrefix: string; projectId: string | null; priority: number }[] }).rules ?? [];
+      const hit = pickRouteRule(rules, process.cwd());
+      if (!hit) return out("프로젝트 매핑 없음 — --project <id|이름> 으로 지정하세요.");
+      projectId = hit;
+    }
+    if (bool(a, "send")) {
+      const r = await apiRaw("POST", "/api/digest", week ? { projectId, week: true, send: true } : { projectId, days: Number(days), send: true });
+      const data = (r.data ?? {}) as { sent?: boolean; channels?: number; reason?: string; error?: string };
+      if (!r.ok) {
+        console.error(r.status === 403 ? `발송은 관리자만 할 수 있습니다(403): ${data.error ?? ""}` : `발송 실패(${r.status}): ${data.error ?? ""}`);
+        process.exit(1);
+      }
+      if (data.sent) return out(`Slack 으로 보냈습니다(채널 ${data.channels ?? 1}곳).`);
+      // 활동 0건은 실패가 아니다(보낼 게 없음) — exit 0
+      if (data.reason === "empty") return out("이번 기간 활동이 없어 보내지 않았습니다.");
+      console.error(`보내지 못했습니다: ${data.error ?? "알 수 없음"}${data.channels ? ` (채널 ${data.channels}곳은 성공)` : ""}`);
+      process.exit(1);
+    }
+    const q = week ? "week=1" : `days=${encodeURIComponent(days)}`;
+    const r = (await api("GET", `/api/digest?project=${encodeURIComponent(projectId)}&${q}`)) as { markdown: string };
+    out(r.markdown);
+  },
+});
+
+// 스킬 레지스트리(관리자) — SKILL.md 사본·낡은 사본. 화면: 설정 › 스킬 레지스트리
+type SkillRegCopy = { id: string; path: string; kind: string; repo: string | null; branch: string | null; checkout: string | null; mtime: string; lines: number; status: string };
+const SKILL_STATUS_KO: Record<string, string> = { canonical: "기준본", same: "같음", differs_newer: "다름(더 새것)", stale: "낡음" };
+const SKILL_KIND_KO: Record<string, string> = { repo: "레포", worktree: "워크트리", global: "전역", plugin: "플러그인", other: "기타" };
+add({
+  name: "skills",
+  usage: "skills [--stale] [--name <스킬>] [--refresh]   (SKILL.md 사본 묶음·낡은 사본 요약 — 관리자, SKILL_SCAN_ROOTS 필요)",
+  ep: ["skills/registry/route.ts"],
+  run: async (a) => {
+    const q = new URLSearchParams();
+    if (bool(a, "stale")) q.set("stale", "1");
+    if (bool(a, "refresh")) q.set("refresh", "1");
+    const name = flag(a, "name");
+    if (name) q.set("name", name);
+    const r = (await api("GET", `/api/skills/registry${q.size ? `?${q}` : ""}`)) as
+      | { configured: false }
+      | {
+          configured: true;
+          scannedAt: string;
+          scan: { truncated: boolean; truncatedReason: string | null; durationMs: number; dirsVisited: number; roots: { path: string; exists: boolean }[] };
+          summary: { groups: number; copies: number; staleCopies: number; groupsWithStale: number; differingCopies: number };
+          groups: { name: string; scope: string; distinct: number; stale: number; differs: number; copies: SkillRegCopy[] }[];
+        };
+    if (!r.configured) {
+      out("스킬 레지스트리: 설정 안 됨 (서버 env SKILL_SCAN_ROOTS 가 비어 있음)");
+      return;
+    }
+    const s = r.summary;
+    out(`■ 스킬 ${s.groups}개 · 사본 ${s.copies}개 · 낡은 사본 ${s.staleCopies}개(${s.groupsWithStale}개 스킬) · 기준본과 다른 사본 ${s.differingCopies}개`);
+    out(`  스캔 ${new Date(r.scannedAt).toLocaleString("ko-KR")} · ${r.scan.durationMs}ms · 폴더 ${r.scan.dirsVisited}개 · 루트 ${r.scan.roots.map((x) => `${x.path}${x.exists ? "" : "(없음)"}`).join(", ")}`);
+    if (r.scan.truncated) out(`  ⚠ 스캔이 한도에서 멈춤(${r.scan.truncatedReason}) — 일부 사본이 빠졌을 수 있음`);
+    // 레포 사본은 보통 <체크아웃>/.claude/skills/<스킬>/SKILL.md — 그 모양이면 체크아웃만, 아니면(.agents 미러 등) 전체 경로
+    const where = (c: SkillRegCopy) => {
+      if (c.kind !== "repo" && c.kind !== "worktree") return c.path;
+      const usual = c.checkout && /^\/\.claude\/skills\/[^/]+\/SKILL\.md$/.test(c.path.slice(c.checkout.length));
+      return `${usual ? c.checkout : c.path}${c.branch ? ` [${c.branch}]` : ""}`;
+    };
+    const shown = r.groups.filter((g) => g.differs > 0 || name);
+    for (const g of shown) {
+      out(`■ ${g.name} (${g.scope}) — 사본 ${g.copies.length} · 내용 ${g.distinct}종${g.stale ? ` · 낡음 ${g.stale}` : ""}${g.differs - g.stale ? ` · 더 새것 ${g.differs - g.stale}` : ""}`);
+      for (const c of g.copies) {
+        if (!name && c.status === "same") continue;
+        out(`  ${SKILL_STATUS_KO[c.status] ?? c.status}\t${SKILL_KIND_KO[c.kind] ?? c.kind}\t${where(c)}\t${c.lines}줄 · ${c.mtime.slice(0, 10)} · id ${c.id}`);
+      }
+    }
+    const rest = r.groups.length - shown.length;
+    if (rest > 0) out(`  (모든 사본이 같은 스킬 ${rest}개는 생략 — --name 으로 자세히)`);
+    if (shown.some((g) => g.differs)) out("  비교: pnpm ws skills diff <기준본 id> <사본 id>");
+  },
+});
+
+add({
+  name: "skills diff",
+  usage: "skills diff <a 사본 id> <b 사본 id>   (두 SKILL.md 사본의 줄 단위 diff — 관리자, id 는 ws skills 출력)",
+  ep: ["skills/registry/diff/route.ts"],
+  run: async (a) => {
+    const [x, y] = a.pos;
+    if (!x || !y) throw new Error("사본 id 두 개가 필요합니다: ws skills diff <a> <b>");
+    const r = (await api("GET", `/api/skills/registry/diff?a=${encodeURIComponent(x)}&b=${encodeURIComponent(y)}`)) as
+      | { configured: false }
+      | { configured: true; diff: { lines: string[]; added: number; removed: number; truncated: boolean; identical: boolean } };
+    if (!r.configured) {
+      out("스킬 레지스트리: 설정 안 됨 (SKILL_SCAN_ROOTS)");
+      return;
+    }
+    if (r.diff.identical) {
+      out("두 사본의 내용이 같습니다.");
+      return;
+    }
+    out(`+${r.diff.added} / -${r.diff.removed}줄`);
+    for (const l of r.diff.lines) out(l);
+    if (r.diff.truncated) out("… (400줄에서 자름)");
+  },
+});
+
 // 비동기 LLM 잡 (디버그용 최소 명령 — 실처리는 워커 dispatchLlmJobs, 결과는 callbackUrl 로 POST)
 add({
   name: "llm classify",
@@ -1832,6 +2558,116 @@ add({
       }),
     );
   },
+});
+
+// env 금고 — 값은 절대 화면에 출력하지 않는다(scripts/wsEnv.ts). 값 설정·열람은 웹 관리자 세션 전용.
+const envDeps = () => ({ api, log: (l: string) => console.log(l) });
+add({
+  name: "env ls",
+  usage: "env ls <project> [--env <e>]   (키 이름·버전·대상별 동기/드리프트 상태만, 값 없음 + syncGroup 불일치 경고)",
+  ep: ["env/route.ts", "env/sync-groups/route.ts", "projects/route.ts"],
+  run: async (a) => envLs(envDeps(), a.pos[0], flag(a, "env")),
+});
+add({
+  name: "env import",
+  usage:
+    "env import <project> <env> --from <.env 경로 | ssm:/prefix> [--profile p] [--region r] [--overwrite] [--apply] [--channel <slackId>]   (기본 드라이런 · --apply 는 사람의 고위험 승인 후 반영)",
+  ep: ["env/route.ts", "env/import/route.ts", "env/import/[opId]/apply/route.ts", "approvals/[id]/route.ts", "projects/route.ts"],
+  run: async (a) =>
+    envImport(envDeps(), {
+      project: a.pos[0], env: a.pos[1], from: flag(a, "from"), profile: flag(a, "profile"), region: flag(a, "region"),
+      overwrite: bool(a, "overwrite"), apply: bool(a, "apply"), channel: flag(a, "channel") ?? process.env.WS_CONFIRM_CHANNEL,
+    }),
+});
+add({
+  name: "env pull",
+  usage: "env pull <project> <env> --out <path> [--force]   (0600 파일로만 기록, 값 출력 안 함)",
+  ep: ["env/pull/route.ts", "projects/route.ts"],
+  run: async (a) => envPull(envDeps(), { project: a.pos[0], env: a.pos[1], out: flag(a, "out"), force: bool(a, "force") }),
+});
+add({
+  name: "env log",
+  usage: "env log [<project>] [--limit <n>]   (감사 로그 — 관리자)",
+  ep: ["env/log/route.ts", "projects/route.ts"],
+  run: async (a) => {
+    const qs = new URLSearchParams();
+    if (a.pos[0]) qs.set("projectId", (await resolveProject(api, a.pos[0])).id);
+    if (flag(a, "limit")) qs.set("limit", flag(a, "limit")!);
+    const r = (await api("GET", `/api/env/log?${qs}`)) as {
+      logs: { at: string; actorType: string; actorName: string; action: string; env: string | null; keys: string[]; viaFunnel: boolean }[];
+    };
+    for (const l of r.logs) out([l.at, l.action, `${l.actorType}:${l.actorName}`, l.env ?? "-", l.keys.join(",") || "-", l.viaFunnel ? "funnel" : ""].join("\t"));
+  },
+});
+add({
+  name: "env target add",
+  usage:
+    "env target add <project> <env> --kind dotenv|ssm|vercel|gha [--path <파일> | --prefix </경로> [--region r] [--profile p] | --vercel-project <이름> --target development|preview|production [--scope s] [--global-dir <-Q 경로>] | --repo <owner/repo> [--gh-env e]] [--account <기대 계정: AWS 계정 id·vercel 사용자·gh 로그인>]   (editor+ 토큰)",
+  ep: ["env/targets/route.ts", "projects/route.ts"],
+  run: async (a) =>
+    envTargetAdd(envDeps(), {
+      project: a.pos[0], env: a.pos[1], kind: flag(a, "kind"), account: flag(a, "account"),
+      path: flag(a, "path"), prefix: flag(a, "prefix"), region: flag(a, "region"), profile: flag(a, "profile"),
+      vercelProject: flag(a, "vercel-project"), target: flag(a, "target"), scope: flag(a, "scope"), globalDir: flag(a, "global-dir"),
+      repo: flag(a, "repo"), ghEnv: flag(a, "gh-env"),
+    }),
+});
+add({
+  name: "env target ls",
+  usage: "env target ls <project> [--env <e>]   (push 대상 목록 — 종류·설정·기대 계정·마지막 반영)",
+  ep: ["env/targets/route.ts", "projects/route.ts"],
+  run: async (a) => envTargetLs(envDeps(), a.pos[0], flag(a, "env")),
+});
+add({
+  name: "env target set",
+  usage: "env target set <id> [--account <기대 계정>]   (기대 계정 교체. 설정을 바꾸려면 rm 후 add)",
+  ep: ["env/targets/[id]/route.ts"],
+  run: async (a) => {
+    const id = a.pos[0];
+    if (!id) throw new Error("대상 id 가 필요합니다: ws env target set <id> --account <기대 계정>");
+    const acct = flag(a, "account");
+    if (!acct) throw new Error("--account <기대 계정> 이 필요합니다.");
+    const cur = ((await api("GET", `/api/env/targets?${new URLSearchParams({ id })}`)) as { targets: { kind: string }[] }).targets[0];
+    if (!cur) throw new Error(`대상 '${id}' 를 찾을 수 없습니다.`);
+    const field = cur.kind === "ssm" ? "accountId" : cur.kind === "vercel" ? "user" : cur.kind === "gha" ? "login" : null;
+    if (!field) throw new Error("로컬 .env 대상에는 기대 계정이 없습니다.");
+    const r = (await api("PATCH", `/api/env/targets/${encodeURIComponent(id)}`, { account: { [field]: acct } })) as { target: { accountSummary: string } };
+    out(`대상 ${id} 기대 계정: ${r.target.accountSummary}`);
+  },
+});
+add({
+  name: "env target rm",
+  usage: "env target rm <id>   (대상 삭제, 원격 값은 그대로)",
+  ep: ["env/targets/[id]/route.ts"],
+  run: async (a) => envTargetRm(envDeps(), a.pos[0]),
+});
+add({
+  name: "env push",
+  usage:
+    "env push <targetId> [--keys A,B] [--apply] [--wait] [--channel <slackId>] [--op <opId>]   (계정 확인 → 키 이름 드라이런 · --apply 는 사람의 고위험 승인 뒤 반영, --wait 는 최대 10분 대기, --op 는 승인된 작업 이어서. 운영은 터미널 yes 확인)",
+  ep: [
+    "env/route.ts", "env/targets/route.ts", "env/targets/[id]/push/route.ts", "env/push/[opId]/claim/route.ts",
+    "env/push/[opId]/result/route.ts", "approvals/[id]/route.ts",
+  ],
+  run: async (a) =>
+    envPush(envDeps(), {
+      targetId: a.pos[0], keys: flag(a, "keys"), apply: bool(a, "apply"), wait: bool(a, "wait"),
+      channel: flag(a, "channel") ?? process.env.WS_CONFIRM_CHANNEL, op: flag(a, "op"),
+    }),
+});
+
+add({
+  name: "env drift",
+  usage:
+    "env drift <targetId> | --all [--project <p>] [--env <e>]   (계정 확인 → 원격과 비교: .env 파일·SSM 은 값, Vercel·GHA 는 이름만 → 키별 상태만 서버에 기록. 값·해시는 출력·전송 안 함)",
+  ep: ["env/route.ts", "env/targets/route.ts", "env/pull/route.ts", "env/targets/[id]/drift/route.ts", "projects/route.ts"],
+  run: async (a) => envDrift(envDeps(), { targetId: a.pos[0], all: bool(a, "all"), project: flag(a, "project"), env: flag(a, "env") }),
+});
+add({
+  name: "env groups",
+  usage: "env groups   (syncGroup 일관성 — 같은 묶음 키의 값이 같은지, 서버가 지문으로 비교·이름만 출력)",
+  ep: ["env/sync-groups/route.ts"],
+  run: async () => envGroups(envDeps()),
 });
 
 // ── 디스패치 ─────────────────────────────────────────────────────────────────

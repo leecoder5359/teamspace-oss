@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import ExtractPanel from "./ExtractPanel";
+import { getPages } from "@/lib/pagesClient";
 
 /* 용어집(glossary) surface — 도메인 용어. /api/glossary. 제품 공통(프로젝트 무관). */
 
@@ -28,9 +29,9 @@ export default function GlossarySurface() {
     setList(data.terms);
   }
   async function loadPages() {
-    const res = await fetch("/api/pages", { cache: "no-store" });
-    if (res.ok) {
-      const d = (await res.json()) as { pages: Page[] };
+    const r = await getPages();
+    if (r.ok) {
+      const d = r.data as { pages: Page[] };
       setPages(d.pages.filter((p) => p.kind !== "database"));
     }
   }

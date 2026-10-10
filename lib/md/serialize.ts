@@ -74,10 +74,12 @@ function serializeList(b: Extract<Block, { t: "list" }>): string {
 function serializeTable(b: Extract<Block, { t: "table" }>): string {
   const sep = b.align.map((a) => (a === "center" ? ":--:" : a === "right" ? "--:" : ":--"));
   const row = (cells: string[]) => `| ${cells.join(" | ")} |`;
+  // 셀 안의 `|` 는 구분자와 구별되도록 `\\|` 로 이스케이프(파서가 되돌림)
+  const cell = (c: { c: Parameters<typeof serializeInline>[0] }) => serializeInline(c.c).replace(/\|/g, "\\|");
   const lines = [
-    row(b.head.map((c) => serializeInline(c.c))),
+    row(b.head.map(cell)),
     row(sep),
-    ...b.rows.map((r) => row(r.map((c) => serializeInline(c.c)))),
+    ...b.rows.map((r) => row(r.map(cell))),
   ];
   return lines.join("\n");
 }

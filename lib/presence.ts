@@ -34,7 +34,7 @@ export function touch(list: PresenceEntry[], entry: PresenceEntry): PresenceEntr
  * @param excludeUserId 자기 자신은 보통 뺀다(내가 여기 있는 건 나도 안다).
  */
 export function viewersOf(
-  list: PresenceEntry[],
+  list: readonly PresenceEntry[],
   pageId: string,
   now: number,
   ttlMs: number,
@@ -46,7 +46,7 @@ export function viewersOf(
 }
 
 /** 오래된 항목 버리기. TTL 의 두 배까지는 남겨 둔다(깜빡임 방지). */
-export function pruneAll(list: PresenceEntry[], now: number, ttlMs: number): PresenceEntry[] {
+export function pruneAll(list: readonly PresenceEntry[], now: number, ttlMs: number): PresenceEntry[] {
   return list.filter((e) => now - e.at <= ttlMs * 2);
 }
 

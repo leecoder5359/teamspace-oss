@@ -11,6 +11,11 @@ export const LEGACY_ACTOR_NAME = "legacy-cli";
  * 이 ctx 위에서 열지 않는다. 진짜 로그인 세션·에이전트 토큰 경로는 여기 걸리지 않으므로
  * 로컬 개발이 막히지 않는다(로그인하면 그대로 쓸 수 있다).
  */
-export function isBootstrapCtx(ctx: { actor: { type: "user" | "agent"; name: string } }): boolean {
-  return ctx.actor.type === "agent" && ctx.actor.name === LEGACY_ACTOR_NAME;
+export function isBootstrapCtx(ctx: { bootstrap?: true }): boolean {
+  return ctx.bootstrap === true;
+}
+
+/** 에이전트 토큰 이름으로 쓸 수 없는 예약어인가(trim·대소문자 무시). 표시 이름과 겹쳐 오인되는 걸 막는다. */
+export function isReservedAgentName(name: string): boolean {
+  return name.trim().toLowerCase() === LEGACY_ACTOR_NAME;
 }

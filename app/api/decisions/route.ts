@@ -3,6 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { recordActivity } from "@/lib/activity";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const DecisionBody = z.object({
+  title: z.string().optional(),
+  context: z.string().optional(),
+  decision: z.string().optional(),
+  status: z.string().optional(),
+  projectId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -30,13 +40,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const body = (await request.json().catch(() => ({}))) as {
-    title?: string;
-    context?: string;
-    decision?: string;
-    status?: string;
-    projectId?: string;
-  };
+  const parsed = await readBody(request, DecisionBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const title = body.title?.trim();
   if (!title) return NextResponse.json({ error: "제목을 입력해 주세요." }, { status: 400 });
 

@@ -54,6 +54,15 @@ pnpm dev                             # http://localhost:3000
 
 백업은 `pnpm backup` — Postgres 덤프 + 데이터 디렉토리 tar 를 `TEAMSPACE_BACKUP_DIR`(기본 `~/Backups/teamspace`)에 저장하고 최근 14개를 로테이션한다.
 
+**복원 리허설** — 백업은 복원해 봐야 믿을 수 있다. `pnpm restore:rehearsal [백업 디렉토리] [--keep]`(`scripts/restore-rehearsal.sh`)이 최신(또는 지정) 백업을 스크래치 DB `teamspace_rehearsal_<타임스탬프>` 에 복원해 7가지(필수 파일·`pg_restore`·마이그레이션 일치·핵심 테이블 행 수·문서 파일 표본·첨부 아카이브·정리)를 점검하고 `결과: PASS|FAIL`(FAIL 이면 종료 코드 1)을 출력한다. 운영 DB 는 읽기만 한다. 분기에 한 번 돌리고 결과를 문서로 남긴다:
+
+```bash
+pnpm restore:rehearsal | tee /tmp/rehearsal.txt
+pnpm ws rehearsal record /tmp/rehearsal.txt   # 결과 블록 → 문서 "백업 복원 리허설 <YYYY-MM-DD>" 생성
+```
+
+워커가 1·4·7·10월 첫 월요일에 관리자 받은편지함으로 `분기 복원 리허설` 알림을 한 번 보낸다.
+
 **데이터 디렉토리 git 백업 패턴(권장)** — tar 로테이션은 유실 대비이고, 이력·오프사이트까지 원하면
 데이터 디렉토리를 전용 git 저장소로 둔다:
 
@@ -96,6 +105,9 @@ pnpm deploy:local
 - `com.teamspace.health` — 5분마다 `/api/health` 확인, 실패 시 재기동
 
 로그는 `~/Library/Logs/teamspace/`. 코드 변경 후엔 같은 명령으로 재배포한다.
+
+- **로그 형식**: production 은 한 줄 JSON(`LOG_FORMAT=json`)이고 수준은 `LOG_LEVEL`(debug|info|warn|error, 기본 info)로 조절한다. 모든 API 응답에 `x-request-id` 헤더가 붙으므로, 문제를 보고할 때 이 값으로 서버 로그 줄을 찾는다.
+- **보안 헤더**: CSP 는 Report-Only 로 나가고 위반은 `POST /api/csp-report`(무인증·본문 2KB·IP 당 1/분)가 받아 로그(`csp.violation`)로 남긴다. 로그로 허용 목록을 다듬은 뒤 enforce 로 전환한다.
 
 **Docker 자동 기동(권장)** — 재부팅 후 Docker 데몬이 안 떠 있으면 DB 연결 실패로 웹이 500을 낸다.
 `com.teamspace.docker` LaunchAgent 가 로그인 시 Docker Desktop 을 띄우고 postgres/redis 컨테이너를 보장한다
@@ -176,8 +188,21 @@ sudo systemctl daemon-reload && sudo systemctl enable --now teamspace
 | Google OAuth | 로그인 화면 사용 불가 | Google Cloud Console 에서 OAuth 클라이언트 생성 → 리디렉션 URI `<PUBLIC_BASE_URL>/api/auth/callback/google` 등록 → `AUTH_GOOGLE_ID/SECRET` |
 | Slack | Slack 알림·컨펌만 꺼짐 | 봇 생성 후 `AUTH_SLACK_BOT_TOKEN` 등 (`.env.example` 참조) |
 | LLM | Q&A 등이 추출형으로 폴백 | `ANTHROPIC_API_KEY` 또는 로컬 `claude` CLI(`ASK_LLM_PROVIDER=cli`) |
+| env 금고 | 설정 › env 금고 비활성 | `ENV_VAULT_KEY`(base64 32바이트, `openssl rand -base64 32`) — 프로젝트·환경별 env 값을 AES-256-GCM 으로 보관하고 `pnpm ws env push` 로 .env·AWS SSM·Vercel·GitHub Actions 에 반영(사람 승인 필요). 키를 잃으면 복구 불가 |
+| AI 실행 경로 | 설정 › AI 실행 경로의 중계 구역 숨김(자체 LLM 호출 기록은 그대로) | 별도 LLM 중계 서버를 쓰면 `AI_RELAY_LOG_PATH`·`AI_RELAY_HEALTH_URL`·`AI_RELAY_LAUNCHD_LABEL`·`AI_RELAY_WATCHDOG_LOG`·`AI_RELAY_DEPLOY_DIR`·`AI_RELAY_LABEL` |
+| 스킬 레지스트리 | 설정 › 스킬 레지스트리 숨김 | `SKILL_SCAN_ROOTS`(콜론 구분, 예 `~/dev:~/.claude`) · 선택 `SKILL_SCAN_MAX_DEPTH`·`SKILL_SCAN_TIME_BUDGET_MS` |
 
-**데모 모드**: `AUTH_OPEN_API=true` 면 인증 없이 전체 개방된다. 로컬 체험 전용 — 외부에 노출되는 서버에서는 절대 켜지 말 것. 정식 사용은 Google OAuth 를 설정하고 시드된 관리자(`admin@example.com`)와 같은 이메일의 Google 계정으로 로그인하거나, `AUTH_ALLOWED_DOMAINS` 로 팀 도메인 자동가입을 열어둔다. 멤버 초대는 `pnpm ws member add <email>` 또는 멤버 화면. 역할: viewer(읽기) < editor(쓰기) < admin(관리).
+**데모 모드**: `AUTH_OPEN_API=true` 면 인증 없이 전체 개방된다. 로컬 체험 전용 — 외부에 노출되는 서버에서는 절대 켜지 말 것. `NODE_ENV=production` 에서는 이 값을 무시한다(실수로 켠 채 배포해도 열리지 않는다). 요청 빈도 제한은 기본으로 켜져 있고, 로컬 부하 시험 등에서 끄려면 `RATE_LIMIT=off`. 정식 사용은 Google OAuth 를 설정하고 시드된 관리자(`admin@example.com`)와 같은 이메일의 Google 계정으로 로그인하거나, `AUTH_ALLOWED_DOMAINS` 로 팀 도메인 자동가입을 열어둔다. 멤버 초대는 `pnpm ws member add <email>` 또는 멤버 화면. 역할: viewer(읽기) < editor(쓰기) < admin(관리).
+
+## 문제 해결
+
+| 증상 | 원인 | 조치 |
+|---|---|---|
+| 로그인이 거부됨(`/login?error=AccessDenied`) | 초대되지 않은 이메일이고 `AUTH_ALLOWED_DOMAINS` 에도 없음 | 관리자가 멤버로 초대하거나 도메인을 허용 목록에 추가 |
+| API 가 429 | 레이트 리밋(로그인 20/분 · `/api/ask` 10/분 · 검색 60/분 등) | 응답의 `Retry-After` 초 뒤에 재시도. 로컬·테스트는 `RATE_LIMIT=off` |
+| health 가 빨강 | `db:false` 는 DB 연결 실패. `worker:false` 는 워커 하트비트가 90초 넘게 없음 | postgres 컨테이너 확인, 워커 재기동 |
+| 기동 실패 "환경변수 검증 실패" | `DATABASE_URL`·`AUTH_SECRET` 누락, `ASK_LLM_PROVIDER`·`LLM_DAILY_BUDGET_TOKENS` 형식 오류 | 로그에서 `"event":"env.invalid"` 줄을 찾아 `.env` 수정(`.env.example` 참조) |
+| `Ctrl+F` 가 보드 행을 못 찾음, Tab 이 중간에서 끊김 | 150행이 넘는 표는 가상 스크롤로 보이는 행만 그린다. 창 밖 행은 DOM 에 없다 | 보드 검색창을 쓰거나, URL 에 `?virtual=0` 또는 `localStorage.setItem("ws-table-virtual","0")` 후 새로고침해 전부 그린다 |
 
 ## 개발
 

@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import type { Role } from "@/app/generated/prisma/enums";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const MemberPatchBody = z.object({
+  role: z.string().optional(),
+  teamId: z.string().nullable().optional(),
+});
 
 const VALID_ROLES: Role[] = ["admin", "editor", "viewer"];
 
@@ -17,12 +24,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: "멤버를 찾을 수 없습니다." }, { status: 404 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { role?: Role; teamId?: string | null };
+  const parsed = await readBody(req, MemberPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const data: { role?: Role; teamId?: string | null } = {};
 
   // 역할 변경
   if (body.role !== undefined) {
-    if (!VALID_ROLES.includes(body.role)) {
+    if (!VALID_ROLES.includes(body.role as Role)) {
       return NextResponse.json({ error: "유효하지 않은 역할입니다." }, { status: 400 });
     }
     // 마지막 관리자 강등 방지
@@ -41,7 +50,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         return NextResponse.json({ error: "마지막 관리자의 역할은 변경할 수 없습니다." }, { status: 400 });
       }
     }
-    data.role = body.role;
+    data.role = body.role as Role;
   }
 
   // 팀 배정 (null = 미배정)

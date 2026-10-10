@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { agentEmail, generateAgentToken, hashToken } from "@/lib/agentToken";
+import { isReservedAgentName } from "@/lib/bootstrapCtx";
 import type { Role } from "@/app/generated/prisma/enums";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const AgentTokenBody = z.object({
+  name: z.string().optional(),
+  role: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -34,11 +42,14 @@ export async function GET() {
 export async function POST(req: Request) {
   const guard = await requireCtx("admin");
   if ("err" in guard) return guard.err;
-  const body = (await req.json().catch(() => ({}))) as { name?: string; role?: Role };
+  const parsed = await readBody(req, AgentTokenBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
 
   const name = body.name?.trim() ?? "";
   if (!name) return NextResponse.json({ error: "에이전트 이름을 입력해 주세요." }, { status: 400 });
-  const role: Role = body.role && VALID_ROLES.includes(body.role) ? body.role : "editor";
+  if (isReservedAgentName(name)) return NextResponse.json({ error: "예약된 이름입니다. 다른 이름을 써 주세요." }, { status: 400 });
+  const role: Role = body.role && VALID_ROLES.includes(body.role as Role) ? (body.role as Role) : "editor";
 
   const token = generateAgentToken();
   const created = await prisma.$transaction(async (tx) => {

@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { pushNotification, recordActivity } from "@/lib/activity";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ProposalPatchBody = z.object({
+  action: z.string().optional(),
+  note: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -20,7 +27,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: `이미 ${proposal.status} 처리된 제안입니다.` }, { status: 409 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { action?: string; note?: string };
+  const parsed = await readBody(req, ProposalPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   if (body.action !== "approve" && body.action !== "reject") {
     return NextResponse.json({ error: 'action 은 "approve" 또는 "reject".' }, { status: 400 });
   }

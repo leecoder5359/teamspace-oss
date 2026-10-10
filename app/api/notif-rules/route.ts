@@ -2,14 +2,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
-import type { NotifEvent, NotifTarget } from "@/app/generated/prisma/enums";
+import type { NotifEvent } from "@/app/generated/prisma/enums";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const NotifRuleBody = z.object({
+  event: z.string().optional(),
+  targetId: z.string().optional(),
+  target: z.string().optional(),
+  projectId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
 // NotifEvent enum 전체와 일치시킨다. 종전엔 task 4종만 허용해서, comment_added·doc_saved 는
 // 규칙을 만들 방법이 없었고 그래서 pages/[id]/comments:84·pages/[id]:149 의 fireNotif 가
 // 영구 무동작이었다 — SKILL.md 는 comment_added 발화를 약속하고 있었다(전수조사 D7).
-const EVENTS: NotifEvent[] = ["task_created", "task_status", "task_assigned", "task_due", "comment_added", "doc_saved"];
+const EVENTS: NotifEvent[] = ["task_created", "task_status", "task_assigned", "task_due", "comment_added", "doc_saved", "weekly_digest"];
 
 // GET /api/notif-rules → 자동 알림 규칙 목록
 export async function GET() {
@@ -25,8 +34,10 @@ export async function POST(request: Request) {
   const guard = await requireCtx("admin");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { event?: NotifEvent; targetId?: string; target?: NotifTarget; projectId?: string };
-  if (!body.event || !EVENTS.includes(body.event)) {
+  const parsed = await readBody(request, NotifRuleBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
+  if (!body.event || !EVENTS.includes(body.event as NotifEvent)) {
     return NextResponse.json({ error: "유효한 이벤트를 선택해 주세요." }, { status: 400 });
   }
   // dm 타깃은 발화 경로가 아직 없다(감사 agents-extra-1) — 조용히 죽는 규칙을 만들지 않도록 명시 거부
@@ -39,7 +50,7 @@ export async function POST(request: Request) {
   const ref = await resolveProjectRef(body.projectId, workspaceId);
   if (!ref.ok) return ref.err;
   const rule = await prisma.notifRule.create({
-    data: { workspaceId, event: body.event, target: "channel", targetId, projectId: ref.projectId },
+    data: { workspaceId, event: body.event as NotifEvent, target: "channel", targetId, projectId: ref.projectId },
   });
   return NextResponse.json({ rule });
 }

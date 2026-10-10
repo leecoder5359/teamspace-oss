@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import ExtractPanel from "./ExtractPanel";
+import { getPages } from "@/lib/pagesClient";
 
 /* 데이터 모델(datamodel) surface — 엔티티·필드. /api/entities. 제품 공통. */
 
@@ -28,9 +29,9 @@ export default function DataModelSurface() {
     setList(data.entities);
   }
   async function loadPages() {
-    const res = await fetch("/api/pages", { cache: "no-store" });
-    if (res.ok) {
-      const d = (await res.json()) as { pages: Page[] };
+    const r = await getPages();
+    if (r.ok) {
+      const d = r.data as { pages: Page[] };
       setPages(d.pages.filter((p) => p.kind !== "database"));
     }
   }

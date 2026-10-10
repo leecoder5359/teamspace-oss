@@ -9,6 +9,7 @@ import { Icon } from "./icons";
 type Lint = {
   broken: { sourceId: string; sourceTitle: string; target: string }[];
   orphans: { id: string; title: string }[];
+  rootDocs: { id: string; title: string; projectId: string }[];
 };
 
 export default function LintSurface() {
@@ -23,7 +24,7 @@ export default function LintSurface() {
   }, []);
 
   if (data === null) return <div className="ws-db" style={{ padding: 40 }} />;
-  const clean = data.broken.length === 0 && data.orphans.length === 0;
+  const clean = data.broken.length === 0 && data.orphans.length === 0 && data.rootDocs.length === 0;
 
   return (
     <div className="ws-db" style={{ maxWidth: 760 }}>
@@ -31,7 +32,7 @@ export default function LintSurface() {
         <Icon name="alert" /> 위키 점검
       </h1>
       <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4 }}>
-        깨진 위키링크 {data.broken.length} · 고아 문서 {data.orphans.length}
+        깨진 위키링크 {data.broken.length} · 고아 문서 {data.orphans.length} · 폴더 밖 문서 {data.rootDocs.length}
       </p>
 
       {clean ? (
@@ -73,6 +74,24 @@ export default function LintSurface() {
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {data.orphans.map((o) => (
+                  <button key={o.id} onClick={() => router.push(`/p/${o.id}`)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                    <Icon name="doc" size={13} /> {o.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* 폴더 밖 문서 */}
+          <section>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+              <span aria-hidden>📁</span> 폴더 밖 문서 ({data.rootDocs.length}) <span style={{ fontWeight: 500 }}>(프로젝트 뿌리에 바로 있음)</span>
+            </div>
+            {data.rootDocs.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>없음</div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {data.rootDocs.map((o) => (
                   <button key={o.id} onClick={() => router.push(`/p/${o.id}`)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
                     <Icon name="doc" size={13} /> {o.title}
                   </button>

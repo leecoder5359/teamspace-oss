@@ -9,6 +9,7 @@ import { hashToken, isAgentTokenFormat } from "@/lib/agentToken";
 import { canAutoJoinDefaultWorkspace } from "@/lib/accessControl";
 import { hasProxyIdentityHeaders } from "@/lib/sites/proxyIdentity";
 import { LEGACY_ACTOR_NAME } from "@/lib/bootstrapCtx";
+import { openApiEnabled } from "@/lib/openApi";
 
 export const WS_COOKIE = "ws_active";
 
@@ -19,6 +20,8 @@ export type Ctx = {
   userId: string;
   role: Role;
   actor: { type: "user" | "agent"; id: string; name: string };
+  /** AUTH_OPEN_API 부트스트랩(resolveLegacyCtx)에서만 true. 이름이 아니라 이 플래그로 판별한다. */
+  bootstrap?: true;
 };
 
 export type CtxResult = Ctx | { err: NextResponse };
@@ -137,6 +140,7 @@ async function resolveLegacyCtx(): Promise<Ctx | { err: NextResponse }> {
     userId: user.id,
     role: "admin",
     actor: { type: "agent", id: user.id, name: LEGACY_ACTOR_NAME },
+    bootstrap: true,
   };
 }
 
@@ -218,7 +222,7 @@ export async function requireCtx(min: Role = "viewer"): Promise<CtxResult> {
       ctx = r;
     } else if (token) {
       return unauthorized("유효하지 않은 토큰입니다.");
-    } else if (process.env.AUTH_OPEN_API === "true") {
+    } else if (openApiEnabled()) {
       // ⚠️ 데모/로컬 전용 탈출구. 켜면 **토큰 없이 누구나 admin** 이 된다.
       // 이 서버는 tailscale 로 공개돼 있으므로 상시 배포에서는 절대 켜지 말 것.
       // (README 에 위험 표기와 함께 문서화 — 코드에만 있는 스위치를 없앤다)

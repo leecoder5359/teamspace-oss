@@ -73,3 +73,11 @@ describe("MCP 서버 ↔ /api 라우트 패리티", () => {
     expect(call?.raw).toContain("neighbors=1");
   });
 });
+
+describe("doc_list 보관 파라미터 (GET /api/pages 패리티)", () => {
+  it("archived: only|all 을 받고 ?archived=1|all 로 전달, 기본은 쿼리 없음", () => {
+    expect(SRC).toMatch(/archived: z\.enum\(\["only", "all"\]\)\.optional\(\)/);
+    expect(SRC).toContain('archived === "only" ? "?archived=1" : archived === "all" ? "?archived=all" : ""');
+    expect(readFileSync(resolve(API_ROOT, "pages", "route.ts"), "utf8")).toContain('a === "1" ? "only" : a === "all" ? "all" : "active"');
+  });
+});

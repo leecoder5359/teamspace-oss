@@ -38,6 +38,11 @@ export type SearchFilters = {
   to?: string | null;
 };
 
+/** 변형(공백 삽입·제거) 일치의 감점 비율. */
+const VARIANT_FACTOR = 0.5;
+/** 원문 일치에 얹는 층. scoreCandidate 최대(≈1240) 보다 커서, 원문 일치는 변형 전용 일치를 항상 이긴다. */
+const ORIGINAL_TIER = 2000;
+
 const norm = (s: string) => s.toLowerCase();
 
 /** 대상 문자열에서 질의가 몇 번 나오는지(겹치지 않게). */
@@ -144,14 +149,28 @@ export function rankSearch(
   filters: SearchFilters = {},
   limit = 30,
   now = Date.now(),
+  /** 공백 변형(lib/searchVariants). 원문 일치가 항상 우선하도록 변형 일치는 감점한다. */
+  variants: string[] = [],
 ): Ranked[] {
   const q = query.trim();
   const out: Ranked[] = [];
   for (const c of candidates) {
     if (!passesFilters(c, filters)) continue;
-    const score = scoreCandidate(c, q, now);
+    const original = scoreCandidate(c, q, now);
+    let score = original > 0 ? ORIGINAL_TIER + original : 0;
+    let hit = q;
+    if (original <= 0) {
+      for (const v of variants) {
+        if (v === q) continue;
+        const s = Math.round(scoreCandidate(c, v, now) * VARIANT_FACTOR);
+        if (s > score) {
+          score = s;
+          hit = v;
+        }
+      }
+    }
     if (score <= 0) continue;
-    out.push({ ...c, score, snippet: makeSnippet(c.body || c.title, q) });
+    out.push({ ...c, score, snippet: makeSnippet(c.body || c.title, hit) });
   }
   out.sort(
     (a, b) =>

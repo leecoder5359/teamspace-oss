@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { getPages } from "@/lib/pagesClient";
 
 /* =====================================================================
    "문서에서 추출 (AI)" 패널 — 문서 선택 → 추출 → 제안 검토 → 개별 반영.
@@ -59,9 +60,9 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/pages", { cache: "no-store" });
-      if (!res.ok) return;
-      const d = (await res.json()) as { pages: Page[] };
+      const r = await getPages();
+      if (!r.ok) return;
+      const d = r.data as { pages: Page[] };
       setPages(d.pages.filter((p) => p.kind !== "database"));
     })();
   }, []);

@@ -1,24 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "./ws/icons";
 import SharePanel from "./ws/SharePanel";
 import PresenceBar from "./ws/PresenceBar";
+import Breadcrumb from "./Breadcrumb";
 import { GalleryView, ListView, CalendarView, TimelineView, pickDateProp, pickEndProp } from "./ws/AltViews";
 import RelationCell, { type RelationOption } from "./ws/RelationCell";
 import { aggOptionsFor, computeAgg, formatAgg, AGG_LABEL, type AggFn } from "@/lib/aggregate";
 import { buildRowTree } from "@/lib/subitems";
+import { VIRTUAL_THRESHOLD, virtualDisabled, windowSegments } from "@/lib/virtualRows";
+import { useVirtualRows } from "./board/useVirtualRows";
+import ViewToolbar, { type Density } from "./board/ViewToolbar";
+import { findStatusProp, openOnlyLayout } from "@/lib/dbOpenOnly";
 import { normalizeIds, blockingIds } from "@/lib/relation";
-import {
-  matchesGroup,
-  filterKindOf,
-  OPS_BY_KIND,
-  OP_LABEL,
-  type FilterGroup,
-  type FilterOp,
-} from "@/lib/dbFilter";
+import { matchesGroup, type FilterGroup } from "@/lib/dbFilter";
 import type { IconName } from "./ws/icons";
 import TaskDetail from "./ws/TaskDetail";
 import {
@@ -38,7 +35,18 @@ import {
   type PillMode,
 } from "./ws/ui";
 
-export type SelectOption = { id: string; name: string; color: string };
+import {
+  useBoardData,
+  type DbPayload,
+  type DbProperty,
+  type DbRow,
+  type DbView,
+  type Reminder,
+  type SelectOption,
+} from "./board/useBoardData";
+
+// 다른 화면(AltViews·TaskDetail·테스트)이 이 파일에서 가져가던 타입 — 경로를 깨지 않게 다시 내보낸다
+export type { DbProperty, DbRow, SelectOption };
 
 /** 뷰 종류별 탭 아이콘 (격차 C1). */
 const VIEW_ICON: Record<string, IconName> = {
@@ -55,46 +63,6 @@ function localTodayKey(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-type PropType =
-  | "text"
-  | "number"
-  | "date"
-  | "select"
-  | "multiselect"
-  | "checkbox"
-  | "person"
-  | "relation";
-
-export type DbProperty = {
-  id: string;
-  name: string;
-  type: PropType;
-  config: { options?: SelectOption[]; targetDatabaseId?: string } | null;
-  position: number;
-};
-
-type DbView = {
-  id: string;
-  name: string;
-  type: "table" | "kanban" | "gallery" | "list" | "calendar" | "timeline";
-  config: { groupBy?: string; dateProp?: string; endProp?: string; agg?: Record<string, string>; sort?: { propId: string; dir: "asc" | "desc" } | null; meta?: string[]; filter?: FilterGroup | null } | null;
-  position: number;
-};
-
-export type DbRow = {
-  id: string;
-  props: Record<string, unknown>;
-  position: number;
-  contentPageId?: string | null;
-  // 행 자체의 메타 — props 가 아니라 컬럼으로 저장돼 있다(격차 C3).
-  createdAt?: string;
-  updatedAt?: string;
-  createdById?: string | null;
-  updatedById?: string | null;
-  /** 서브아이템 부모(격차 C6) */
-  parentRowId?: string | null;
-};
 
 /** 속성이 아니라 행 메타에서 오는 가상 열. 스키마에 PropType 을 늘리지 않는다. */
 export const META_COLUMNS = [
@@ -118,22 +86,6 @@ export function metaCell(row: DbRow, key: MetaKey, users: Record<string, string>
       return row.updatedById ? users[row.updatedById] ?? row.updatedById : "";
   }
 }
-
-type DbPayload = {
-  page: { id: string; title: string; kind: string; project: { id: string; name: string; color: string } | null };
-  properties: DbProperty[];
-  views: DbView[];
-  rows: DbRow[];
-  users?: Record<string, string>;
-};
-
-type Reminder = {
-  id: string;
-  spec: string;
-  template: { text?: string; rowId?: string } | null;
-};
-
-type Density = "compact" | "cozy" | "roomy";
 
 /* ===== 속성 → 역할 분류 (제네릭 매핑) ===== */
 export type Role =
@@ -224,115 +176,42 @@ export default function DatabaseView({
   /** URL ?view 가 없을 때 우선 선택할 뷰 타입(예: "kanban") */
   defaultViewType?: string;
 }) {
-  const [data, setData] = useState<DbPayload | null>(null);
-  const [rows, setRows] = useState<DbRow[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const activeViewRef = useRef<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [editError, setEditError] = useState<string | null>(null);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [density, setDensity] = useState<Density>("cozy");
   // 달력의 '오늘'. 렌더마다 새로 만들면 하이드레이션 불일치가 나므로 한 번만 고정한다.
   const [todayKey] = useState(localTodayKey);
-  // relation 속성이 가리키는 보드의 행 목록(격차 C2). propId → [{id,title}]
-  const [relationOptions, setRelationOptions] = useState<Map<string, RelationOption[]>>(new Map());
   const [colorMode, setColorMode] = useState<PillMode>("soft");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
-  const [projects, setProjects] = useState<{ id: string; name: string; color: string }[]>([]);
 
   const searchParams = useSearchParams();
   const viewParam = searchParams.get("view"); // "kanban" | "table" | null
 
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/databases/${pageId}`, { cache: "no-store" });
-    if (!res.ok) return;
-    const payload = (await res.json()) as DbPayload;
-    setData(payload);
-    setRows(payload.rows);
-    setActiveViewId((prev) => {
-      if (prev) return prev;
-      const wanted = viewParam || defaultViewType;
-      if (wanted) {
-        const v = payload.views.find((x) => x.type === wanted);
-        if (v) return v.id;
-      }
-      return payload.views[0]?.id ?? null;
-    });
-  }, [pageId, viewParam, defaultViewType]);
-  useAutoRefresh(load); // W6: 30초 폴링+포커스 갱신
-
-  /* relation 속성이 가리키는 보드의 행 제목을 받아 온다(격차 C2).
-     값은 행 id 라 그대로 보여 주면 사람이 못 읽는다. /api/tasks 는 이미 D3
-     게이트를 통과하므로, 볼 수 없는 보드를 가리키면 후보가 비어 있게 된다. */
-  useEffect(() => {
-    const rels = (data?.properties ?? []).filter((p) => p.type === "relation");
-    if (rels.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const next = new Map<string, RelationOption[]>();
-      for (const p of rels) {
-        const target = (p.config as { targetDatabaseId?: string } | null)?.targetDatabaseId;
-        if (!target) continue;
-        const res = await fetch(`/api/tasks?board=${target}`, { cache: "no-store" }).catch(() => null);
-        if (!res?.ok) continue;
-        const payload = (await res.json()) as { tasks?: { id: string; title?: string }[] };
-        next.set(
-          p.id,
-          (payload.tasks ?? []).map((t) => ({ id: t.id, title: t.title?.trim() || "(제목 없음)" })),
-        );
-      }
-      if (!cancelled) setRelationOptions(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [data?.properties]);
-
-  const loadReminders = useCallback(async () => {
-    const res = await fetch(`/api/schedules?databasePageId=${pageId}`, { cache: "no-store" });
-    if (!res.ok) return;
-    const { schedules } = (await res.json()) as { schedules: Reminder[] };
-    setReminders(schedules);
-  }, [pageId]);
-
-  // 프로젝트 목록(헤더 배정용)
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/projects", { cache: "no-store" });
-      if (res.ok) {
-        const { projects: pjs } = (await res.json()) as { projects: { id: string; name: string; color: string }[] };
-        setProjects(pjs.map((p) => ({ id: p.id, name: p.name, color: p.color })));
-      }
-    })();
-  }, []);
-
-  const assignProject = useCallback(
-    async (projectId: string) => {
-      const current = data?.page.project?.id ?? "";
-      if (projectId === current) return;
-      // 프로젝트 배정은 이 보드 페이지 전체(모든 태스크)를 옮긴다 — 실수 방지 확인.
-      const target = projectId ? projects.find((p) => p.id === projectId)?.name ?? "프로젝트" : "미분류";
-      const ok = window.confirm(
-        `이 보드의 모든 태스크(${rows.length}개)가 "${target}"(으)로 함께 이동합니다.\n특정 태스크만 옮기는 게 아닙니다. 계속할까요?`,
-      );
-      if (!ok) return;
-      await fetch(`/api/pages/${pageId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectId: projectId || null }),
-      });
-      await load();
-    },
-    [pageId, load, data, projects, rows],
+  // 처음 읽을 때만 ?view(없으면 defaultViewType) 로 활성 뷰를 고른다 — 이후 로드는 사용자의 선택을 유지
+  const pickInitialView = useCallback(
+    (payload: DbPayload) =>
+      setActiveViewId((prev) => {
+        if (prev) return prev;
+        const wanted = viewParam || defaultViewType;
+        if (wanted) {
+          const v = payload.views.find((x) => x.type === wanted);
+          if (v) return v.id;
+        }
+        return payload.views[0]?.id ?? null;
+      }),
+    [viewParam, defaultViewType],
   );
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    Promise.all([load(), loadReminders()]).finally(() => setLoading(false));
-  }, [load, loadReminders]);
+  const {
+    data, rows, reminders, projects, relationOptions, loading,
+    error: editError, setError: setEditError,
+    assignProject, saveViewConfig, updateCell, addRow, deleteRow, quickAdd, cancelReminder,
+  } = useBoardData(pageId, {
+    onLoad: pickInitialView,
+    // 사이드바 보드/테이블 클릭(?view)·기본 뷰 변경 시 다시 읽는다(분리 전 load 의존성과 동일)
+    refetchKey: `${viewParam ?? ""}|${defaultViewType ?? ""}`,
+  });
 
   // 사이드바의 보드/테이블 클릭(?view 변경)에 반응해 활성 뷰 전환
   useEffect(() => {
@@ -414,203 +293,103 @@ export default function DatabaseView({
     });
   }, [rows, query, filters, data, activeFilter]);
 
-  // 낙관적 편집은 실패하면 되돌린다. 종전엔 응답을 버려서 viewer 가 편집하거나
-  // 409 가 나도 화면엔 성공으로 남았고, 새로고침해야 사라졌다(전수조사 D4).
-  const failEdit = useCallback(async (res: Response, fallback: string) => {
-    const d = (await res.json().catch(() => ({}))) as { error?: string };
-    setEditError(d.error ?? fallback);
-    await load();
-  }, [load]);
+  // 표 뷰 "열린 것만" — 상태(select) 속성이 있는 보드의 표 뷰에서만. 뷰 config 는 건드리지 않고
+  // 브라우저 localStorage 에만 저장한다(기본 ON).
+  // 토글은 data 로딩 뒤에야 그려지므로(SSR 에선 로딩 화면) 초기값을 바로 읽어도 하이드레이션이 어긋나지 않는다.
+  const [openOnly, setOpenOnly] = useState(() => {
+    try {
+      return localStorage.getItem(`ws-db-open-only:${pageId}`) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleOpenOnly = (on: boolean) => {
+    setOpenOnly(on);
+    try {
+      localStorage.setItem(`ws-db-open-only:${pageId}`, on ? "1" : "0");
+    } catch {}
+  };
+  const statusProp = useMemo(() => (data ? findStatusProp(data.properties) : null), [data]);
+  const isTableView = !!data && (!activeView || activeView.type === "table");
+  const openOnlyOn = isTableView && !!statusProp && openOnly;
+  // 방금 편집한 행 — 열린 것만 ON 에서 완료로 바꿔도 바로 사라지지 않게 흐리게 남긴다(2A 후속).
+  // 뷰·토글·검색·필터가 바뀌면(scope) 비운다. 폴링 재조회로는 비우지 않는다 — 30초 뒤 갑자기 사라지면 더 헷갈린다.
+  const keepScope = `${activeView?.id ?? ""}|${openOnly}|${query}|${JSON.stringify(filters)}|${JSON.stringify(activeFilter)}`;
+  const [keepIds, setKeepIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [keptScope, setKeptScope] = useState(keepScope);
+  if (keptScope !== keepScope) {
+    // 렌더 중 리셋(React 권장 패턴) — effect 로 하면 한 프레임 동안 옛 행이 남는다
+    setKeptScope(keepScope);
+    if (keepIds.size) setKeepIds(new Set());
+  }
+  const statusPropId = statusProp?.id ?? null;
+  const editCell = useCallback(
+    (rowId: string, propId: string, value: unknown) => {
+      // 상태 속성을 바꾼 행만 남겨 둔다 — 제목·담당자 같은 편집은 행이 사라질 일이 없다
+      if (propId === statusPropId) setKeepIds((prev) => (prev.has(rowId) ? prev : new Set(prev).add(rowId)));
+      return updateCell(rowId, propId, value);
+    },
+    [updateCell, statusPropId],
+  );
+  const tableLayout = useMemo(
+    () =>
+      openOnlyLayout(visibleRows, data?.properties ?? [], {
+        openOnly: openOnlyOn,
+        hasViewSort: !!activeView?.config?.sort,
+        keepIds,
+      }),
+    [openOnlyOn, visibleRows, data, activeView, keepIds],
+  );
+  const closedHidden = tableLayout.hidden;
 
-  /** 정렬을 뷰에 저장한다. 실패해도 화면 정렬은 그대로 두고 알리기만 한다 —
-   *  못 저장했다고 방금 누른 정렬을 되돌리면 더 당황스럽다. */
-  /** 집계 선택을 뷰 config 에 저장한다(격차 C6). 열마다 독립이라 병합해서 보낸다. */
+  /* 뷰 config 저장 — 어느 뷰인지·무엇을 바꾸는지는 화면이 정하고 fetch 는 훅이 한다.
+     정렬은 성공했을 때만 반영하고 나머지는 화면부터 바꾼다. 실패해도 되돌리지 않고 알리기만 한다. */
+  /** 집계 선택(격차 C6). 서버에는 **바뀐 열만** 보낸다 — 전체를 보내면 연달아 바꿀 때 응답 순서가 뒤바뀌며 한쪽이 지워진다. */
   const saveViewAgg = useCallback(
     async (propId: string, fn: AggFn) => {
       const viewId = activeViewRef.current;
       if (!viewId) return;
-      // 화면은 즉시 반영하고, 서버에는 **바뀐 열만** 보낸다.
-      // 전체 agg 를 보내면 두 열을 연달아 바꿀 때 응답 순서가 뒤바뀌며 한쪽이 지워진다.
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              views: prev.views.map((v) =>
-                v.id === viewId
-                  ? {
-                      ...v,
-                      config: {
-                        ...(v.config ?? {}),
-                        agg: Object.fromEntries(
-                          Object.entries({ ...((v.config?.agg ?? {}) as Record<string, string>), [propId]: fn }).filter(
-                            ([, x]) => x && x !== "none",
-                          ),
-                        ),
-                      },
-                    }
-                  : v,
-              ),
-            }
-          : prev,
+      await saveViewConfig(
+        viewId,
+        { agg: { [propId]: fn } },
+        (c) => ({
+          ...c,
+          agg: Object.fromEntries(
+            Object.entries({ ...((c.agg ?? {}) as Record<string, string>), [propId]: fn }).filter(([, x]) => x && x !== "none"),
+          ),
+        }),
+        "집계 설정을 저장하지 못했습니다(화면에는 적용됨).",
       );
-      const res = await fetch(`/api/databases/${pageId}/views/${viewId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ config: { agg: { [propId]: fn } } }),
-      });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string };
-        setEditError(d.error ?? "집계 설정을 저장하지 못했습니다(화면에는 적용됨).");
-      }
     },
-    [pageId],
+    [saveViewConfig],
   );
-
   const saveViewSort = useCallback(
     async (sort: { propId: string; dir: "asc" | "desc" } | null) => {
       const viewId = activeViewRef.current;
       if (!viewId) return;
-      const res = await fetch(`/api/databases/${pageId}/views/${viewId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ config: { sort } }),
-      });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string };
-        setEditError(d.error ?? "정렬을 저장하지 못했습니다(화면에는 적용됨).");
-        return;
-      }
       // 로컬 data 도 갱신해 두면 뷰를 오갔다 돌아와도 정렬이 유지된다
-      setData((prev) =>
-        prev
-          ? { ...prev, views: prev.views.map((v) => (v.id === viewId ? { ...v, config: { ...(v.config ?? {}), sort } } : v)) }
-          : prev,
-      );
+      await saveViewConfig(viewId, { sort }, (c) => ({ ...c, sort }), "정렬을 저장하지 못했습니다(화면에는 적용됨).", false);
     },
-    [pageId],
+    [saveViewConfig],
   );
-
-
-  /** 복합 필터를 뷰에 저장한다. 낙관적으로 화면부터 반영하고 실패만 알린다. */
+  /** 복합 필터를 뷰에 저장한다. */
   const saveViewFilter = useCallback(
     async (next: FilterGroup | null) => {
       const viewId = activeViewRef.current;
       if (!viewId) return;
-      setData((prev) =>
-        prev
-          ? { ...prev, views: prev.views.map((v) => (v.id === viewId ? { ...v, config: { ...(v.config ?? {}), filter: next } } : v)) }
-          : prev,
-      );
-      const res = await fetch(`/api/databases/${pageId}/views/${viewId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ config: { filter: next } }),
-      });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string };
-        setEditError(d.error ?? "필터를 저장하지 못했습니다.");
-      }
+      await saveViewConfig(viewId, { filter: next }, (c) => ({ ...c, filter: next }), "필터를 저장하지 못했습니다.");
     },
-    [pageId],
+    [saveViewConfig],
   );
-
-  /** 메타 열 표시 여부를 뷰에 저장한다(정렬과 같은 경로). */
+  /** 메타 열 표시 여부를 뷰에 저장한다. */
   const saveViewMeta = useCallback(
     async (next: MetaKey[]) => {
       const viewId = activeViewRef.current;
       if (!viewId) return;
-      setData((prev) =>
-        prev
-          ? { ...prev, views: prev.views.map((v) => (v.id === viewId ? { ...v, config: { ...(v.config ?? {}), meta: next } } : v)) }
-          : prev,
-      );
-      const res = await fetch(`/api/databases/${pageId}/views/${viewId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ config: { meta: next } }),
-      });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string };
-        setEditError(d.error ?? "열 표시 설정을 저장하지 못했습니다.");
-      }
+      await saveViewConfig(viewId, { meta: next }, (c) => ({ ...c, meta: next }), "열 표시 설정을 저장하지 못했습니다.");
     },
-    [pageId],
+    [saveViewConfig],
   );
-
-  const updateCell = useCallback(async (rowId: string, propId: string, value: unknown) => {
-    const before = rows;
-    setRows((prev) =>
-      prev.map((r) => (r.id === rowId ? { ...r, props: { ...r.props, [propId]: value } } : r)),
-    );
-    const res = await fetch(`/api/rows/${rowId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ props: { [propId]: value } }),
-    });
-    if (!res.ok) {
-      setRows(before);
-      await failEdit(res, "저장하지 못했습니다.");
-    }
-  }, [rows, failEdit]);
-
-  const addRow = useCallback(
-    async (props: Record<string, unknown> = {}) => {
-      const res = await fetch(`/api/databases/${pageId}/rows`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ props }),
-      });
-      if (res.ok) {
-        const { row } = (await res.json()) as { row: DbRow };
-        setRows((prev) => [...prev, row]);
-        return row;
-      }
-      return null;
-    },
-    [pageId],
-  );
-
-  const deleteRow = useCallback(async (rowId: string) => {
-    const before = rows;
-    setRows((prev) => prev.filter((r) => r.id !== rowId));
-    const res = await fetch(`/api/rows/${rowId}`, { method: "DELETE" });
-    if (!res.ok) {
-      setRows(before);
-      await failEdit(res, "삭제하지 못했습니다.");
-    }
-  }, [rows, failEdit]);
-
-  const quickAdd = useCallback(
-    async (name: string, remindAt: string) => {
-      if (!data) return;
-      const nameProp = data.properties.find((p) => p.type === "text") ?? data.properties[0];
-      const dueProp = data.properties.find((p) => p.type === "date");
-      const props: Record<string, unknown> = { [nameProp.id]: name };
-      if (remindAt && dueProp) props[dueProp.id] = remindAt.slice(0, 10);
-      const row = await addRow(props);
-      if (remindAt) {
-        await fetch(`/api/schedules`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ remindAt, text: name, databasePageId: pageId, rowId: row?.id }),
-        });
-        await loadReminders();
-      }
-    },
-    [data, addRow, pageId, loadReminders],
-  );
-
-  const cancelReminder = useCallback(async (id: string) => {
-    const before = reminders;
-    setReminders((prev) => prev.filter((r) => r.id !== id));
-    const res = await fetch(`/api/schedules/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      // 리마인더는 폴링 대상 밖이라 되돌리지 않으면 재방문까지 어긋난 채로 남는다
-      setReminders(before);
-      const d = (await res.json().catch(() => ({}))) as { error?: string };
-      setEditError(d.error ?? "리마인더를 취소하지 못했습니다.");
-    }
-  }, [reminders]);
 
   if (loading && !data) {
     return <div className={`ws-db${embedded ? " ws-db--embedded" : ""}`}>불러오는 중…</div>;
@@ -643,6 +422,7 @@ export default function DatabaseView({
           </button>
         </div>
       )}
+      {!embedded && <Breadcrumb pageId={pageId} />}
       {!embedded && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
           <h1 className="ws-db-title" style={{ margin: 0 }}>{data.page.title || "Untitled"}</h1>
@@ -674,235 +454,36 @@ export default function DatabaseView({
         />
       )}
 
-      <div className="ws-db-toolbar">
-        <input
-          className="ws-db-search"
-          type="search"
-          placeholder="검색…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {selectProps.map((p) => (
-          <select
-            key={p.id}
-            className="ws-db-filter"
-            value={filters[p.id] ?? ""}
-            onChange={(e) => setFilters((prev) => ({ ...prev, [p.id]: e.target.value }))}
-          >
-            <option value="">{p.name}: 전체</option>
-            {(p.config?.options ?? []).map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        ))}
-        {(query || Object.values(filters).some(Boolean) || !!activeFilter?.rules.length) && (
-          <button
-            className="ws-db-clear"
-            onClick={() => {
-              setQuery("");
-              setFilters({});
-              void saveViewFilter(null);
-            }}
-          >
-            초기화 ({visibleRows.length}/{rows.length})
-          </button>
-        )}
-
-        <details className="ws-filter-builder" style={{ position: "relative" }}>
-          <summary
-            className="ws-db-filter"
-            style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
-            title="AND/OR 와 연산자를 쓰는 필터 — 뷰에 저장된다"
-          >
-            필터{activeFilter?.rules.length ? ` ${activeFilter.rules.length}` : ""}
-          </summary>
-          <div
-            style={{
-              position: "absolute", zIndex: 20, top: "calc(100% + 4px)", left: 0, minWidth: 430,
-              background: "var(--surface-card)", border: "1px solid var(--border-subtle)",
-              borderRadius: 10, padding: 10, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-              <select
-                className="ws-db-filter"
-                value={activeFilter?.conj ?? "and"}
-                onChange={(e) =>
-                  void saveViewFilter({ conj: e.target.value as "and" | "or", rules: activeFilter?.rules ?? [] })
-                }
-                aria-label="조건 결합"
-              >
-                <option value="and">모두 만족(AND)</option>
-                <option value="or">하나라도(OR)</option>
-              </select>
-              <span style={{ flex: 1 }} />
-              {!!activeFilter?.rules.length && (
-                <button className="ws-btn-soft" onClick={() => void saveViewFilter(null)}>
-                  전체 해제
-                </button>
-              )}
-            </div>
-
-            {(activeFilter?.rules ?? []).map((rule, i) => {
-              const prop = data.properties.find((p) => p.id === rule.propId);
-              const kind = filterKindOf(prop?.type ?? "text");
-              const ops = OPS_BY_KIND[kind] as readonly FilterOp[];
-              const needsValue = !["empty", "notEmpty", "checked", "unchecked"].includes(rule.op);
-              const patch = (next: Partial<typeof rule>) => {
-                const rules = (activeFilter?.rules ?? []).map((r, j) => (j === i ? { ...r, ...next } : r));
-                void saveViewFilter({ conj: activeFilter?.conj ?? "and", rules });
-              };
-              return (
-                <div key={i} style={{ display: "flex", gap: 5, marginBottom: 6, alignItems: "center" }}>
-                  <select
-                    className="ws-db-filter"
-                    value={rule.propId}
-                    onChange={(e) => {
-                      // 속성이 바뀌면 연산자가 안 맞을 수 있다 — 그 종류의 첫 연산자로 되돌린다
-                      const nk = filterKindOf(data.properties.find((p) => p.id === e.target.value)?.type ?? "text");
-                      patch({ propId: e.target.value, op: OPS_BY_KIND[nk][0] as FilterOp, value: null });
-                    }}
-                    aria-label="속성"
-                  >
-                    {data.properties.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="ws-db-filter"
-                    value={rule.op}
-                    onChange={(e) => patch({ op: e.target.value as FilterOp })}
-                    aria-label="연산자"
-                  >
-                    {ops.map((o) => (
-                      <option key={o} value={o}>{OP_LABEL[o]}</option>
-                    ))}
-                  </select>
-                  {needsValue &&
-                    (kind === "select" && prop?.config?.options?.length ? (
-                      <select
-                        className="ws-db-filter"
-                        value={String(rule.value ?? "")}
-                        onChange={(e) => patch({ value: e.target.value || null })}
-                        aria-label="값"
-                      >
-                        <option value="">(선택)</option>
-                        {prop.config.options.map((o) => (
-                          <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="ws-db-filter"
-                        type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
-                        value={String(rule.value ?? "")}
-                        onChange={(e) => patch({ value: e.target.value || null })}
-                        placeholder="값"
-                        aria-label="값"
-                        style={{ minWidth: 110 }}
-                      />
-                    ))}
-                  <button
-                    className="ws-row-del"
-                    title="이 조건 삭제"
-                    onClick={() =>
-                      void saveViewFilter({
-                        conj: activeFilter?.conj ?? "and",
-                        rules: (activeFilter?.rules ?? []).filter((_, j) => j !== i),
-                      })
-                    }
-                  >
-                    <Icon name="close" size={13} />
-                  </button>
-                </div>
-              );
-            })}
-
-            <button
-              className="ws-btn-soft"
-              onClick={() => {
-                const first = data.properties[0];
-                if (!first) return;
-                const k = filterKindOf(first.type);
-                void saveViewFilter({
-                  conj: activeFilter?.conj ?? "and",
-                  rules: [...(activeFilter?.rules ?? []), { propId: first.id, op: OPS_BY_KIND[k][0] as FilterOp, value: null }],
-                });
-              }}
-            >
-              + 조건 추가
-            </button>
-          </div>
-        </details>
-
-        {activeView?.type !== "kanban" && (
-          <details className="ws-meta-toggle" style={{ position: "relative" }}>
-            <summary
-              className="ws-db-filter"
-              style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
-              title="만든/수정 시각·사람 열 — 데이터는 원래 저장돼 있었는데 보여줄 곳이 없었다"
-            >
-              메타 열{(activeView?.config?.meta?.length ?? 0) > 0 ? ` ${activeView?.config?.meta?.length}` : ""}
-            </summary>
-            <div
-              style={{
-                position: "absolute", zIndex: 20, top: "calc(100% + 4px)", left: 0, minWidth: 160,
-                background: "var(--surface-card)", border: "1px solid var(--border-subtle)",
-                borderRadius: 10, padding: 8, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
-              }}
-            >
-              {META_COLUMNS.map((c) => {
-                const cur = (activeView?.config?.meta ?? []) as MetaKey[];
-                const on = cur.includes(c.key);
-                return (
-                  <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 2px", fontSize: 12.5, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() =>
-                        void saveViewMeta(on ? cur.filter((x) => x !== c.key) : [...cur, c.key])
-                      }
-                    />
-                    {c.label}
-                  </label>
-                );
-              })}
-            </div>
-          </details>
-        )}
-
-        <PresenceBar pageId={pageId} />
-        <span className="ws-toolbar-spacer" />
-
-        {activeView?.type === "kanban" && (
-          <div className="ws-seg" role="group" aria-label="카드 색상 모드">
-            {(["soft", "solid", "bar"] as PillMode[]).map((m) => (
-              <button
-                key={m}
-                className={`ws-seg-btn${colorMode === m ? " active" : ""}`}
-                onClick={() => setColorMode(m)}
-              >
-                {m === "soft" ? "소프트" : m === "solid" ? "솔리드" : "바"}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="ws-seg" role="group" aria-label="밀도">
-          {(["compact", "cozy", "roomy"] as Density[]).map((d) => (
-            <button
-              key={d}
-              className={`ws-seg-btn${density === d ? " active" : ""}`}
-              onClick={() => setDensity(d)}
-              title={d}
-            >
-              {d === "compact" ? "조밀" : d === "cozy" ? "보통" : "넓게"}
-            </button>
-          ))}
-        </div>
-      </div>
+      <ViewToolbar
+        query={query}
+        onQueryChange={setQuery}
+        selectProps={selectProps}
+        quickFilters={filters}
+        onQuickFilterChange={(propId, optId) => setFilters((prev) => ({ ...prev, [propId]: optId }))}
+        showOpenOnly={isTableView && !!statusProp}
+        openOnly={openOnly}
+        onOpenOnlyChange={toggleOpenOnly}
+        closedHidden={closedHidden}
+        shownCount={isTableView ? tableLayout.rows.length : visibleRows.length}
+        totalCount={rows.length}
+        onClear={() => {
+          setQuery("");
+          setFilters({});
+          void saveViewFilter(null);
+        }}
+        properties={data.properties}
+        filter={activeFilter}
+        onFilterChange={(next) => void saveViewFilter(next)}
+        viewType={activeView?.type}
+        metaColumns={META_COLUMNS}
+        meta={(activeView?.config?.meta ?? []) as MetaKey[]}
+        onMetaChange={(next) => void saveViewMeta(next)}
+        presence={<PresenceBar pageId={pageId} />}
+        colorMode={colorMode}
+        onColorModeChange={setColorMode}
+        density={density}
+        onDensityChange={setDensity}
+      />
 
       <div className="ws-db-tabs">
         {data.views.map((v) => (
@@ -948,7 +529,7 @@ export default function DatabaseView({
           rows={visibleRows}
           colorMode={colorMode}
           density={density}
-          onMove={updateCell}
+          onMove={editCell}
           onOpenRow={setSelectedRowId}
           groupAgg={groupAgg}
         />
@@ -957,9 +538,11 @@ export default function DatabaseView({
           key={activeView?.id ?? "default"}
           properties={data.properties}
           roles={roles}
-          rows={visibleRows}
+          rows={tableLayout.rows}
+          rootCompare={tableLayout.rootCompare}
+          keptRowIds={tableLayout.kept}
           colorMode={colorMode}
-          onUpdate={updateCell}
+          onUpdate={editCell}
           onAddRow={() => addRow()}
           onDeleteRow={deleteRow}
           onOpenRow={setSelectedRowId}
@@ -980,7 +563,7 @@ export default function DatabaseView({
           properties={data.properties}
           roles={roles}
           titleId={titleId}
-          onChange={(propId, value) => updateCell(selectedRow.id, propId, value)}
+          onChange={(propId, value) => editCell(selectedRow.id, propId, value)}
           onClose={() => setSelectedRowId(null)}
         />
       )}
@@ -1111,7 +694,7 @@ function sortValue(row: DbRow, prop: DbProperty, role: Role): string | number {
 }
 
 /* ===== 표 뷰 ===== */
-function TableView({
+export function TableView({
   properties,
   roles,
   rows,
@@ -1128,7 +711,16 @@ function TableView({
   agg = {},
   onAggChange,
   blockedRows,
+  flat = false,
+  rootCompare,
+  keptRowIds,
 }: {
+  /** true 면 서브아이템 트리를 만들지 않고 받은 순서 그대로 */
+  flat?: boolean;
+  /** 최상위 행 순서(열린 것만 기본 정렬 = 수정 시각 내림차순). 서브아이템은 트리를 유지한다 */
+  rootCompare?: (a: DbRow, b: DbRow) => number;
+  /** 닫힘 상태지만 방금 편집해 남겨 둔 행 — 흐리게 그린다 */
+  keptRowIds?: ReadonlySet<string>;
   properties: DbProperty[];
   roles: Map<string, Role>;
   rows: DbRow[];
@@ -1173,9 +765,42 @@ function TableView({
   // 정렬을 켜면 계층이 무의미해지므로, 정렬 중에는 트리를 접지 않고 평평하게 둔다.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const treeRows = useMemo(
-    () => (sortKey ? sortedRows.map((r) => ({ ...r, depth: 0, hasChildren: false })) : buildRowTree(sortedRows, collapsed)),
-    [sortedRows, collapsed, sortKey],
+    () =>
+      sortKey || flat
+        ? sortedRows.map((r) => ({ ...r, depth: 0, hasChildren: false }))
+        : buildRowTree(sortedRows, collapsed, { rootCompare }),
+    [sortedRows, collapsed, sortKey, flat, rootCompare],
   );
+
+  // 가상 스크롤(P-1): 150행 넘을 때만 보이는 창 + overscan 만 그린다. 이하면 종전 그대로.
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  // ?virtual=0 · localStorage ws-table-virtual=0 이면 끈다 — 창 밖 행은 Ctrl+F·Tab 이 못 닿는 한계의 탈출구. 마운트당 한 번 읽는다.
+  const [virtualAllowed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {}
+    return !virtualDisabled(window.location.search, storage);
+  });
+  const virtualOn = virtualAllowed && treeRows.length > VIRTUAL_THRESHOLD;
+  const vr = useVirtualRows({ anchorRef: tbodyRef, total: treeRows.length, enabled: virtualOn });
+  // 포커스가 든 행은 창 밖으로 밀려도 계속 그린다 — 셀은 blur 때 저장하므로 언마운트되면 입력이 사라진다(I3).
+  const [focusRowId, setFocusRowId] = useState<string | null>(null);
+  const pinIndex = useMemo(
+    () => (virtualOn && focusRowId ? treeRows.findIndex((r) => r.id === focusRowId) : -1),
+    [virtualOn, focusRowId, treeRows],
+  );
+  const onRowsFocus = (e: React.FocusEvent<HTMLTableSectionElement>) => {
+    const tr = (e.target as HTMLElement).closest("tr[data-row-id]");
+    setFocusRowId(tr?.getAttribute("data-row-id") ?? null);
+  };
+  const onRowsBlur = (e: React.FocusEvent<HTMLTableSectionElement>) => {
+    const tr = (e.target as HTMLElement).closest("tr");
+    const next = e.relatedTarget as Node | null;
+    if (!next || !tr?.contains(next)) setFocusRowId(null);
+  };
+  const colCount = properties.length + meta.length + 1;
 
   const toggleSort = (id: string) => {
     // asc → desc → 해제 순환. 해제가 없으면 "정렬을 끄고 원래 순서로" 가 불가능하다.
@@ -1195,6 +820,78 @@ function TableView({
     setSortDir(nextDir);
     onSortChange?.(nextKey ? { propId: nextKey, dir: nextDir } : null);
   };
+
+  type TreeRow = (typeof treeRows)[number];
+  const renderRow = (row: TreeRow) => (
+    <tr
+      key={row.id}
+      data-row-id={virtualOn ? row.id : undefined}
+      className="ws-table-row"
+      data-kept={keptRowIds?.has(row.id) ? "" : undefined}
+      title={keptRowIds?.has(row.id) ? "방금 상태를 바꾼 행 — 검색·필터를 바꾸거나 새로고침하면 목록에서 정리됩니다" : undefined}
+      style={keptRowIds?.has(row.id) ? { opacity: 0.55 } : undefined}
+      onClick={(e) => {
+        // 인라인 편집 컨트롤 클릭 시에는 드로어를 열지 않음
+        if ((e.target as HTMLElement).closest("input,select,textarea,button,a,label")) return;
+        onOpenRow(row.id);
+      }}
+    >
+      {properties.map((p, ci) => (
+        <td key={p.id}>
+          {ci === 0 && (row.depth > 0 || row.hasChildren) && (
+            // 서브아이템(C6): 들여쓰기 + 접기. 자식이 있을 때만 버튼을 낸다.
+            <span style={{ display: "inline-flex", alignItems: "center", width: row.depth * 14 + (row.hasChildren ? 18 : 0), verticalAlign: "middle" }}>
+              <span style={{ width: row.depth * 14 }} />
+              {row.hasChildren && (
+                <button
+                  className="ws-row-del"
+                  title={collapsed.has(row.id) ? "펼치기" : "접기"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCollapsed((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(row.id)) next.delete(row.id);
+                      else next.add(row.id);
+                      return next;
+                    });
+                  }}
+                >
+                  <Icon name={collapsed.has(row.id) ? "chevronRight" : "chevronDown"} size={13} />
+                </button>
+              )}
+            </span>
+          )}
+          {ci === 0 && (blockedRows?.get(row.id) ?? 0) > 0 && (
+            <span
+              title={`선행 태스크 ${blockedRows!.get(row.id)}건이 아직 끝나지 않았습니다`}
+              style={{ marginRight: 6, fontSize: 11, fontWeight: 700, color: "#E0900F", whiteSpace: "nowrap" }}
+            >
+              ⛔{blockedRows!.get(row.id)}
+            </span>
+          )}
+          <TableCell
+            prop={p}
+            role={roles.get(p.id) ?? "text"}
+            rowId={row.id}
+            value={row.props[p.id]}
+            colorMode={colorMode}
+            onChange={(v) => onUpdate(row.id, p.id, v)}
+            relationOptions={relationOptions?.get(p.id)}
+          />
+        </td>
+      ))}
+      {meta.map((k) => (
+        <td key={k} className="ws-td-meta" style={{ color: "var(--text-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
+          {metaCell(row, k, users)}
+        </td>
+      ))}
+      <td className="ws-table-actions">
+        <button className="ws-row-del" title="행 삭제" onClick={() => onDeleteRow(row.id)}>
+          <Icon name="close" size={14} />
+        </button>
+      </td>
+    </tr>
+  );
 
   return (
     <>
@@ -1228,73 +925,24 @@ function TableView({
               <th className="ws-table-actions" />
             </tr>
           </thead>
-          <tbody>
-            {treeRows.map((row) => (
-              <tr
-                key={row.id}
-                className="ws-table-row"
-                onClick={(e) => {
-                  // 인라인 편집 컨트롤 클릭 시에는 드로어를 열지 않음
-                  if ((e.target as HTMLElement).closest("input,select,textarea,button,a,label")) return;
-                  onOpenRow(row.id);
-                }}
-              >
-                {properties.map((p, ci) => (
-                  <td key={p.id}>
-                    {ci === 0 && (row.depth > 0 || row.hasChildren) && (
-                      // 서브아이템(C6): 들여쓰기 + 접기. 자식이 있을 때만 버튼을 낸다.
-                      <span style={{ display: "inline-flex", alignItems: "center", width: row.depth * 14 + (row.hasChildren ? 18 : 0), verticalAlign: "middle" }}>
-                        <span style={{ width: row.depth * 14 }} />
-                        {row.hasChildren && (
-                          <button
-                            className="ws-row-del"
-                            title={collapsed.has(row.id) ? "펼치기" : "접기"}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCollapsed((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(row.id)) next.delete(row.id);
-                                else next.add(row.id);
-                                return next;
-                              });
-                            }}
-                          >
-                            <Icon name={collapsed.has(row.id) ? "chevronRight" : "chevronDown"} size={13} />
-                          </button>
-                        )}
-                      </span>
-                    )}
-                    {ci === 0 && (blockedRows?.get(row.id) ?? 0) > 0 && (
-                      <span
-                        title={`선행 태스크 ${blockedRows!.get(row.id)}건이 아직 끝나지 않았습니다`}
-                        style={{ marginRight: 6, fontSize: 11, fontWeight: 700, color: "#E0900F", whiteSpace: "nowrap" }}
-                      >
-                        ⛔{blockedRows!.get(row.id)}
-                      </span>
-                    )}
-                    <TableCell
-                      prop={p}
-                      role={roles.get(p.id) ?? "text"}
-                      rowId={row.id}
-                      value={row.props[p.id]}
-                      colorMode={colorMode}
-                      onChange={(v) => onUpdate(row.id, p.id, v)}
-                      relationOptions={relationOptions?.get(p.id)}
-                    />
-                  </td>
-                ))}
-                {meta.map((k) => (
-                  <td key={k} className="ws-td-meta" style={{ color: "var(--text-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {metaCell(row, k, users)}
-                  </td>
-                ))}
-                <td className="ws-table-actions">
-                  <button className="ws-row-del" title="행 삭제" onClick={() => onDeleteRow(row.id)}>
-                    <Icon name="close" size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+          <tbody
+            ref={tbodyRef}
+            onFocusCapture={virtualOn ? onRowsFocus : undefined}
+            onBlurCapture={virtualOn ? onRowsBlur : undefined}
+          >
+            {virtualOn
+              ? // 한 배열에 평평하게 — 포커스 행이 창 안↔밖(따로 끼운 조각)을 오가도 key 가 같아 다시 마운트되지 않는다.
+                windowSegments({ start: vr.start, end: vr.end, total: treeRows.length, rowHeight: vr.rowHeight, pin: pinIndex }).flatMap(
+                  (seg) =>
+                    seg.kind === "pad"
+                      ? [
+                          <tr key={seg.key} className="ws-table-spacer" aria-hidden="true" style={{ height: seg.height }}>
+                            <td colSpan={colCount} />
+                          </tr>,
+                        ]
+                      : treeRows.slice(seg.from, seg.to).map((row) => renderRow(row)),
+                )
+              : treeRows.map((row) => renderRow(row))}
           </tbody>
           {/* 집계 줄(격차 C6) — 열마다 함수를 고르면 뷰 config 에 저장된다. */}
           <tfoot>
@@ -1374,6 +1022,39 @@ function PillSelect({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+/** 값이 있으면 기존대로 D-day + 입력. 비었으면 평소엔 "—", 클릭하면 그때만 date 입력. */
+function DateCell({ name, value, onChange }: { name: string; value: unknown; onChange: (v: unknown) => void }) {
+  const [editing, setEditing] = useState(false);
+  const has = typeof value === "string" && value !== "";
+  if (!has && !editing) {
+    return (
+      <div className="ws-pill-cell">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label={`${name} 날짜 지정`}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", color: "var(--text-muted)" }}
+        >
+          —
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="ws-pill-cell">
+      <DDay value={value} />
+      <input
+        type="date"
+        autoFocus={editing && !has}
+        value={has ? (value as string) : ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        onBlur={() => setEditing(false)}
+        aria-label={name}
+      />
     </div>
   );
 }
@@ -1477,17 +1158,7 @@ function TableCell({
   }
 
   if (role === "date") {
-    return (
-      <div className="ws-pill-cell">
-        <DDay value={value} />
-        <input
-          type="date"
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value || null)}
-          aria-label={prop.name}
-        />
-      </div>
-    );
+    return <DateCell name={prop.name} value={value} onChange={onChange} />;
   }
 
   if (role === "progress") {

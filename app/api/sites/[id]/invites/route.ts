@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { recordActivity } from "@/lib/activity";
 import { parseEmailList } from "@/lib/sites/access";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const InviteBody = z.object({
+  emails: z.unknown().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -19,7 +25,9 @@ type Loaded =
 async function load(req: Request, id: string, workspaceId: string): Promise<Loaded> {
   const site = await prisma.publishedSite.findFirst({ where: { id, workspaceId, deletedAt: null }, select: { id: true, title: true } });
   if (!site) return { err: NextResponse.json({ error: "사이트를 찾을 수 없습니다." }, { status: 404 }) };
-  const body = (await req.json().catch(() => ({}))) as { emails?: unknown };
+  const parsed = await readBody(req, InviteBody);
+  if (!parsed.ok) return { err: parsed.res };
+  const body = parsed.data;
   if (!Array.isArray(body.emails)) return { err: NextResponse.json({ error: "emails 배열이 필요합니다." }, { status: 400 }) };
   return { site, list: parseEmailList(body.emails.map(String)) };
 }

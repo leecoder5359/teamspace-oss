@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const RiskPatchBody = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  severity: z.string().optional(),
+  status: z.string().optional(),
+  projectId: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 const ST = ["open", "mitigated", "closed"] as const;
@@ -13,9 +23,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { workspaceId } = guard;
   const found = await prisma.risk.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const b = (await req.json().catch(() => ({}))) as {
-    title?: string; description?: string; severity?: string; status?: string; projectId?: string;
-  };
+  const parsed = await readBody(req, RiskPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const b = parsed.data;
   if (b.status !== undefined && !(ST as readonly string[]).includes(b.status)) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }

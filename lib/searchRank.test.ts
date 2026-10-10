@@ -177,3 +177,15 @@ describe("usesTrigramIndex", () => {
     expect(usesTrigramIndex("  ab  ")).toBe(false);
   });
 });
+
+describe("rankSearch 변형 층", () => {
+  it("원문 본문 일치가 변형 제목 정확 일치보다 위", () => {
+    const now = Date.now();
+    const items = [
+      { id: "v", kind: "doc" as const, title: "인증 코어", body: "", updatedAt: new Date(now) },
+      { id: "o", kind: "doc" as const, title: "무관", body: "인증코어 설명", updatedAt: new Date(now) },
+    ];
+    const r = rankSearch(items, "인증코어", {}, 30, now, ["인증코어", "인증 코어"]);
+    expect(r.map((x) => x.id)).toEqual(["o", "v"]);
+  });
+});

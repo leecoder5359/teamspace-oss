@@ -1,52 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Icon } from "./ws/icons";
-import type { SessionUser } from "./AppShell";
+import type { InitialSidebar, SessionUser } from "./AppShell";
+import { useSidebarData } from "./sidebar/useSidebarData";
+import { SidebarQuick } from "./sidebar/SidebarQuick";
+import { SidebarTree, type CreatePageOpts } from "./sidebar/SidebarTree";
+import { DUPLICATE_RENAME_NOTICE, renameCollides } from "@/lib/renameDuplicate";
 
 type Theme = "light" | "dark";
-
-type FlatPage = {
-  id: string;
-  title: string;
-  icon: string | null;
-  parentId: string | null;
-  position: number;
-  kind: "doc" | "database";
-  projectId: string | null;
-  /** D3 후속: 이 페이지가 모두에게 열려 있지 않다(조상·프로젝트 상속 포함) */
-  restricted?: boolean;
-  /** 잠금이 이 페이지에서 시작됐나 — 자손마다 자물쇠를 겹쳐 그리지 않으려고 */
-  restrictedSelf?: boolean;
-};
-type PageNode = FlatPage & { children: PageNode[] };
-
-const NONE = "__none__";
-const LS_COLLAPSED = "ws-sidebar-collapsed";
-
-function buildTree(flat: FlatPage[]): PageNode[] {
-  const byId = new Map<string, PageNode>();
-  flat.forEach((p) => byId.set(p.id, { ...p, children: [] }));
-  const roots: PageNode[] = [];
-  byId.forEach((node) => {
-    if (node.parentId && byId.has(node.parentId)) {
-      byId.get(node.parentId)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  const sortRec = (nodes: PageNode[]) => {
-    nodes.sort((a, b) => a.position - b.position);
-    nodes.forEach((n) => sortRec(n.children));
-  };
-  sortRec(roots);
-  return roots;
-}
-
-type Group = { key: string; name: string; isProject: boolean; boards: FlatPage[]; roots: PageNode[] };
 
 export default function Sidebar({
   rail,
@@ -55,6 +20,7 @@ export default function Sidebar({
   onToggleTheme,
   onNavigate,
   sessionUser = null,
+  initialSidebar = null,
 }: {
   rail: boolean;
   theme: Theme;
@@ -62,23 +28,18 @@ export default function Sidebar({
   onToggleTheme: () => void;
   onNavigate?: () => void;
   sessionUser?: SessionUser;
+  initialSidebar?: InitialSidebar;
 }) {
-  const [flat, setFlat] = useState<FlatPage[]>([]);
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [menu, setMenu] = useState<{ node: FlatPage; hasChildren: boolean; x: number; y: number } | null>(null);
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [dragId, setDragId] = useState<string | null>(null);
+  // 이름 바꾸기 뒤 같은 제목 경고(비차단, 몇 초 뒤 사라진다)
+  const [dupNotice, setDupNotice] = useState(false);
   const [unread, setUnread] = useState(0);
-  const [dropKey, setDropKey] = useState<string | null>(null);
-  const persistRef = useRef(false);
   const pathname = usePathname();
   const router = useRouter();
 
   const activeId = pathname.startsWith("/p/") ? pathname.slice(3) : null;
+  const data = useSidebarData(activeId, initialSidebar);
+  const { refresh } = data;
 
   // 알림 미읽음 배지 (W6): 60초 폴링 + 경로 변경 시 갱신
   useEffect(() => {
@@ -99,80 +60,10 @@ export default function Sidebar({
     };
   }, [pathname]);
 
-  const load = useCallback(async () => {
-    const [pagesRes, projectsRes] = await Promise.all([
-      fetch("/api/pages", { cache: "no-store" }),
-      fetch("/api/projects", { cache: "no-store" }),
-    ]);
-    if (!pagesRes.ok) return;
-    const data = (await pagesRes.json()) as { pages: FlatPage[] };
-    setFlat(data.pages);
-    if (projectsRes.ok) {
-      const pj = (await projectsRes.json()) as { projects: { id: string; name: string }[] };
-      setProjects(pj.projects.map((p) => ({ id: p.id, name: p.name })));
-    }
-    setLoaded(true);
-  }, []);
-
-  // 접힘 상태 복원(최초 1회)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_COLLAPSED);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
-    } catch {
-      /* ignore */
-    }
-    persistRef.current = true;
-  }, []);
-
-  // 접힘 상태 저장
-  useEffect(() => {
-    if (!persistRef.current) return;
-    try {
-      localStorage.setItem(LS_COLLAPSED, JSON.stringify([...collapsed]));
-    } catch {
-      /* ignore */
-    }
-  }, [collapsed]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-    const onChanged = () => load();
-    window.addEventListener("pages:changed", onChanged);
-    return () => window.removeEventListener("pages:changed", onChanged);
-  }, [load]);
-
-  // 컨텍스트 메뉴: 바깥 클릭/스크롤 시 닫기
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("click", close);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("resize", close);
-    };
-  }, [menu]);
-
-  const toggle = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-
-  const refresh = useCallback(async () => {
-    await load();
-    window.dispatchEvent(new Event("pages:changed"));
-  }, [load]);
 
   // ── 변이(mutation) ──
   const createPage = useCallback(
-    async (opts: { parentId?: string | null; projectId?: string | null; title?: string; folder?: boolean }) => {
+    async (opts: CreatePageOpts): Promise<string | null> => {
       setBusy(true);
       try {
         const res = await fetch("/api/pages", {
@@ -184,19 +75,14 @@ export default function Sidebar({
             projectId: opts.projectId ?? null,
           }),
         });
-        if (res.ok) {
-          const { page } = (await res.json()) as { page: { id: string } };
-          if (opts.parentId) setCollapsed((prev) => { const n = new Set(prev); n.delete(opts.parentId!); return n; });
-          await refresh();
-          if (!opts.folder) {
-            router.push(`/p/${page.id}`);
-            onNavigate?.();
-          } else {
-            // 폴더는 바로 이름 편집 모드로
-            setRenaming(page.id);
-            setDraft("새 폴더");
-          }
+        if (!res.ok) return null;
+        const { page } = (await res.json()) as { page: { id: string } };
+        await refresh();
+        if (!opts.folder) {
+          router.push(`/p/${page.id}`);
+          onNavigate?.();
         }
+        return page.id;
       } finally {
         setBusy(false);
       }
@@ -229,17 +115,23 @@ export default function Sidebar({
   const rename = useCallback(
     async (id: string, title: string) => {
       const t = title.trim();
-      setRenaming(null);
       if (!t) return;
-      await fetch(`/api/pages/${id}`, {
+      const res = await fetch(`/api/pages/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: t }),
       });
       await refresh();
+      if (res.ok && (await renameCollides(id))) setDupNotice(true);
     },
     [refresh],
   );
+
+  useEffect(() => {
+    if (!dupNotice) return;
+    const t = setTimeout(() => setDupNotice(false), 6000);
+    return () => clearTimeout(t);
+  }, [dupNotice]);
 
   const remove = useCallback(
     async (node: { id: string; title: string; hasChildren: boolean }) => {
@@ -270,151 +162,10 @@ export default function Sidebar({
     [refresh],
   );
 
-  // ── 그룹 구성: 문서/폴더는 parentId 트리, 루트를 projectId로 그룹화 ──
-  const groups = useMemo<Group[]>(() => {
-    const docPages = flat.filter((p) => p.kind === "doc");
-    const databases = flat.filter((p) => p.kind === "database");
-    const roots = buildTree(docPages);
-
-    const rootsByProject = new Map<string, PageNode[]>();
-    for (const r of roots) {
-      const k = r.projectId ?? NONE;
-      (rootsByProject.get(k) ?? rootsByProject.set(k, []).get(k)!).push(r);
-    }
-    const boardsByProject = new Map<string, FlatPage[]>();
-    for (const d of databases) {
-      const k = d.projectId ?? NONE;
-      (boardsByProject.get(k) ?? boardsByProject.set(k, []).get(k)!).push(d);
-    }
-
-    const out: Group[] = [];
-    for (const p of projects) {
-      out.push({
-        key: p.id,
-        name: p.name,
-        isProject: true,
-        boards: boardsByProject.get(p.id) ?? [],
-        roots: rootsByProject.get(p.id) ?? [],
-      });
-    }
-    const nr = rootsByProject.get(NONE) ?? [];
-    const nb = boardsByProject.get(NONE) ?? [];
-    if (nr.length || nb.length) {
-      out.push({ key: NONE, name: "미분류", isProject: false, boards: nb, roots: nr });
-    }
-    return out;
-  }, [flat, projects]);
-
   const collapseTitle = rail ? "사이드바 펼치기" : "사이드바 접기";
   const userName = sessionUser ? sessionUser.name ?? sessionUser.email ?? "사용자" : "이호준";
   const userEmail = sessionUser ? sessionUser.email ?? "" : "you@example.com";
   const userInitials = userName.slice(0, 2);
-
-  // ── 렌더: 문서/폴더 노드(재귀) ──
-  const renderNode = (node: PageNode, projectKey: string, depth: number) => {
-    const hasChildren = node.children.length > 0;
-    const open = !collapsed.has(node.id);
-    const active = node.id === activeId;
-    const isRenaming = renaming === node.id;
-    const isDrop = dropKey === node.id;
-
-    return (
-      <li key={node.id}>
-        <div
-          className={`ws-tree-row${active ? " active" : ""}${isDrop ? " drop-over" : ""}`}
-          style={{ paddingLeft: 6 + depth * 14 }}
-          draggable={!isRenaming}
-          onDragStart={(e) => {
-            setDragId(node.id);
-            e.dataTransfer.effectAllowed = "move";
-          }}
-          onDragEnd={() => {
-            setDragId(null);
-            setDropKey(null);
-          }}
-          onDragOver={(e) => {
-            if (!dragId || dragId === node.id) return;
-            e.preventDefault();
-            if (dropKey !== node.id) setDropKey(node.id);
-          }}
-          onDragLeave={() => setDropKey((k) => (k === node.id ? null : k))}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (dragId && dragId !== node.id) void move(dragId, node.id, node.projectId);
-            setDragId(null);
-            setDropKey(null);
-          }}
-        >
-          <button
-            className="ws-tree-twist"
-            onClick={() => (hasChildren ? toggle(node.id) : undefined)}
-            aria-label={hasChildren ? (open ? "접기" : "펼치기") : undefined}
-            tabIndex={hasChildren ? 0 : -1}
-            style={{ visibility: hasChildren ? "visible" : "hidden" }}
-          >
-            <Icon name={open ? "chevronDown" : "chevronRight"} size={13} />
-          </button>
-          <span className="ws-tree-icon">
-            {node.icon ?? (hasChildren ? "📁" : "📄")}
-          </span>
-          {/* D3 후속: 비공개 표시. 잠금이 시작된 지점에만 그린다 —
-              자손마다 붙이면 트리가 자물쇠로 뒤덮여 오히려 안 읽힌다. */}
-          {node.restrictedSelf && (
-            <span
-              title="비공개 — 부여받은 사람만 볼 수 있습니다(하위 문서도 함께)"
-              style={{ display: "inline-flex", alignItems: "center", color: "#E0900F", marginRight: 2, flexShrink: 0 }}
-            >
-              <Icon name="lock" size={12} />
-            </span>
-          )}
-          {isRenaming ? (
-            <input
-              className="ws-tree-rename"
-              autoFocus
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void rename(node.id, draft);
-                if (e.key === "Escape") setRenaming(null);
-              }}
-              onBlur={() => void rename(node.id, draft)}
-            />
-          ) : (
-            <Link href={`/p/${node.id}`} className="ws-tree-name" onClick={onNavigate} title={node.title || "제목 없음"}>
-              {node.title || "제목 없음"}
-            </Link>
-          )}
-          <span className="ws-row-actions">
-            <button
-              className="ws-icon-btn ws-row-act"
-              title="문서 추가"
-              onClick={(e) => {
-                e.stopPropagation();
-                void createPage({ parentId: node.id, projectId: node.projectId });
-              }}
-            >
-              <Icon name="plus" size={14} />
-            </button>
-            <button
-              className="ws-icon-btn ws-row-act"
-              title="더보기"
-              onClick={(e) => {
-                e.stopPropagation();
-                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setMenu({ node, hasChildren, x: r.right, y: r.bottom + 4 });
-              }}
-            >
-              <Icon name="dots" size={15} />
-            </button>
-          </span>
-        </div>
-        {hasChildren && open && (
-          <ul className="ws-tree">{node.children.map((c) => renderNode(c, projectKey, depth + 1))}</ul>
-        )}
-      </li>
-    );
-  };
 
   return (
     <aside className="ws-sidebar" aria-label="사이드바">
@@ -462,99 +213,32 @@ export default function Sidebar({
           )}
         </Link>
 
-        {/* 프로젝트 (트리) */}
-        <div className="ws-nav-section">
-          <div className="ws-section-label">
-            <Link href="/projects" onClick={onNavigate} title="모든 프로젝트" className="ws-section-link" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "inherit", textDecoration: "none" }}>
-              <span>프로젝트</span>
-              <span className="ws-nav-count">{projects.length}</span>
-            </Link>
-            <Link
-              href="/projects"
-              className="ws-icon-btn ws-section-add"
-              onClick={onNavigate}
-              title="새 프로젝트"
-              aria-label="새 프로젝트"
-              style={{ width: 22, height: 22, marginLeft: "auto" }}
-            >
-              <Icon name="plus" size={15} />
-            </Link>
+        <SidebarQuick favorites={data.favorites} recents={data.recents} activeId={activeId} onNavigate={onNavigate} />
+
+        {dupNotice && (
+          <div role="status" style={{ margin: "6px 10px", padding: "6px 10px", borderRadius: 8, fontSize: 12, color: "#E0900F", border: "1px solid #E0900F", background: "var(--surface-sunken)" }}>
+            {DUPLICATE_RENAME_NOTICE}
           </div>
+        )}
 
-          {groups.map((g) => {
-            const open = !collapsed.has(g.key);
-            const isDrop = dropKey === g.key;
-            return (
-              <div key={g.key} className="ws-doc-group">
-                <div
-                  className={`ws-tree-row ws-group-row${isDrop ? " drop-over" : ""}`}
-                  onDragOver={(e) => {
-                    if (!dragId) return;
-                    e.preventDefault();
-                    if (dropKey !== g.key) setDropKey(g.key);
-                  }}
-                  onDragLeave={() => setDropKey((k) => (k === g.key ? null : k))}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragId) void move(dragId, null, g.isProject ? g.key : null);
-                    setDragId(null);
-                    setDropKey(null);
-                  }}
-                >
-                  <button className="ws-tree-twist" onClick={() => toggle(g.key)} aria-label={open ? "접기" : "펼치기"}>
-                    <Icon name={open ? "chevronDown" : "chevronRight"} size={13} />
-                  </button>
-                  <span className="ws-tree-icon">{g.isProject ? "📁" : "🗄"}</span>
-                  <button className="ws-tree-name ws-group-name" onClick={() => toggle(g.key)} title={g.name}>
-                    {g.name}
-                  </button>
-                  {g.isProject && (
-                    <span className="ws-row-actions">
-                      <button className="ws-icon-btn ws-row-act" title="문서 추가" onClick={() => void createPage({ projectId: g.key })}>
-                        <Icon name="plus" size={14} />
-                      </button>
-                      <button className="ws-icon-btn ws-row-act" title="폴더 추가" onClick={() => void createPage({ projectId: g.key, folder: true })}>
-                        <Icon name="folder" size={14} />
-                      </button>
-                    </span>
-                  )}
-                </div>
-
-                {open && (
-                  <ul className="ws-tree">
-                    {/* 보드 행 */}
-                    {g.boards.map((b) => (
-                      <li key={b.id}>
-                        <div className={`ws-tree-row${activeId === b.id ? " active" : ""}`} style={{ paddingLeft: 20 }}>
-                          <span className="ws-tree-twist" style={{ visibility: "hidden" }} />
-                          <span className="ws-tree-icon"><Icon name="board" size={15} /></span>
-                          <Link href={`/p/${b.id}?view=kanban`} className="ws-tree-name" onClick={onNavigate} title={b.title}>
-                            {b.title || "태스크 보드"}
-                          </Link>
-                        </div>
-                      </li>
-                    ))}
-                    {g.isProject && g.boards.length === 0 && (
-                      <li>
-                        <button className="ws-tree-row ws-tree-add" style={{ paddingLeft: 20 }} onClick={() => void createBoard(g.key)} disabled={busy}>
-                          <span className="ws-tree-twist" style={{ visibility: "hidden" }} />
-                          <span className="ws-tree-icon"><Icon name="board" size={15} /></span>
-                          <span className="ws-tree-name" style={{ color: "var(--text-muted)" }}>태스크 보드 만들기</span>
-                        </button>
-                      </li>
-                    )}
-                    {/* 문서/폴더 트리 */}
-                    {g.roots.map((n) => renderNode(n, g.key, 1))}
-                    {g.boards.length === 0 && g.roots.length === 0 && !g.isProject && (
-                      <li className="ws-tree-empty">비어 있음</li>
-                    )}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-          {groups.length === 0 && loaded && <div className="ws-tree-empty">프로젝트가 없습니다</div>}
-        </div>
+        {/* 프로젝트 (트리) */}
+        <SidebarTree
+          groups={data.groups}
+          collapsed={data.collapsed}
+          ready={data.ready}
+          toggle={data.toggle}
+          activeId={activeId}
+          onNavigate={onNavigate}
+          createPage={createPage}
+          createBoard={createBoard}
+          busy={busy}
+          loaded={data.loaded}
+          move={move}
+          rename={rename}
+          remove={remove}
+          toggleFavorite={data.toggleFavorite}
+          setDocType={data.setDocType}
+        />
 
         {/* 일반 */}
         <div className="ws-nav-section">
@@ -598,25 +282,6 @@ export default function Sidebar({
           </Link>
         </div>
       </nav>
-
-      {/* 컨텍스트 메뉴 */}
-      {menu && (
-        <div className="ws-ctx-menu" style={{ top: menu.y, left: Math.max(8, menu.x - 180) }} onClick={(e) => e.stopPropagation()}>
-          <button className="ws-ctx-item" onClick={() => { setRenaming(menu.node.id); setDraft(menu.node.title); setMenu(null); }}>
-            이름 변경
-          </button>
-          <button className="ws-ctx-item" onClick={() => { void createPage({ parentId: menu.node.id, projectId: menu.node.projectId }); setMenu(null); }}>
-            문서 추가
-          </button>
-          <button className="ws-ctx-item" onClick={() => { void createPage({ parentId: menu.node.id, projectId: menu.node.projectId, folder: true }); setMenu(null); }}>
-            폴더 추가
-          </button>
-          <div className="ws-ctx-sep" />
-          <button className="ws-ctx-item danger" onClick={() => { void remove({ id: menu.node.id, title: menu.node.title, hasChildren: menu.hasChildren }); setMenu(null); }}>
-            삭제
-          </button>
-        </div>
-      )}
 
       {/* 하단 사용자 카드 + 테마 토글 */}
       <div className="ws-side-foot">

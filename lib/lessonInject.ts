@@ -58,23 +58,26 @@ const fullLine = (l: LessonLite) => `- **${l.title}**: ${neutralizeHeadings(l.bo
 const size = (lines: string[]) => lines.reduce((n, l) => n + l.length + 1, 0);
 
 /** 한 섹션을 예산 안에 채운다 — **커버리지 우선**: 먼저 전부 제목 줄로 담고(넘치면 뒤에서 '외 N개'),
-    남는 예산만큼 최근 것부터 요약 줄로 올린다. 몇 개의 긴 요약보다 모든 규칙의 이름이 보이는 게 낫다. */
-function fillSection(list: LessonLite[], budget: number): { lines: string[]; used: number } {
+    남는 예산만큼 최근 것부터 요약 줄로 올린다. 몇 개의 긴 요약보다 모든 규칙의 이름이 보이는 게 낫다.
+    gist = 요약 줄로 올라간 개수(앞에서부터), shown = 제목 이상으로 보인 개수 — 나머지는 '외 N개'. */
+function fillSection(list: LessonLite[], budget: number): { lines: string[]; used: number; gist: number; shown: number } {
   const titles = list.map(titleLine);
   const moreLine = (n: number) => `- … 외 ${n}개 (전체 제목: MCP \`lesson_list\`)`;
   let shown = titles.length;
   while (shown > 0 && size(titles.slice(0, shown)) + (shown < list.length ? moreLine(list.length - shown).length + 1 : 0) > budget) shown--;
   const lines = titles.slice(0, shown);
   let used = size(lines) + (shown < list.length ? moreLine(list.length - shown).length + 1 : 0);
+  let gist = 0;
   for (let i = 0; i < shown; i++) {
     const upgraded = compactLine(list[i]);
     const delta = upgraded.length - lines[i].length;
     if (used + delta > budget) break;
     lines[i] = upgraded;
     used += delta;
+    gist++;
   }
   if (shown < list.length) lines.push(moreLine(list.length - shown));
-  return { lines, used };
+  return { lines, used, gist, shown };
 }
 
 const STACK_RE = /^[a-z0-9][a-z0-9.+-]{0,31}$/;
@@ -111,6 +114,35 @@ function allocate(needs: number[], counts: number[], budget: number): number[] {
   return alloc;
 }
 
+/** 레슨별 주입 상태 — gist: 제목+요약 / title: 제목만 / omitted: '외 N개' 로만 셈 / not_applicable: 이 세션 대상 아님. */
+export type LessonStatus = "gist" | "title" | "omitted" | "not_applicable";
+export type LessonScope = "project" | "stack" | "global";
+export type NotApplicableReason = "other_project" | "stack_mismatch";
+
+export type LessonSectionReport = {
+  kind: LessonScope;
+  /** 스택 섹션의 태그 */
+  tag: string | null;
+  count: number;
+  /** compact 에서 이 섹션에 배분된 예산(문자). full 은 null */
+  budget: number | null;
+  /** 실제로 쓴 문자(줄바꿈 포함, 섹션 제목 줄 제외) */
+  used: number;
+  gist: number;
+  title: number;
+  omitted: number;
+};
+
+export type LessonRenderReport = {
+  mode: "full" | "compact";
+  /** 레슨 섹션 전체 예산(compact) */
+  budget: number | null;
+  /** 레슨 섹션 글자 수(lines.join("\n")) */
+  chars: number;
+  sections: LessonSectionReport[];
+  statuses: { id: string; scope: LessonScope; status: LessonStatus; reason?: NotApplicableReason }[];
+};
+
 export function renderLessons(i: {
   lessons: LessonLite[];
   projectId: string | null;
@@ -119,6 +151,18 @@ export function renderLessons(i: {
   mode: "full" | "compact";
   budget?: number;
 }): string[] {
+  return renderLessonsReport(i).lines;
+}
+
+/** renderLessons 와 같은 출력 + 레슨별 상태·섹션 예산 사용(레슨 주입 점검 화면용). 출력 줄은 renderLessons 와 바이트 단위로 같다. */
+export function renderLessonsReport(i: {
+  lessons: LessonLite[];
+  projectId: string | null;
+  projectName: string | null;
+  projectStack?: string[];
+  mode: "full" | "compact";
+  budget?: number;
+}): { lines: string[]; report: LessonRenderReport } {
   const stackSet = new Set(i.projectId ? (i.projectStack ?? []) : []);
   const project = i.projectId ? i.lessons.filter((l) => l.projectId === i.projectId) : [];
   const global = i.lessons.filter((l) => !l.projectId && !l.stack);
@@ -135,24 +179,38 @@ export function renderLessons(i: {
   ].filter(Boolean).join(" · ");
   out.push(`## 팀 작업규칙·레슨 — 반드시 따른다 (${head})`);
 
-  const sections: { title: string; list: LessonLite[] }[] = [];
-  if (i.projectId) sections.push({ title: `### 프로젝트: ${i.projectName ?? "현재 프로젝트"} (${project.length})`, list: project });
-  for (const x of byStack) sections.push({ title: `### 스택: ${x.tag} (${x.list.length})`, list: x.list });
-  sections.push({ title: `### 전역 (${global.length})`, list: global });
+  const sections: { title: string; list: LessonLite[]; kind: LessonScope; tag: string | null }[] = [];
+  if (i.projectId) sections.push({ title: `### 프로젝트: ${i.projectName ?? "현재 프로젝트"} (${project.length})`, list: project, kind: "project", tag: null });
+  for (const x of byStack) sections.push({ title: `### 스택: ${x.tag} (${x.list.length})`, list: x.list, kind: "stack", tag: x.tag });
+  sections.push({ title: `### 전역 (${global.length})`, list: global, kind: "global", tag: null });
+
+  const statusById = new Map<string, { scope: LessonScope; status: LessonStatus }>();
+  const secReports: LessonSectionReport[] = [];
+  let budgetOut: number | null = null;
 
   if (i.mode === "full") {
     for (const sec of sections) {
       out.push(sec.title);
       if (sec.list.length === 0) out.push("- (없음)");
-      for (const l of sec.list) out.push(fullLine(l));
+      const lines = sec.list.map(fullLine);
+      out.push(...lines);
+      for (const l of sec.list) statusById.set(l.id, { scope: sec.kind, status: "gist" });
+      secReports.push({ kind: sec.kind, tag: sec.tag, count: sec.list.length, budget: null, used: size(lines), gist: sec.list.length, title: 0, omitted: 0 });
     }
   } else {
     const budget = i.budget ?? LESSON_BUDGET;
+    budgetOut = budget;
     const alloc = allocate(sections.map((sec) => size(sec.list.map(compactLine))), sections.map((sec) => sec.list.length), budget);
     sections.forEach((sec, idx) => {
       out.push(sec.title);
-      if (sec.list.length === 0) return void out.push("- (없음)");
-      out.push(...fillSection(sec.list, alloc[idx]).lines);
+      if (sec.list.length === 0) {
+        secReports.push({ kind: sec.kind, tag: sec.tag, count: 0, budget: alloc[idx], used: 0, gist: 0, title: 0, omitted: 0 });
+        return void out.push("- (없음)");
+      }
+      const r = fillSection(sec.list, alloc[idx]);
+      out.push(...r.lines);
+      sec.list.forEach((l, k) => statusById.set(l.id, { scope: sec.kind, status: k < r.gist ? "gist" : k < r.shown ? "title" : "omitted" }));
+      secReports.push({ kind: sec.kind, tag: sec.tag, count: sec.list.length, budget: alloc[idx], used: r.used, gist: r.gist, title: r.shown - r.gist, omitted: sec.list.length - r.shown });
     });
     out.push("_전문은 관련 작업을 시작할 때 읽는다: MCP `lesson_get {id}` (TeamSpace 레포에서는 `pnpm ws lesson show <id>`)._");
   }
@@ -160,7 +218,42 @@ export function renderLessons(i: {
     out.push(`_스택 레슨 ${skippedStack}개는 이 세션의 프로젝트 스택과 맞지 않거나 프로젝트가 매핑되지 않아 제외했다._`);
   }
   out.push("");
-  return out;
+
+  const statuses = i.lessons.map((l) => {
+    const hit = statusById.get(l.id);
+    if (hit) return { id: l.id, ...hit };
+    const scope: LessonScope = l.projectId ? "project" : l.stack ? "stack" : "global";
+    const reason: NotApplicableReason = l.projectId ? "other_project" : "stack_mismatch";
+    return { id: l.id, scope, status: "not_applicable" as const, reason };
+  });
+  return { lines: out, report: { mode: i.mode, budget: budgetOut, chars: out.join("\n").length, sections: secReports, statuses } };
+}
+
+/** 세션 컨텍스트에서 레슨 섹션이 받는 예산: 전체 예산(CONTEXT_BUDGET)에서 다른 섹션이 쓰고 남은 만큼(최소 LESSON_BUDGET).
+    태스크가 없는 레포(로요)는 레슨이 더 들어가고, 태스크가 많은 레포는 레슨이 최소 몫을 지킨다. */
+export function lessonBudgetFor(restChars: number): number {
+  return Math.max(LESSON_BUDGET, CONTEXT_BUDGET - restChars - 400);
+}
+
+/** /api/context 의 레슨 섹션 조립 — 라우트와 레슨 주입 점검(시뮬레이터)이 **같은 함수**를 쓴다(드리프트 방지).
+    restChars = 레슨을 뺀 나머지 컨텍스트 글자 수(레슨은 나머지를 다 그린 뒤 끼운다). */
+export function buildLessonSection(i: {
+  lessons: LessonLite[];
+  projectId: string | null;
+  projectName: string | null;
+  projectStack: string[];
+  compact: boolean;
+  restChars: number;
+}): { lines: string[]; report: LessonRenderReport & { restChars: number } } {
+  const r = renderLessonsReport({
+    lessons: i.lessons,
+    projectId: i.projectId,
+    projectName: i.projectName,
+    projectStack: i.projectStack,
+    mode: i.compact ? "compact" : "full",
+    budget: lessonBudgetFor(i.restChars),
+  });
+  return { lines: r.lines, report: { ...r.report, restChars: i.restChars } };
 }
 
 /** 레슨 스택은 태그 하나(null/빈 문자열 = 해제). */

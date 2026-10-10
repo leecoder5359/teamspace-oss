@@ -1,13 +1,15 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useRef, useSyncExternalStore } from "react";
 
 // BlockNote·에디터 모두 window 를 쓰므로 클라이언트 전용 로드 (SSR 비활성)
 const PageEditor = dynamic(() => import("./PageEditor"), { ssr: false });
 const RawDocEditor = dynamic(() => import("./RawDocEditor"), { ssr: false });
 import SharePanel from "./ws/SharePanel";
 import PresenceBar from "./ws/PresenceBar";
+import Breadcrumb from "./Breadcrumb";
+import DocToc from "./DocToc";
 
 /* =====================================================================
    문서 편집 진입점.
@@ -48,6 +50,8 @@ const getServerSnapshot = (): Mode => "rich";
 
 export default function PageView({ pageId, fileBacked }: { pageId: string; fileBacked?: boolean }) {
   const mode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  // 목차(U5)가 헤딩을 모을 본문 영역 — 편집기·원문 어느 모드든 이 안에 그려진다
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const pick = useCallback((m: Mode) => {
     try {
@@ -62,13 +66,20 @@ export default function PageView({ pageId, fileBacked }: { pageId: string; fileB
   if (!fileBacked)
     return (
       <div className="ws-page-view">
-        <PageEditor key={pageId} pageId={pageId} />
+        <Breadcrumb pageId={pageId} />
+        <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+          <div ref={bodyRef} style={{ flex: 1, minWidth: 0 }}>
+            <PageEditor key={pageId} pageId={pageId} />
+          </div>
+          <DocToc rootRef={bodyRef} />
+        </div>
         <SharePanel pageId={pageId} />
       </div>
     );
 
   return (
     <div className="ws-page-view">
+      <Breadcrumb pageId={pageId} />
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
         {/* 프레즌스(격차 D4) — 편집기 모드면 '편집 중'으로 알린다 */}
         <PresenceBar pageId={pageId} editing={mode === "rich" || mode === "source"} />
@@ -90,7 +101,12 @@ export default function PageView({ pageId, fileBacked }: { pageId: string; fileB
           원문
         </button>
       </div>
-      {mode === "rich" ? <PageEditor key={pageId} pageId={pageId} /> : <RawDocEditor key={pageId} pageId={pageId} />}
+      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+        <div ref={bodyRef} style={{ flex: 1, minWidth: 0 }}>
+          {mode === "rich" ? <PageEditor key={pageId} pageId={pageId} /> : <RawDocEditor key={pageId} pageId={pageId} />}
+        </div>
+        <DocToc rootRef={bodyRef} />
+      </div>
 
       {/* 공유 범위(격차 D3) — 편집기·원문 어느 모드에서도 보여야 한다 */}
       <SharePanel pageId={pageId} />

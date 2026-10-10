@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { createTaskDatabase } from "@/lib/taskdb";
@@ -8,11 +10,16 @@ export async function POST(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId, userId } = guard;
-  const body = (await request.json().catch(() => ({}))) as {
-    title?: string;
-    parentId?: string | null;
-    projectId?: string | null;
-  };
+  const parsedBody = await readBody(
+    request,
+    z.object({
+      title: z.string().optional(),
+      parentId: z.string().nullable().optional(),
+      projectId: z.string().nullable().optional(),
+    }),
+  );
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
   const title = body.title?.trim() || "태스크 보드";
 
   // projectId 지정 시 동일 워크스페이스 프로젝트인지 검증

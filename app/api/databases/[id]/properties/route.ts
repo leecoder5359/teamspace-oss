@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage, gatePage } from "@/lib/pageGuard";
@@ -36,11 +38,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!(await loadBoard(id, guard.workspaceId))) {
     return NextResponse.json({ error: "Not a database" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as {
-    name?: string;
-    type?: PropTypeStr;
-    config?: object;
-  };
+  const parsedBody = await readBody(
+    req,
+    z.object({
+      name: z.string().optional(),
+      type: z.string().optional(),
+      config: z.record(z.string(), z.unknown()).optional(),
+    }),
+  );
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data as { name?: string; type?: PropTypeStr; config?: object };
   const name = body.name?.trim() ?? "";
   if (!name) return NextResponse.json({ error: "name 이 필요합니다." }, { status: 400 });
   if (!body.type || !(CREATABLE_TYPES as readonly string[]).includes(body.type)) {

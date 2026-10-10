@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, gatePage, canManageGrants } from "@/lib/pageGuard";
@@ -19,12 +21,14 @@ export const runtime = "nodejs";
    "누구와 공유돼 있나" 는 그 페이지를 볼 수 있는 사람에게 감출 이유가 없다.
    ===================================================================== */
 
-type Body = {
-  userId?: string | null;
-  teamId?: string | null;
-  level?: "view" | "edit";
-  visibility?: "inherit" | "restricted";
-};
+const GrantBody = z.object({
+  userId: z.string().nullable().optional(),
+  teamId: z.string().nullable().optional(),
+  level: z.enum(["view", "edit"]).optional(),
+  // 값 검사는 라우트의 한국어 수동 검사가 맡는다(문구 유지) — 여기선 타입만.
+  visibility: z.string().optional(),
+});
+type Body = { userId?: string | null; teamId?: string | null; level?: "view" | "edit"; visibility?: "inherit" | "restricted" };
 
 async function gate(id: string, min: "view" | "edit") {
   const guard = await requireCtx(min === "edit" ? "editor" : "viewer");
@@ -66,7 +70,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   const g = await gate(id, "edit");
   if ("err" in g) return g.err;
-  const body = (await req.json().catch(() => ({}))) as Body;
+  const parsedBody = await readBody(req, GrantBody);
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data as Body;
   if (body.visibility !== "inherit" && body.visibility !== "restricted") {
     return NextResponse.json({ error: "visibility 는 inherit 또는 restricted 입니다." }, { status: 400 });
   }
@@ -105,7 +111,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const g = await gate(id, "edit");
   if ("err" in g) return g.err;
   const { workspaceId } = g.guard;
-  const body = (await req.json().catch(() => ({}))) as Body;
+  const parsedBody = await readBody(req, GrantBody);
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data as Body;
   const level = body.level === "edit" ? "edit" : "view";
   const userId = body.userId?.trim() || null;
   const teamId = body.teamId?.trim() || null;

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
+import { responseErrorMessage } from "@/lib/fetchErrorMessage";
 
 /* 전역 검색 + 물어보기(Vault Q&A). /api/search · /api/ask. */
 
@@ -15,15 +16,27 @@ type ConceptResult = { query: string; expanded: string[]; mode: "expanded" | "pl
 
 type Mode = "search" | "ask" | "concept";
 
-export default function Search() {
+export default function Search({ initialQ = "" }: { initialQ?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("search");
-  const [q, setQ] = useState("");
+  // ?q= 딥링크가 입력창 초기값. 이후 입력은 디바운스 뒤 URL 로 되돌려 쓴다(아래 syncUrl).
+  const [q, setQ] = useState(initialQ);
   const [res, setRes] = useState<Results | null>(null);
   const [ask, setAsk] = useState<AskResult | null>(null);
   const [concept, setConcept] = useState<ConceptResult | null>(null);
   const [loading, setLoading] = useState(false);
+  // 요청 실패(429 레이트 리밋 등) 안내. 오류 본문을 결과 상태에 넣지 않는다 — 렌더가 docs·sources 를 읽다 죽는다.
+  const [err, setErr] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
+  // URL 에 이미 반영된 q. 같은 값이면 건너뛴다(마운트 직후 중복 갱신 방지).
+  // router.replace 가 아니라 history.replaceState — /search 는 searchParams 를 읽는 동적 페이지라 router.replace 는
+  // 디바운스된 입력마다 RSC 서버 왕복을 낸다. replaceState 는 Next 라우터와 동기화되면서 서버를 부르지 않는다.
+  const syncedQ = useRef(initialQ.trim());
+  const syncUrl = (query: string) => {
+    if (syncedQ.current === query) return;
+    syncedQ.current = query;
+    window.history.replaceState(null, "", query ? `/search?q=${encodeURIComponent(query)}` : "/search");
+  };
 
   useEffect(() => {
     ref.current?.focus();
@@ -36,19 +49,40 @@ export default function Search() {
     if (!query) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRes(null);
+      setErr(null);
+      syncUrl("");
       return;
     }
     let alive = true;
     setLoading(true);
     const t = setTimeout(() => {
       fetch(`/api/search?q=${encodeURIComponent(query)}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d: Results) => {
-          if (alive) setRes(d);
+        .then(async (r) => {
+          const e = responseErrorMessage(r);
+          if (e) {
+            if (alive) {
+              setRes(null);
+              setErr(e);
+            }
+            return;
+          }
+          const d = (await r.json()) as Results;
+          if (alive) {
+            setErr(null);
+            setRes(d);
+          }
+        })
+        .catch(() => {
+          if (alive) {
+            setRes(null);
+            setErr("결과를 가져오지 못했어요. 잠시 뒤 다시 시도해 주세요.");
+          }
         })
         .finally(() => {
           if (alive) setLoading(false);
         });
+      // 히스토리를 쌓지 않도록 replace. 비면 ?q 제거.
+      syncUrl(query);
     }, 220);
     return () => {
       alive = false;
@@ -61,6 +95,7 @@ export default function Search() {
     setRes(null);
     setAsk(null);
     setConcept(null);
+    setErr(null);
     ref.current?.focus();
   }
 
@@ -69,8 +104,14 @@ export default function Search() {
     if (!query || loading) return;
     setLoading(true);
     setAsk(null);
+    setErr(null);
     try {
       const r = await fetch(`/api/ask?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      const e = responseErrorMessage(r);
+      if (e) {
+        setErr(e);
+        return;
+      }
       setAsk((await r.json()) as AskResult);
     } catch {
       setAsk({ question: query, answer: "답변을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.", mode: "empty", sources: [] });
@@ -84,8 +125,14 @@ export default function Search() {
     if (!query || loading) return;
     setLoading(true);
     setConcept(null);
+    setErr(null);
     try {
       const r = await fetch(`/api/search/concept?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      const e = responseErrorMessage(r);
+      if (e) {
+        setErr(e);
+        return;
+      }
       setConcept((await r.json()) as ConceptResult);
     } catch {
       setConcept({ query, expanded: [], mode: "plain", results: [] });
@@ -148,7 +195,9 @@ export default function Search() {
         )}
       </div>
 
-      {mode === "ask" ? (
+      {err && !loading ? (
+        <div className="ws-empty-hint" role="alert" style={{ marginTop: 18 }}>{err}</div>
+      ) : mode === "ask" ? (
         <AskView loading={loading} ask={ask} q={q} onOpen={openSource} />
       ) : mode === "concept" ? (
         <ConceptView loading={loading} concept={concept} onOpen={openSource} />

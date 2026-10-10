@@ -15,7 +15,7 @@ import { GET } from "./route";
 const m = (f: unknown) => f as Mock;
 const params = { params: Promise.resolve({ id: "cs1" }) };
 const ctx = { workspaceId: "w1", userId: "u1", role: "viewer", actor: { type: "user", id: "u1", name: "나" } };
-const bootstrapCtx = { workspaceId: "w1", userId: "u9", role: "admin", actor: { type: "agent", id: "u9", name: "legacy-cli" } };
+const bootstrapCtx = { workspaceId: "w1", userId: "u9", role: "admin", actor: { type: "agent", id: "u9", name: "legacy-cli" }, bootstrap: true };
 
 describe("GET /api/sites/[id]/intake — 멤버용 목록", () => {
   beforeEach(() => {

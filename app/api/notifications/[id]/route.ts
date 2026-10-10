@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const NotificationPatchBody = z.object({
+  read: z.boolean().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -13,7 +19,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!n || n.workspaceId !== guard.workspaceId || n.userId !== guard.userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as { read?: boolean };
+  const parsed = await readBody(req, NotificationPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const updated = await prisma.notification.update({
     where: { id },
     data: { readAt: body.read === false ? null : new Date() },

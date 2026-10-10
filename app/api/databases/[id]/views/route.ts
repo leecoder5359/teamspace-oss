@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
@@ -42,7 +44,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   });
   if (!db) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as { name?: string; type?: string; config?: unknown };
+  const parsedBody = await readBody(req, z.object({ name: z.string().optional(), type: z.string().optional(), config: z.unknown().optional() }));
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "뷰 이름을 입력해 주세요." }, { status: 400 });
   if (body.type !== undefined && !(VIEW_TYPES as readonly string[]).includes(body.type)) {

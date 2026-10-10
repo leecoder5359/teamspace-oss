@@ -2,34 +2,51 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { parseLessonStack } from "@/lib/lessonInject";
+import { clampLessonLimit, normalizeLessonQ, lessonTitleWhere } from "@/lib/lessonQuery";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const LessonBody = z.object({
+  title: z.string().optional(),
+  body: z.string().optional(),
+  projectId: z.string().nullable().optional(),
+  stack: z.string().nullable().optional(),
+});
 
 export const runtime = "nodejs";
 
-// GET /api/lessons[?projectId=] → 팀 레슨/작업규칙 목록 (전역 + 프로젝트)
+// GET /api/lessons[?projectId=&q=&limit=] → 팀 레슨/작업규칙 목록 (전역 + 프로젝트)
+// q = 제목 부분일치(대소문자 무시), limit = 1..300(생략하면 전체 — 자사 UI 호환). 응답 { lessons, total } — total 은 limit 앞의 건수.
 export async function GET(req: Request) {
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
-  const projectId = new URL(req.url).searchParams.get("projectId");
-  const lessons = await prisma.lesson.findMany({
-    where: {
-      workspaceId: guard.workspaceId,
-      ...(projectId ? { OR: [{ projectId }, { projectId: null }] } : {}),
-    },
-    orderBy: [{ projectId: "asc" }, { updatedAt: "desc" }],
-  });
-  return NextResponse.json({ lessons });
+  const sp = new URL(req.url).searchParams;
+  const projectId = sp.get("projectId");
+  const q = normalizeLessonQ(sp.get("q"));
+  const limit = clampLessonLimit(sp.get("limit"));
+  const where = {
+    workspaceId: guard.workspaceId,
+    ...(projectId ? { OR: [{ projectId }, { projectId: null }] } : {}),
+    ...lessonTitleWhere(q),
+  };
+  const [lessons, total] = await Promise.all([
+    prisma.lesson.findMany({
+      where,
+      orderBy: [{ projectId: "asc" }, { updatedAt: "desc" }],
+      ...(limit ? { take: limit } : {}),
+    }),
+    prisma.lesson.count({ where }),
+  ]);
+  return NextResponse.json({ lessons, total });
 }
 
 // POST /api/lessons { title, body, projectId?, stack? } → 레슨 등록 (컨텍스트 주입에 포함됨)
 export async function POST(req: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
-  const body = (await req.json().catch(() => ({}))) as {
-    title?: string;
-    body?: string;
-    projectId?: string | null;
-    stack?: string | null;
-  };
+  const parsed = await readBody(req, LessonBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const title = body.title?.trim() ?? "";
   const text = body.body?.trim() ?? "";
   if (!title || !text) {

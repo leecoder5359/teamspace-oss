@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getDefaultContext, requireCtx } from "@/lib/workspace";
 import { verifyHmac, resolveWorkspaceByCwd } from "@/lib/ingest";
+import { sessionGitFields } from "@/lib/liveSessions";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
   const secret = (process.env.AUTH_INGEST_SECRET || process.env.AUTH_SECRET || "").trim();
 
   let workspaceId: string | null = null;
+  let agentName: string | null = null;
   if (sig) {
     if (!secret) {
       return NextResponse.json({ error: "AUTH_INGEST_SECRET/AUTH_SECRET 미설정" }, { status: 503 });
@@ -28,6 +30,7 @@ export async function POST(request: Request) {
     const guard = await requireCtx("editor");
     if ("err" in guard) return guard.err;
     workspaceId = guard.workspaceId;
+    agentName = guard.actor.name;
   }
 
   let body: {
@@ -35,6 +38,10 @@ export async function POST(request: Request) {
     cwd?: string;
     project?: string;
     status?: string;
+    // 라이브 세션 보드(Console 4) — SessionStart 훅이 보낸다
+    branch?: string;
+    repo?: string;
+    worktree?: string;
     items?: { kind?: string; body?: unknown; externalRef?: string }[];
   };
   try {
@@ -54,6 +61,12 @@ export async function POST(request: Request) {
   }
 
   const status = body.status === "ended" ? "ended" : "active";
+  // 라이브 세션 보드: 저장소 필드(없으면 기존 값 유지)·토큰 이름·마지막 활동
+  const live = {
+    ...sessionGitFields(body),
+    ...(agentName ? { agentName } : {}),
+    ...(status === "active" ? { lastSeenAt: new Date() } : {}),
+  };
   const session = await prisma.claudeSession.upsert({
     where: { workspaceId_externalId: { workspaceId, externalId } },
     create: {
@@ -64,6 +77,7 @@ export async function POST(request: Request) {
       status,
       lastSyncedAt: new Date(),
       ...(status === "ended" ? { endedAt: new Date() } : {}),
+      ...live,
     },
     update: {
       cwd: body.cwd ?? undefined,
@@ -71,6 +85,7 @@ export async function POST(request: Request) {
       status,
       lastSyncedAt: new Date(),
       ...(status === "ended" ? { endedAt: new Date() } : {}),
+      ...live,
     },
     select: { id: true },
   });

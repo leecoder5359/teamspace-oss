@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { callbackPolicy } from "@/lib/llmjob";
 import { checkCallbackUrl } from "@/lib/callbackUrl";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ClassifyBody = z.object({
+  kind: z.string().optional(),
+  payload: z.unknown().optional(),
+  callbackUrl: z.string().optional(),
+  callbackSecret: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -14,9 +23,9 @@ export async function POST(request: Request) {
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
 
-  const body = (await request.json().catch(() => ({}))) as {
-    kind?: string; payload?: unknown; callbackUrl?: string; callbackSecret?: string;
-  };
+  const parsed = await readBody(request, ClassifyBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   if (!body.kind || !KINDS.has(body.kind)) return NextResponse.json({ error: "kind 가 없거나 지원하지 않음" }, { status: 400 });
   if (!body.payload || typeof body.payload !== "object") return NextResponse.json({ error: "payload 필요" }, { status: 400 });
   /* 콜백 URL 은 **접수 때 한 번, 발송 때 한 번** 본다(SSRF 축소, 피드백허브 후속).

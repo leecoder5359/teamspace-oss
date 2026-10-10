@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { pushNotification, recordActivity } from "@/lib/activity";
 import { withIdempotency } from "@/lib/idempotency";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ProposalBody = z.object({
+  kind: z.string().optional(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  projectId: z.string().nullable().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -25,12 +34,9 @@ export async function POST(req: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   return withIdempotency(req, guard, async () => {
-    const body = (await req.json().catch(() => ({}))) as {
-      kind?: string;
-      title?: string;
-      body?: string;
-      projectId?: string | null;
-    };
+    const parsed = await readBody(req, ProposalBody);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data;
     const kind = body.kind === "decision" ? "decision" : body.kind === "lesson" ? "lesson" : null;
     const title = body.title?.trim() ?? "";
     const text = body.body?.trim() ?? "";

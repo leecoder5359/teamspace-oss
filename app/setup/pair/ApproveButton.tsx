@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-export function ApproveButton({ code }: { code: string }) {
+// label 은 호출부에서 버튼 이름을 드러내려고 받는다(a11y 스캐너가 래퍼 호출부의 이름을 검사한다).
+export function ApproveButton({ code, label }: { code: string; label: string }) {
   const [state, setState] = useState<"idle" | "ok" | "err">("idle");
 
   async function approve() {
@@ -18,7 +19,7 @@ export function ApproveButton({ code }: { code: string }) {
   return (
     <>
       <button onClick={approve} style={{ padding: "10px 20px", fontSize: 16 }}>
-        이 기기 승인
+        {label}
       </button>
       {state === "err" && <p style={{ color: "crimson" }}>승인 실패 — 링크를 다시 열어 주세요.</p>}
     </>

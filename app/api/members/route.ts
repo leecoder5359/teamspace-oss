@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import type { Role } from "@/app/generated/prisma/enums";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+import { loadAgentTokenSummaries } from "@/lib/membersAgents";
+import { isAgentEmail } from "@/lib/agentToken";
+
+const MemberBody = z.object({
+  email: z.string().optional(),
+  role: z.string().optional(),
+});
 
 const VALID_ROLES: Role[] = ["admin", "editor", "viewer"];
 
@@ -19,7 +28,15 @@ export async function GET() {
     },
     orderBy: { createdAt: "asc" },
   });
-  return NextResponse.json({ members });
+  // 에이전트 계정은 토큰 요약을 붙인다(한 번의 쿼리, 유저별 최신 1건).
+  const summaries = await loadAgentTokenSummaries(workspaceId, members);
+  return NextResponse.json({
+    members: members.map((mem) =>
+      isAgentEmail(mem.user.email)
+        ? { ...mem, kind: "agent" as const, agentToken: summaries.get(mem.userId) ?? null }
+        : { ...mem, kind: "human" as const, agentToken: null },
+    ),
+  });
 }
 
 // POST /api/members → 이메일로 멤버 추가 (없으면 User 자동 생성)
@@ -27,10 +44,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx("admin");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const body = (await request.json().catch(() => ({}))) as {
-    email?: string;
-    role?: Role;
-  };
+  const parsed = await readBody(request, MemberBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
 
   const email = body.email?.trim() ?? "";
   if (!email.includes("@")) {
@@ -38,7 +54,7 @@ export async function POST(request: Request) {
   }
 
   const role: Role =
-    body.role && VALID_ROLES.includes(body.role) ? body.role : "editor";
+    body.role && VALID_ROLES.includes(body.role as Role) ? (body.role as Role) : "editor";
 
   // find-or-create User
   const emailLocal = email.split("@")[0];

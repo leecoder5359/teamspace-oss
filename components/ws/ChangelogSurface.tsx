@@ -6,7 +6,8 @@ import { Icon } from "./icons";
 
 /* 변경 이력(changelog) surface — 릴리스 노트. /api/changelog. 제품 공통. */
 
-type Entry = { id: string; version: string | null; title: string; body: string | null; releasedAt: string };
+type Entry = { id: string; projectId: string | null; version: string | null; title: string; body: string | null; releasedAt: string };
+type Proj = { id: string; name: string; archivedAt: string | null };
 
 export default function ChangelogSurface() {
   const [list, setList] = useState<Entry[] | null>(null);
@@ -15,23 +16,38 @@ export default function ChangelogSurface() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [projects, setProjects] = useState<Proj[]>([]);
+  // 필터: "" = 전체, "none" = 프로젝트 없음(공용), 그 외 = 프로젝트 id
+  const [filter, setFilter] = useState("");
+  const [formProject, setFormProject] = useState("");
 
-  async function load() {
-    const res = await fetch("/api/changelog", { cache: "no-store" });
+  async function load(f = filter) {
+    const res = await fetch(`/api/changelog${f ? `?project=${encodeURIComponent(f)}` : ""}`, { cache: "no-store" });
     const data = (await res.json()) as { entries: Entry[] };
     setList(data.entries);
   }
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    (async () => {
+      try {
+        // 칩 라벨은 보관 프로젝트 항목에도 이름이 떠야 해서 보관 포함으로 받는다(선택지는 아래에서 활성만)
+        const res = await fetch("/api/projects?archived=all", { cache: "no-store" });
+        const j = (await res.json()) as { projects?: (Omit<Proj, "archivedAt"> & { archivedAt?: string | null })[] };
+        if (Array.isArray(j.projects)) setProjects(j.projects.map((p) => ({ id: p.id, name: p.name, archivedAt: p.archivedAt ?? null })));
+      } catch {
+        /* 칩·필터만 비는 것 — 목록은 그대로 */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function create() {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      await fetch("/api/changelog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version, title, body }) });
-      setVersion(""); setTitle(""); setBody(""); setOpen(false);
+      await fetch("/api/changelog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version, title, body, projectId: formProject || null }) });
+      setVersion(""); setTitle(""); setBody(""); setFormProject(""); setOpen(false);
       await load();
     } finally {
       setBusy(false);
@@ -53,6 +69,11 @@ export default function ChangelogSurface() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
         <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>변경 이력 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{list.length}</span></span>
+        <select className="ws-db-filter" value={filter} onChange={(e) => { setFilter(e.target.value); void load(e.target.value); }} aria-label="프로젝트">
+          <option value="">전체</option>
+          {projects.filter((p) => !p.archivedAt || p.id === filter).map((p) => <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>)}
+          <option value="none">프로젝트 없음</option>
+        </select>
         <span style={{ flex: 1 }} />
         <button className="ws-btn-soft" onClick={() => setOpen((v) => !v)}><Icon name="plus" size={15} /> 릴리스 추가</button>
       </div>
@@ -65,6 +86,10 @@ export default function ChangelogSurface() {
                 <input autoFocus value={version} onChange={(e) => setVersion(e.target.value)} placeholder="버전 (예: v1.2.0)" style={{ ...inp, flex: "0 0 160px" }} />
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목" style={{ ...inp, flex: 1 }} />
               </div>
+              <select className="ws-db-filter" value={formProject} onChange={(e) => setFormProject(e.target.value)} aria-label="프로젝트" style={{ marginTop: 8 }}>
+                <option value="">프로젝트 없음</option>
+                {projects.filter((p) => !p.archivedAt || p.id === formProject).map((p) => <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>)}
+              </select>
               <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="변경 내용" rows={3} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <span style={{ flex: 1 }} />
@@ -89,6 +114,11 @@ export default function ChangelogSurface() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {e.version && <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-weak)", padding: "2px 8px", borderRadius: 6 }}>{e.version}</span>}
                     <span style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-strong)" }}>{e.title}</span>
+                    {e.projectId && (
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken, var(--border-subtle))", padding: "2px 8px", borderRadius: 6 }}>
+                        {projects.find((p) => p.id === e.projectId)?.name ?? "프로젝트"}
+                      </span>
+                    )}
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{new Date(e.releasedAt).toLocaleDateString("ko-KR")}</span>
                     <button className="ws-btn-soft" disabled={busy} onClick={() => remove(e.id)} title="삭제"><Icon name="close" size={14} /></button>

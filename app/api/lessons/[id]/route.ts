@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { parseLessonStack } from "@/lib/lessonInject";
+import { recordLessonRead } from "@/lib/lessonInspect/log";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!lesson || lesson.workspaceId !== guard.workspaceId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  // 에이전트의 전문 조회(MCP lesson_get·pnpm ws lesson show)를 센다 — 레슨 주입 점검의 '조회 수'. fire-and-forget.
+  if (guard.actor?.type === "agent") void recordLessonRead({ workspaceId: guard.workspaceId, lessonId: lesson.id, actorName: guard.actor.name });
   return NextResponse.json({ lesson });
 }
 

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const NotifRulePatchBody = z.object({
+  enabled: z.boolean().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -16,7 +22,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
   if (!(await owned(id, workspaceId))) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const body = (await req.json().catch(() => ({}))) as { enabled?: boolean };
+  const parsed = await readBody(req, NotifRulePatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   if (body.enabled === undefined) return NextResponse.json({ error: "변경할 내용이 없습니다." }, { status: 400 });
   const rule = await prisma.notifRule.update({ where: { id }, data: { enabled: !!body.enabled } });
   return NextResponse.json({ rule });

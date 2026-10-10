@@ -159,7 +159,7 @@ export async function dispatchLlmJobs(): Promise<{ checked: number; done: number
       if (cached) {
         result = cached;
       } else {
-        const raw = await complete(buildFeedbackClassifyPrompt(payload));
+        const raw = await complete(buildFeedbackClassifyPrompt(payload), { feature: "feedback-classify", workspaceId: job.workspaceId });
         result = raw ? parseFeedbackClassification(raw) : null;
         if (!result) error = raw ? "파싱 실패" : "LLM 응답 없음";
         else result = sanitizeMergeAgendaId(result, payload.agendas);

@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   if (base.length === 0) return NextResponse.json({ query, expanded: [], terms: [], mode: "plain", results: [] });
 
   // LLM 확장(없으면 원 토큰만으로 graceful)
-  const raw = await complete(buildExpansionPrompt(query));
+  const raw = await complete(buildExpansionPrompt(query), { feature: "search-concept", workspaceId });
   const expanded = raw ? parseExpansion(raw) : [];
   const terms = mergeTerms(base, expanded);
 

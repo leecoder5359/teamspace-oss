@@ -13,7 +13,7 @@ export async function GET() {
   const { workspaceId } = guard;
   const pages = await prisma.page.findMany({
     where: { workspaceId, kind: "doc", deletedAt: null },
-    select: { id: true, title: true, markdown: true },
+    select: { id: true, title: true, markdown: true, parentId: true, projectId: true, docType: true },
   });
   // D3: 그래프·점검도 제목과 링크 관계를 드러낸다 — 볼 수 있는 것만 넣는다.
   const idx = await loadAccess(guard);

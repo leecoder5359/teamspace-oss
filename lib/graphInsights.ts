@@ -99,6 +99,25 @@ export function subgraph(g: KGraph, keep: (n: GNode) => boolean): KGraph {
   return { nodes, edges: g.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 }
 
+/** 프로젝트 조각 — 씨앗(projectId 가 같은 노드 + 그 프로젝트 노드)에서 hops 홉(무방향) 안의 노드와 그 사이 간선. 원본 순서 유지. */
+export function projectSlice(g: KGraph, projectId: string, hops = 1): KGraph {
+  const seeds = g.nodes.filter((n) => n.projectId === projectId || (n.type === "project" && n.id === projectId));
+  if (!seeds.length) return { nodes: [], edges: [] };
+  const adj = new Map<string, string[]>();
+  for (const e of g.edges) {
+    (adj.get(e.from) ?? adj.set(e.from, []).get(e.from)!).push(e.to);
+    (adj.get(e.to) ?? adj.set(e.to, []).get(e.to)!).push(e.from);
+  }
+  const seen = new Set(seeds.map((n) => n.id));
+  let frontier = [...seen];
+  for (let h = 0; h < hops && frontier.length; h++) {
+    const next: string[] = [];
+    for (const id of frontier) for (const m of adj.get(id) ?? []) if (!seen.has(m)) { seen.add(m); next.push(m); }
+    frontier = next;
+  }
+  return subgraph(g, (n) => seen.has(n.id));
+}
+
 /** LLM 연관 대상: 프로젝트 contains 말고는 간선이 없는 문서. */
 export function weakDocs(g: KGraph): GNode[] {
   const projectIds = new Set(g.nodes.filter((n) => n.type === "project").map((n) => n.id));

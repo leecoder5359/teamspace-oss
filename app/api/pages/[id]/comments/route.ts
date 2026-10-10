@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage, isRestrictedPage } from "@/lib/pageGuard";
@@ -82,11 +84,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!page) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return withIdempotency(req, guard, async () => {
-  const body = (await req.json().catch(() => ({}))) as {
-    body?: string;
-    /** 인라인 코멘트(D2): 본문에서 고른 문구와 앞뒤 문맥 */
-    anchor?: { quote?: string; prefix?: string; suffix?: string } | null;
-  };
+  const parsedBody = await readBody(
+    req,
+    z.object({
+      body: z.string().optional(),
+      /** 인라인 코멘트(D2): 본문에서 고른 문구와 앞뒤 문맥 */
+      anchor: z
+        .object({ quote: z.string().optional(), prefix: z.string().optional(), suffix: z.string().optional() })
+        .nullable()
+        .optional(),
+    }),
+  );
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
   const text = body.body?.trim() ?? "";
   if (!text) return NextResponse.json({ error: "body 가 필요합니다." }, { status: 400 });
 
@@ -151,7 +161,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
   const commentId = new URL(req.url).searchParams.get("commentId");
   if (!commentId) return NextResponse.json({ error: "commentId 가 필요합니다." }, { status: 400 });
-  const body = (await req.json().catch(() => ({}))) as { resolved?: boolean };
+  const parsedBody = await readBody(req, z.object({ resolved: z.boolean().optional() }));
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
 
   const comment = await prisma.pageComment.findFirst({ where: { id: commentId, pageId: id }, select: { id: true } });
   if (!comment) return NextResponse.json({ error: "Not found" }, { status: 404 });

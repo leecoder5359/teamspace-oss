@@ -4,6 +4,15 @@ import { requireCtx } from "@/lib/workspace";
 import { writeDoc, docFolderFor, listDocFolder, uniqueFileName } from "@/lib/docFiles";
 import { complete } from "@/lib/llm";
 import { buildClassifyPrompt, parseClassification, buildClipMarkdown } from "@/lib/clip";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const ClipBody = z.object({
+  url: z.string().optional(),
+  title: z.string().optional(),
+  text: z.string().optional(),
+  html: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -13,19 +22,21 @@ export async function POST(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId, userId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { url?: string; title?: string; text?: string; html?: string };
+  const parsed = await readBody(request, ClipBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const url = body.url?.trim() ?? "";
   const text = (body.text ?? "").trim();
   const title = body.title?.trim() || url || "웹 클립";
   if (!text && !url) return NextResponse.json({ error: "text 또는 url 이 필요합니다." }, { status: 400 });
 
   const projects = await prisma.project.findMany({
-    where: { workspaceId },
+    where: { workspaceId, archivedAt: null }, // 보관 프로젝트는 분류 대상이 아니다
     select: { id: true, name: true, description: true },
   });
 
   // LLM 분류·요약(없으면 원문만 저장: plain)
-  const raw = text ? await complete(buildClassifyPrompt(projects, title, text)) : null;
+  const raw = text ? await complete(buildClassifyPrompt(projects, title, text), { feature: "clip", workspaceId }) : null;
   const { projectId, summary } = raw
     ? parseClassification(raw, projects.map((p) => p.id))
     : { projectId: null, summary: "" };

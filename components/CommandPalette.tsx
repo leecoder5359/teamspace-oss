@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "./ws/icons";
 import { NAV_COMMANDS, rankItems, moveCursor, type PaletteItem } from "@/lib/palette";
+import { getPages } from "@/lib/pagesClient";
 
 /* =====================================================================
    커맨드 팔레트 (Cmd/Ctrl+K) — 격차 F3·F4.
@@ -68,9 +69,9 @@ export default function CommandPalette() {
     if (!open || loaded) return;
     let alive = true;
     (async () => {
-      const res = await fetch("/api/pages", { cache: "no-store" }).catch(() => null);
-      if (!res?.ok || !alive) return;
-      const d = (await res.json()) as {
+      const r = await getPages();
+      if (!r.ok || !alive) return;
+      const d = r.data as {
         pages: { id: string; title: string; kind: string; project?: { name?: string } | null }[];
       };
       if (!alive) return;

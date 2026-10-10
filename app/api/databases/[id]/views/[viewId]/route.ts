@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
@@ -114,7 +116,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string; v
   const view = await loadView(id, viewId, guard.workspaceId);
   if (!view) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as { name?: string; type?: string; config?: unknown };
+  const parsedBody = await readBody(req, z.object({ name: z.string().optional(), type: z.string().optional(), config: z.unknown().optional() }));
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
 
   if (body.name !== undefined && !body.name.trim()) {
     return NextResponse.json({ error: "뷰 이름을 입력해 주세요." }, { status: 400 });

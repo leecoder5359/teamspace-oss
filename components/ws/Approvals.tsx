@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
@@ -49,11 +50,23 @@ export default function Approvals() {
   const [autoLow, setAutoLow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // 알림 링크(/approvals?id=)로 들어오면 해당 카드로 스크롤하고 잠시 강조한다.
+  const focusId = useSearchParams().get("id");
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [missingId, setMissingId] = useState<string | null>(null);
+  const widenedFor = useRef<string | null>(null);
+  const widenedAppended = useRef(false);
 
   async function load() {
     const res = await fetch("/api/approvals", { cache: "no-store" });
     const data = (await res.json()) as { approvals: Approval[] };
     setList(data.approvals);
+    // 단건 조회로 붙였던 카드는 이 응답에 없으면 사라진다 — 다시 조회할 수 있게 표식을 풀면
+    // (inList true→false 로 효과가 재실행돼) 최신 상태로 다시 붙이거나, 이제 없으면 안내를 보인다.
+    if (widenedAppended.current) {
+      widenedAppended.current = false;
+      widenedFor.current = null;
+    }
   }
 
   // 낮은 위험 자동 승인: 켜면 대기 중인 저위험 건을 일괄 승인
@@ -79,6 +92,38 @@ export default function Approvals() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, []);
+
+  const listReady = list !== null;
+  const inList = !!focusId && !!list?.some((a) => a.id === focusId);
+  // 목록은 최신 100건뿐이라 오래된 알림 링크의 승인은 빠져 있을 수 있다 —
+  // 그땐 단건 조회로 한 번만 넓혀 보고, 그래도 없으면 알려 준다.
+  useEffect(() => {
+    if (!focusId || !listReady || inList || widenedFor.current === focusId) return;
+    widenedFor.current = focusId;
+    (async () => {
+      try {
+        const res = await fetch(`/api/approvals/${encodeURIComponent(focusId)}`, { cache: "no-store" });
+        if (!res.ok) return setMissingId(focusId);
+        const { approval } = (await res.json()) as { approval: Approval };
+        widenedAppended.current = true;
+        setMissingId(null);
+        setList((prev) => (prev && !prev.some((a) => a.id === approval.id) ? [...prev, approval] : prev));
+      } catch {
+        setMissingId(focusId);
+      }
+    })();
+  }, [focusId, listReady, inList]);
+
+  useEffect(() => {
+    if (!focusId || !listReady) return;
+    const el = document.getElementById(`approval-${focusId}`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFlashId(focusId);
+    const t = setTimeout(() => setFlashId(null), 2600);
+    return () => clearTimeout(t);
+  }, [focusId, listReady, inList]);
 
   async function createReq() {
     if (!title.trim()) return;
@@ -161,6 +206,12 @@ export default function Approvals() {
         {msg && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 8 }}>{msg}</div>}
       </div>
 
+      {focusId && missingId === focusId && !inList && (
+        <div role="status" style={{ fontSize: 12.5, color: "var(--text-sub)", padding: "10px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-sunken)", marginBottom: 12 }}>
+          해당 승인을 찾을 수 없어요
+        </div>
+      )}
+
       {list.length === 0 ? (
         <div className="ws-empty">
           <div style={{ width: 52, height: 52, borderRadius: 14, background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
@@ -172,7 +223,7 @@ export default function Approvals() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {[...pending, ...done].map((a) => (
-            <Card key={a.id} a={a} busy={busy} onDecide={decide} />
+            <Card key={a.id} a={a} busy={busy} onDecide={decide} flash={flashId === a.id} />
           ))}
         </div>
       )}
@@ -180,7 +231,7 @@ export default function Approvals() {
   );
 }
 
-function Card({ a, busy, onDecide }: { a: Approval; busy: boolean; onDecide: (id: string, s: Status, t?: string) => void }) {
+function Card({ a, busy, onDecide, flash }: { a: Approval; busy: boolean; onDecide: (id: string, s: Status, t?: string) => void; flash: boolean }) {
   const [mode, setMode] = useState<null | "reject" | "additional">(null);
   const [text, setText] = useState("");
   const s = STATUS_META[a.status];
@@ -193,7 +244,11 @@ function Card({ a, busy, onDecide }: { a: Approval; busy: boolean; onDecide: (id
   );
 
   return (
-    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 14, background: "var(--surface-card)", padding: 18, boxShadow: "var(--shadow-xs)" }}>
+    <div
+      id={`approval-${a.id}`}
+      data-flash={flash ? "1" : undefined}
+      style={{ border: `1px solid ${flash ? "var(--color-primary)" : "var(--border-subtle)"}`, borderRadius: 14, background: "var(--surface-card)", padding: 18, boxShadow: flash ? "0 0 0 3px var(--color-primary-weak)" : "var(--shadow-xs)", transition: "box-shadow .3s, border-color .3s", scrollMarginTop: 80 }}
+    >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <div style={aiBadge}>AI</div>
         <div style={{ flex: 1, minWidth: 0 }}>

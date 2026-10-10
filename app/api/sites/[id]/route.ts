@@ -4,6 +4,16 @@ import { requireCtx } from "@/lib/workspace";
 import { recordActivity } from "@/lib/activity";
 import { siteUrl } from "@/lib/sites/url";
 import { parseApiUpstreamInput } from "@/lib/sites/apiProxy";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const SitePatchBody = z.object({
+  title: z.unknown().optional(),
+  status: z.unknown().optional(),
+  currentVersion: z.unknown().optional(),
+  projectId: z.unknown().optional(),
+  apiUpstream: z.unknown().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -34,7 +44,9 @@ export async function PATCH(req: Request, { params }: Params) {
   const site = await prisma.publishedSite.findFirst({ where: { id, workspaceId: ctx.workspaceId, deletedAt: null }, select: { id: true, title: true, status: true, currentVersion: true, apiUpstream: true } });
   if (!site) return notFound();
 
-  const body = (await req.json().catch(() => ({}))) as { title?: unknown; status?: unknown; currentVersion?: unknown; projectId?: unknown; apiUpstream?: unknown };
+  const parsed = await readBody(req, SitePatchBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const data: { title?: string; status?: "active" | "disabled"; currentVersion?: number; projectId?: string | null; apiUpstream?: string | null } = {};
 
   if (body.title !== undefined) {

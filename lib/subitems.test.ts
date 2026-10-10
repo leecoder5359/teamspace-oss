@@ -101,3 +101,37 @@ describe("descendantIds", () => {
     expect(descendantIds("b", rows([["b", null]]))).toEqual([]);
   });
 });
+
+describe("buildRowTree — 입력 불변", () => {
+  it("동결한 입력으로 호출해도 throw 없고 입력 순서가 그대로다", () => {
+    const input = [
+      { id: "b", parentRowId: null, position: 2 },
+      { id: "b1", parentRowId: "b", position: 9 },
+      { id: "b2", parentRowId: "b", position: 1 },
+      { id: "a", parentRowId: null, position: 1 },
+    ] as TreeRow[];
+    const before = input.map((r) => r.id);
+    Object.freeze(input);
+    const out = buildRowTree(input).map((r) => r.id);
+    expect(out).toEqual(["a", "b", "b2", "b1"]);
+    expect(input.map((r) => r.id)).toEqual(before);
+  });
+});
+
+describe("buildRowTree — rootCompare (열린 것만 기본 정렬)", () => {
+  type R = TreeRow & { updatedAt: string };
+  const input: R[] = [
+    { id: "a", parentRowId: null, position: 0, updatedAt: "2026-01-01" },
+    { id: "a1", parentRowId: "a", position: 1, updatedAt: "2026-09-01" },
+    { id: "a2", parentRowId: "a", position: 2, updatedAt: "2026-02-01" },
+    { id: "b", parentRowId: null, position: 3, updatedAt: "2026-05-01" },
+  ];
+  const desc = (x: R, y: R) => y.updatedAt.localeCompare(x.updatedAt);
+  it("최상위만 비교 함수로 정렬하고 서브아이템은 부모 아래 position 순서를 지킨다", () => {
+    const out = buildRowTree(input, undefined, { rootCompare: desc });
+    expect(out.map((r) => [r.id, r.depth])).toEqual([["b", 0], ["a", 0], ["a1", 1], ["a2", 1]]);
+  });
+  it("비교 함수가 없으면 종전처럼 position 순서", () => {
+    expect(buildRowTree(input).map((r) => r.id)).toEqual(["a", "a1", "a2", "b"]);
+  });
+});

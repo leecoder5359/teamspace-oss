@@ -12,8 +12,13 @@ UID_NUM="$(id -u)"
 
 mkdir -p "$PLIST_DST" "$LOG_DIR"
 
-echo "→ prod 빌드"
 cd "$REPO_DIR"
+# Prisma 클라이언트(app/generated/prisma, gitignore)를 스키마에 맞춰 다시 만든다.
+# 빼먹으면 새 모델/필드가 있는 커밋을 배포해도 옛 클라이언트로 빌드돼 런타임 500 이 난다(env 금고 P1 배포 사고).
+echo "→ prisma generate"
+pnpm exec prisma generate
+
+echo "→ prod 빌드"
 pnpm exec next build
 
 echo "→ launchd plist 설치"
@@ -69,4 +74,6 @@ for i in $(seq 1 20); do
   sleep 1
 done
 echo "web: http://localhost:3002 → $code"
+# 변경 이력 초안(D-3) — 실패해도 배포 결과에 영향 없음. WS_TOKEN 이 없으면 CLI 가 알아서 건너뛴다.
+pnpm ws changelog draft || echo "changelog 초안 생략"
 echo "완료. 로그: $LOG_DIR"

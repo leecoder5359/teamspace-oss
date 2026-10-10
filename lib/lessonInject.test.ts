@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { renderLessons, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack } from "./lessonInject";
+import { renderLessons, renderLessonsReport, buildLessonSection, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, type LessonLite } from "./lessonInject";
+import { legacyRenderLessons, legacyLessonBudget } from "./lessonInject.legacy.fixture";
 
 const L = (id: string, title: string, body: string, projectId: string | null = null) => ({ id, title, body, projectId });
 
@@ -118,5 +119,105 @@ describe("parseLessonStack", () => {
     expect(parseLessonStack(null)).toEqual({ ok: true, stack: null });
     expect(parseLessonStack("")).toEqual({ ok: true, stack: null });
     expect(parseLessonStack("next,supabase")).toMatchObject({ ok: false });
+  });
+});
+
+/* ── 레슨 주입 점검: 리팩터가 /api/context 출력을 바꾸지 않았음을 증명 ───────────── */
+
+/** 결정적 의사난수(시드 고정) — 픽스처를 매번 같게 만든다. */
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+}
+function fixture(seed: number): { lessons: LessonLite[]; projectId: string | null; projectStack: string[] } {
+  const r = rng(seed);
+  const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
+  const words = ["배포", "마이그레이션", "훅", "세션", "예산", "Slack", "컨펌", "next", "prisma", "## 원인", "**처방**: 먼저 본다.", "실사례(로요, 2026).", "교훈 1: 작게."];
+  const n = 5 + Math.floor(r() * 90);
+  const lessons: LessonLite[] = Array.from({ length: n }, (_, i) => {
+    const kind = r();
+    const body = Array.from({ length: 3 + Math.floor(r() * 60) }, () => pick(words)).join(r() < 0.2 ? "\n" : " ");
+    const title = Array.from({ length: 1 + Math.floor(r() * 8) }, () => pick(words)).join(" ");
+    if (kind < 0.35) return { id: `p${seed}_${i}`, title, body, projectId: pick(["proj", "other"]), stack: null };
+    if (kind < 0.55) return { id: `s${seed}_${i}`, title, body, projectId: null, stack: pick(["next", "supabase", "ios"]) };
+    return { id: `g${seed}_${i}`, title, body, projectId: null, stack: null };
+  });
+  const projectId = r() < 0.75 ? "proj" : null;
+  const projectStack = r() < 0.5 ? ["next"] : r() < 0.5 ? ["next", "supabase"] : [];
+  return { lessons, projectId, projectStack };
+}
+
+describe("buildLessonSection — 리팩터 전 출력과 바이트 단위로 같다", () => {
+  for (let seed = 1; seed <= 120; seed++) {
+    it(`픽스처 #${seed}`, () => {
+      const f = fixture(seed);
+      // /api/context 가 실제로 넘기는 레슨 집합(전역 + 해당 프로젝트)과 전체 집합 둘 다 확인
+      const scoped = f.projectId ? f.lessons.filter((l) => !l.projectId || l.projectId === f.projectId) : f.lessons;
+      for (const lessons of [scoped, f.lessons]) {
+        for (const restChars of [0, 1200, 3600, 7000, 12000]) {
+          for (const compact of [true, false]) {
+            const legacy = legacyRenderLessons({ lessons, projectId: f.projectId, projectName: "프로젝트", projectStack: f.projectStack, mode: compact ? "compact" : "full", budget: legacyLessonBudget(restChars) });
+            const now = buildLessonSection({ lessons, projectId: f.projectId, projectName: "프로젝트", projectStack: f.projectStack, compact, restChars });
+            expect(now.lines.join("\n")).toBe(legacy.join("\n"));
+            expect(now.report.chars).toBe(legacy.join("\n").length);
+          }
+        }
+      }
+    });
+  }
+});
+
+describe("renderLessonsReport — 레슨별 상태·섹션 예산", () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => L(`g${i}`, `전역 규칙 ${i}`, "처방: " + "본문 ".repeat(60)));
+
+  it("예산이 남으면 앞에서부터 요약(gist), 나머지는 제목만(title) — 개수가 출력과 맞는다", () => {
+    const { lines, report } = renderLessonsReport({ lessons: many(20), projectId: null, projectName: null, mode: "compact", budget: 1500 });
+    const md = lines.join("\n");
+    const st = report.statuses.map((s) => s.status);
+    const firstTitle = st.indexOf("title");
+    expect(st[0]).toBe("gist");
+    expect(firstTitle).toBeGreaterThan(0);
+    expect(st.slice(firstTitle).every((s) => s === "title")).toBe(true);
+    const sec = report.sections[0];
+    expect(sec).toMatchObject({ kind: "global", count: 20, omitted: 0 });
+    expect(sec.gist + sec.title).toBe(20);
+    expect(sec.used).toBeLessThanOrEqual(sec.budget!);
+    expect(md).toContain("- **전역 규칙 0** — ");
+    expect(md).toContain(`- **전역 규칙 ${firstTitle}** \`g${firstTitle}\``);
+  });
+
+  it("제목도 다 못 담으면 뒤에서부터 '외 N개'(omitted)", () => {
+    const { lines, report } = renderLessonsReport({ lessons: many(80), projectId: null, projectName: null, mode: "compact", budget: 1500 });
+    const md = lines.join("\n");
+    const st = report.statuses.map((s) => s.status);
+    const firstOmitted = st.indexOf("omitted");
+    expect(firstOmitted).toBeGreaterThan(0);
+    expect(st.slice(firstOmitted).every((s) => s === "omitted")).toBe(true);
+    const sec = report.sections[0];
+    expect(sec.gist + sec.title + sec.omitted).toBe(80);
+    expect(md).toContain(`외 ${sec.omitted}개`);
+    expect(md).not.toContain(`\`g${firstOmitted}\``);
+    expect(sec.used).toBeLessThanOrEqual(sec.budget!);
+  });
+
+  it("다른 프로젝트·맞지 않는 스택은 not_applicable 과 사유", () => {
+    const lessons: LessonLite[] = [
+      { id: "g", title: "전역", body: "처방: x", projectId: null, stack: null },
+      { id: "p", title: "내 프로젝트", body: "처방: x", projectId: "proj", stack: null },
+      { id: "o", title: "남의 프로젝트", body: "처방: x", projectId: "other", stack: null },
+      { id: "n", title: "next", body: "처방: x", projectId: null, stack: "next" },
+      { id: "i", title: "ios", body: "처방: x", projectId: null, stack: "ios" },
+    ];
+    const { report } = renderLessonsReport({ lessons, projectId: "proj", projectName: "P", projectStack: ["next"], mode: "compact" });
+    const by = Object.fromEntries(report.statuses.map((s) => [s.id, s]));
+    expect(by.g).toMatchObject({ scope: "global", status: "gist" });
+    expect(by.p).toMatchObject({ scope: "project", status: "gist" });
+    expect(by.n).toMatchObject({ scope: "stack", status: "gist" });
+    expect(by.o).toMatchObject({ status: "not_applicable", reason: "other_project" });
+    expect(by.i).toMatchObject({ status: "not_applicable", reason: "stack_mismatch" });
+    expect(report.sections.map((s) => [s.kind, s.tag])).toEqual([["project", null], ["stack", "next"], ["global", null]]);
   });
 });

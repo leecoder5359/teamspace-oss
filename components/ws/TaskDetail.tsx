@@ -659,7 +659,7 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                   <input value={newCheck} onChange={(e) => setNewCheck(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addCheck(); }} placeholder="체크리스트 항목 추가" style={taskInp} aria-label="체크리스트 항목" />
-                  <button type="button" className="ws-btn-soft" onClick={() => void addCheck()} disabled={!newCheck.trim()}><Icon name="plus" size={14} /></button>
+                  <button type="button" className="ws-btn-soft" aria-label="체크리스트 항목 추가" title="체크리스트 항목 추가" onClick={() => void addCheck()} disabled={!newCheck.trim()}><Icon name="plus" size={14} /></button>
                 </div>
               </div>
             )}

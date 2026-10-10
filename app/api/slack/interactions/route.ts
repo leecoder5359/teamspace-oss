@@ -4,6 +4,7 @@ import { getSlackConfig } from "@/lib/slack";
 import { verifySlackSignature } from "@/lib/slackSign";
 import { alreadyDecidedModalResponse, buildReasonModalView, parseAlreadyDecided, recordDecision, refreshDecisionCard } from "@/lib/approvals";
 import { prisma } from "@/lib/prisma";
+import { withReq } from "@/lib/log";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,7 @@ const SLACK = "https://slack.com/api";
 
 // POST /api/slack/interactions → 슬랙 인터랙티브 콜백(공개·서명검증 필수)
 export async function POST(request: Request) {
+  const logger = withReq(request);
   const secret = process.env.AUTH_SLACK_SIGNING_SECRET?.trim();
   if (!secret) {
     return NextResponse.json({ error: "AUTH_SLACK_SIGNING_SECRET 미설정" }, { status: 503 });
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
     if (action.action_id === "approve") {
       try {
         const approval = await recordDecision(approvalId, { status: "approved", userId });
-        after(() => refreshDecisionCard(approval).catch((e) => console.warn("[slack] 카드 갱신 실패", e)));
+        after(() => refreshDecisionCard(approval).catch((e) => logger.warn("slack.card_refresh_failed", { msg: "카드 갱신 실패", approvalId: approval.id, err: e })));
       } catch (e) {
         if (!parseAlreadyDecided(e)) throw e; // 이미 처리됨: 버튼 재클릭은 조용히 무시(카드가 곧 결과로 바뀐다)
       }
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({ trigger_id: payload.trigger_id, view: buildReasonModalView({ approvalId, kind, title: ap?.title ?? "" }) }),
       });
       const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-      if (!json?.ok) console.warn(`[slack] views.open 실패: ${json?.error ?? res.status}`);
+      if (!json?.ok) logger.warn("slack.views_open_failed", { msg: "views.open 실패", error: json?.error, status: res.status });
     }
     return NextResponse.json({});
   }
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
           responseText: value?.trim() || undefined,
           userId,
         });
-        after(() => refreshDecisionCard(approval).catch((e) => console.warn("[slack] 카드 갱신 실패", e)));
+        after(() => refreshDecisionCard(approval).catch((e) => logger.warn("slack.card_refresh_failed", { msg: "카드 갱신 실패", approvalId: approval.id, err: e })));
       } catch (e) {
         const status = parseAlreadyDecided(e);
         if (!status) throw e;

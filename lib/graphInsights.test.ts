@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { KGraph, GNode, GEdge, EdgeKind } from "./knowledgeGraph";
 import { KIND_TAG } from "./knowledgeGraph";
-import { degreeMap, hubs, communities, neighbors, subgraph, weakDocs, renderKnowledgeMap } from "./graphInsights";
+import { degreeMap, hubs, communities, neighbors, subgraph, projectSlice, weakDocs, renderKnowledgeMap } from "./graphInsights";
 
 const N = (id: string, type: GNode["type"] = "doc", projectId: string | null = null): GNode => ({ id, title: `T-${id}`, type, href: `/p/${id}`, projectId });
 const E = (from: string, to: string, kind: EdgeKind = "link"): GEdge => ({ from, to, kind, kinds: [kind], tag: KIND_TAG[kind] });
@@ -58,6 +58,35 @@ describe("graphInsights", () => {
   it("subgraph: 남은 노드 사이 간선만", () => {
     const s = subgraph(g, (n) => n.id !== "a");
     expect(s.edges.some((e) => e.from === "a" || e.to === "a")).toBe(false);
+  });
+
+  it("projectSlice: 씨앗(프로젝트 노드+소속 노드)과 1홉 이웃, 양끝이 안에 있는 간선만, 원본 순서 유지", () => {
+    const pg: KGraph = {
+      nodes: [N("a", "doc", "P"), N("b"), N("c"), N("P", "project", "P"), N("q", "doc", "Q"), N("Q", "project", "Q")],
+      edges: [E("a", "b"), E("b", "c"), E("P", "a", "contains"), E("q", "c"), E("Q", "q", "contains")],
+    };
+    const s1 = projectSlice(pg, "P");
+    expect(s1.nodes.map((n) => n.id)).toEqual(["a", "b", "P"]);
+    expect(s1.edges.map((e) => `${e.from}>${e.to}`)).toEqual(["a>b", "P>a"]);
+    const s2 = projectSlice(pg, "P", 2);
+    expect(s2.nodes.map((n) => n.id)).toEqual(["a", "b", "c", "P"]);
+    expect(s2.edges.map((e) => `${e.from}>${e.to}`)).toEqual(["a>b", "b>c", "P>a"]);
+  });
+
+  it("projectSlice: 씨앗을 가리키는 역방향 간선(밖 → 안)으로도 이웃이 들어온다(무방향)", () => {
+    const pg: KGraph = {
+      nodes: [N("a", "doc", "P"), N("out1"), N("out2"), N("far")],
+      edges: [E("out1", "a"), E("out2", "out1"), E("far", "out2")],
+    };
+    expect(projectSlice(pg, "P").nodes.map((n) => n.id)).toEqual(["a", "out1"]);
+    expect(projectSlice(pg, "P", 2).nodes.map((n) => n.id)).toEqual(["a", "out1", "out2"]);
+    expect(projectSlice(pg, "P", 2).edges.map((e) => `${e.from}>${e.to}`)).toEqual(["out1>a", "out2>out1"]);
+    // hops=0 은 씨앗만
+    expect(projectSlice(pg, "P", 0).nodes.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("projectSlice: 없는 프로젝트는 빈 그래프", () => {
+    expect(projectSlice(g, "nope")).toEqual({ nodes: [], edges: [] });
   });
 
   it("weakDocs: 프로젝트 contains 외 간선이 없는 문서", () => {

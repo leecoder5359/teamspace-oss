@@ -2,6 +2,7 @@
 
 import { extractFrontmatter } from "./md/parse";
 import { scanWikilinks } from "./md/wikilinkSyntax";
+import { isTaskNote } from "./taskNotes";
 
 /** [[제목]] / [[제목|표시]] 에서 제목부만 추출. 트림·중복제거·순서유지. */
 export function extractWikiTitles(md: string): string[] {
@@ -22,7 +23,14 @@ export function normalizeTitle(t: string): string {
   return t.trim().toLowerCase();
 }
 
-export type PageLite = { id: string; title: string; markdown: string | null };
+export type PageLite = {
+  id: string;
+  title: string;
+  markdown: string | null;
+  parentId?: string | null;
+  projectId?: string | null;
+  docType?: string | null;
+};
 
 /**
  * 제목·별칭 → 페이지 id 색인.
@@ -102,6 +110,7 @@ export function computeGraph(pages: PageLite[]): {
 export function computeLint(pages: PageLite[]): {
   broken: { sourceId: string; sourceTitle: string; target: string }[];
   orphans: { id: string; title: string }[];
+  rootDocs: { id: string; title: string; projectId: string }[];
 } {
   const idByTitle = buildTitleIndex(pages);
 
@@ -121,7 +130,13 @@ export function computeLint(pages: PageLite[]): {
   }
   const orphans = pages.filter((p) => !connected.has(p.id)).map((p) => ({ id: p.id, title: p.title }));
 
-  return { broken, orphans };
+  // 프로젝트 뿌리에 바로 놓인 문서(폴더 밖) — 태스크 설명과 폴더(다른 문서의 부모)는 제외.
+  const parents = new Set(pages.map((p) => p.parentId).filter((x): x is string => !!x));
+  const rootDocs = pages
+    .filter((p) => p.projectId && !p.parentId && !parents.has(p.id) && !isTaskNote({ docType: p.docType, title: p.title }))
+    .map((p) => ({ id: p.id, title: p.title, projectId: p.projectId! }));
+
+  return { broken, orphans, rootDocs };
 }
 
 const CYPHER_LABELS: Record<string, string> = { doc: "Doc", project: "Project", decision: "Decision", lesson: "Lesson", task: "Task", risk: "Risk" };

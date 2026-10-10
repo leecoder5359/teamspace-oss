@@ -63,6 +63,8 @@ export default function GraphSurface() {
   const [query, setQuery] = useState("");
   const [types, setTypes] = useState("doc,project");
   const [kinds, setKinds] = useState("");
+  const [project, setProject] = useState("");
+  const [projects, setProjects] = useState<{ id: string; name: string; archivedAt: string | null }[]>([]);
   const [box, setBox] = useState<Box>(FULL);
   /** 사용자가 끌어다 놓은 노드 — 레이아웃 결과를 덮어쓴다 */
   const [pinned, setPinned] = useState<Map<string, Point>>(new Map());
@@ -80,6 +82,7 @@ export default function GraphSurface() {
       const q = new URLSearchParams();
       if (types) q.set("types", types);
       if (kinds) q.set("kinds", kinds);
+      if (project) q.set("project", project);
       try {
         const res = await fetch(`/api/graph${q.size ? `?${q}` : ""}`, { cache: "no-store" });
         if (!res.ok) {
@@ -97,7 +100,21 @@ export default function GraphSurface() {
     return () => {
       cancelled = true;
     };
-  }, [types, kinds]);
+  }, [types, kinds, project]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        // 보관 포함으로 받아 이름 라벨을 유지하고, 필터 선택지는 활성 + 지금 선택한 것만
+        const res = await fetch("/api/projects?archived=all", { cache: "no-store" });
+        if (!res.ok) return;
+        const j = (await res.json()) as { projects?: { id: string; name: string; archivedAt?: string | null }[] };
+        if (!cancelled && Array.isArray(j.projects)) setProjects(j.projects.map((p) => ({ id: p.id, name: p.name, archivedAt: p.archivedAt ?? null })));
+      } catch { /* 선택지가 없을 뿐 — 전체 보기는 그대로 */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const go = (nd: Node) => {
     const href = nd.href === undefined ? `/p/${nd.id}` : nd.href;
@@ -203,7 +220,7 @@ export default function GraphSurface() {
   if (data === null) return <div className="ws-db" style={{ padding: 40 }} />;
 
   const empty = data.nodes.length === 0;
-  const filtered = types !== "doc,project" || kinds !== "";
+  const filtered = types !== "doc,project" || kinds !== "" || project !== "";
   const dim = (id: string) => {
     if (visible && !visible.has(id)) return 0.06;
     if (matches && !matches.has(id)) return 0.15;
@@ -237,6 +254,10 @@ export default function GraphSurface() {
           <option value={1}>이웃 1홉</option>
           <option value={2}>이웃 2홉</option>
           <option value={3}>이웃 3홉</option>
+        </select>
+        <select className="ws-db-filter" value={project} onChange={(e) => { setProject(e.target.value); setFocus(null); }} aria-label="프로젝트">
+          <option value="">전체 프로젝트</option>
+          {projects.filter((p) => !p.archivedAt || p.id === project).map((p) => <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>)}
         </select>
         <select className="ws-db-filter" value={types} onChange={(e) => { setTypes(e.target.value); setFocus(null); }} aria-label="노드 종류">
           {NODE_TYPES.map(([v, l]) => <option key={l} value={v}>{l}</option>)}

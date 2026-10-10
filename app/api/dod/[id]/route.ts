@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const DodPatchBody = z.object({
+  done: z.boolean().optional(),
+  text: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -11,7 +18,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { workspaceId } = guard;
   const found = await prisma.dodItem.findFirst({ where: { id, workspaceId }, select: { id: true } });
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const b = (await req.json().catch(() => ({}))) as { done?: boolean; text?: string };
+  const parsed = await readBody(req, DodPatchBody);
+  if (!parsed.ok) return parsed.res;
+  const b = parsed.data;
   if (b.text !== undefined && !b.text.trim()) return NextResponse.json({ error: "항목을 입력해 주세요." }, { status: 400 });
   // done 은 주어졌을 때만 건드린다 — 종전엔 text 만 고쳐도 done 이 false 로 밀렸다.
   await prisma.dodItem.update({

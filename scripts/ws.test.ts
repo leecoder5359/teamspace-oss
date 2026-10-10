@@ -61,6 +61,7 @@ const REVERSE_WHITELIST = new Set([
   "slack/interactions/route.ts", // 슬랙 콜백
   "events/route.ts", // SSE 스트림(브라우저 전용)
   "health/route.ts", // 모니터링 프로브
+  "csp-report/route.ts", // 브라우저가 CSP 위반을 자동 POST(무인증 로그 수집) — CLI 대상 아님
   "pair/approve/route.ts", // 페어링 승인(브라우저 로그인 세션 전용)
   "pair/[code]/route.ts", // CLI 폴링(페어링 코드 자체인증)
   "pair/[code]/route-rule/route.ts", // 설치기 route-rule 등록(페어링 게이트)
@@ -68,6 +69,11 @@ const REVERSE_WHITELIST = new Set([
   "setup/hooks/[name]/route.ts", // 훅 서빙(화이트리스트 공개 정적)
   "site-intake/route.ts", // 퍼블리시 페이지의 폼 제출(게스트 전용 쓰기) — CLI 가 호출할 대상이 아니다.
   //                        멤버용 읽기·삭제는 'site intake *' 가 sites/[id]/intake 로 커버한다.
+  // env 금고 값 설정·삭제·열람은 관리자 **로그인 세션 전용**(에이전트 토큰은 403) — CLI 는 항상
+  // 에이전트 토큰으로 인증하므로 호출할 수 없다. CLI 쓰기는 'env import'(승인 경유)로만 한다.
+  "env/vars/route.ts",
+  "env/vars/[id]/route.ts",
+  "env/reveal/route.ts",
 ]);
 
 function collectRoutes(dir: string, prefix = ""): string[] {

@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { readBody } from "@/lib/apiBody";
+import { z } from "zod";
+
+const TeamBody = z.object({
+  name: z.string().optional(),
+  color: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -26,7 +33,9 @@ export async function POST(request: Request) {
   const guard = await requireCtx("admin");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const body = (await request.json().catch(() => ({}))) as { name?: string; color?: string };
+  const parsed = await readBody(request, TeamBody);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "팀 이름을 입력해 주세요." }, { status: 400 });
   const color = body.color && COLORS.includes(body.color) ? body.color : "blue";

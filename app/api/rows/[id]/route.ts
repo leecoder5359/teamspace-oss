@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readBody, positionSchema } from "@/lib/apiBody";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage, pageAccess } from "@/lib/pageGuard";
@@ -14,14 +16,19 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
-  const body = (await req.json().catch(() => ({}))) as {
-    props?: Record<string, unknown>;
-    position?: number;
-    expectedUpdatedAt?: string;
-    contentPageId?: string | null;
-    /** 서브아이템(격차 C6): 같은 보드의 부모 행. null=최상위로 */
-    parentRowId?: string | null;
-  };
+  const parsedBody = await readBody(
+    req,
+    z.object({
+      props: z.record(z.string(), z.unknown()).optional(),
+      position: positionSchema.optional(),
+      expectedUpdatedAt: z.string().optional(),
+      contentPageId: z.string().nullable().optional(),
+      /** 서브아이템(격차 C6): 같은 보드의 부모 행. null=최상위로 */
+      parentRowId: z.string().nullable().optional(),
+    }),
+  );
+  if (!parsedBody.ok) return parsedBody.res;
+  const body = parsedBody.data;
   const row = await prisma.dbRow.findUnique({
     where: { id },
     include: { database: { select: { workspaceId: true, dbProperties: { select: { id: true } } } } },

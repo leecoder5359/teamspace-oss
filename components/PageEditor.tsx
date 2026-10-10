@@ -13,6 +13,8 @@ import { astToBlocks, blocksToAst } from "@/lib/md/blocknote";
 import { merge3, formatConflicts, hasConflictMarkers, type ConflictBlock } from "@/lib/merge3";
 import type { BNBlock } from "@/lib/md/blocknote";
 import type { Frontmatter } from "@/lib/md/ast";
+import { getPages } from "@/lib/pagesClient";
+import { DUPLICATE_RENAME_NOTICE, renameCollides } from "@/lib/renameDuplicate";
 
 /* =====================================================================
    문서 편집기(BlockNote).
@@ -35,6 +37,9 @@ type PageLite = { id: string; title: string };
 export default function PageEditor({ pageId }: { pageId: string }) {
   const editor = useCreateBlockNote({ schema: wsSchema });
   const [title, setTitle] = useState("");
+  // 저장 뒤 같은 제목 경고 — 제목이 바뀐 저장에서만 확인한다
+  const [dupTitle, setDupTitle] = useState(false);
+  const checkedTitleRef = useRef<string | null>(null);
   const [state, setState] = useState<SaveState>("loading");
 
   const loadedRef = useRef(false);
@@ -84,6 +89,7 @@ export default function PageEditor({ pageId }: { pageId: string }) {
 
         setTitle(data.page.title);
         titleRef.current = data.page.title;
+        checkedTitleRef.current = data.page.title;
         loadedRef.current = true;
         setState("idle");
       } catch (e) {
@@ -106,9 +112,9 @@ export default function PageEditor({ pageId }: { pageId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch("/api/pages", { cache: "no-store" }).catch(() => null);
-      if (!res?.ok || cancelled) return;
-      const d = (await res.json()) as { pages: { id: string; title: string; kind: string }[] };
+      const r = await getPages();
+      if (!r.ok || cancelled) return;
+      const d = r.data as { pages: { id: string; title: string; kind: string }[] };
       if (!cancelled) setPages(d.pages.filter((p) => p.kind === "doc").map((p) => ({ id: p.id, title: p.title })));
     })();
     return () => {
@@ -152,6 +158,10 @@ export default function PageEditor({ pageId }: { pageId: string }) {
       if (typeof d.rev === "number") revRef.current = d.rev;
       setState("saved");
       window.dispatchEvent(new CustomEvent("pages:changed"));
+      if (checkedTitleRef.current !== titleRef.current) {
+        checkedTitleRef.current = titleRef.current;
+        setDupTitle(await renameCollides(pageId));
+      }
     } catch {
       setState("error");
     }
@@ -320,6 +330,7 @@ export default function PageEditor({ pageId }: { pageId: string }) {
         onChange={(e) => {
           setTitle(e.target.value);
           titleRef.current = e.target.value;
+          setDupTitle(false);
           scheduleSave();
         }}
         onBlur={() => void save()}
@@ -327,6 +338,7 @@ export default function PageEditor({ pageId }: { pageId: string }) {
       <div className="ws-save-state">
         {saveLabel}
         {state === "conflict" && <span style={{ color: "#E0900F" }}>다른 곳에서 먼저 수정됨 — 아래에서 정리하세요</span>}
+        {dupTitle && state !== "conflict" && <span role="status" style={{ color: "#E0900F", marginLeft: 8 }}>{DUPLICATE_RENAME_NOTICE}</span>}
       </div>
 
       {conflict && (
