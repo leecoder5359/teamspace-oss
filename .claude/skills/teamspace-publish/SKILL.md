@@ -15,6 +15,8 @@ HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고 **초대�
 | **루트 기준 경로(`/assets/x.js`) 가 없는가** | 샌드박스 경로에서 로드되지 않는다. 상대경로로 빌드(`vite build --base=./`) |
 | **폴더·zip 이면 `index.html` 이 있는가** | 필수. 최상위 폴더 한 겹은 자동으로 벗긴다. 20MB·해제 50MB·파일 500개 |
 | **비밀값·개인정보가 없는가** | 초대 게스트 전용이어도 링크가 전달되는 순간 밖으로 나간 것이다 |
+| **여러 페이지면 `pages/<영문-kebab>.html` 인가** | 주소창에 그대로 보인다(`/s/<slug>/pages/supabase-setup`). `A1.html`·한글 파일명 대신 내용을 말하는 영문 소문자·하이픈 이름으로. 페이지끼리는 **상대 링크**(`pages/x.html`, 하위에서 `../index.html`) — 루트 기준(`/pages/x.html`)은 안 열린다 |
+| **`__ts/` 폴더가 없는가** | 예약 폴더(주소창 동기화 스크립트 자리) — 올리면 빠진다 |
 
 **감싸기** (doctype 없는 Artifact HTML → 정식 문서, 원본은 건드리지 않고 사본을 만든다):
 
@@ -62,11 +64,14 @@ PY
 레포 루트(`/Users/ljun/dev/ljun/teamspace`)에서, **`pnpm ws` 는 다른 레포 `cd` 체인에 섞지 말고 별도 호출**로 실행한다.
 
 ```bash
-# 새로 올리기 — 프로젝트에 연결하고, 외부인이면 초대 이메일 포함
-pnpm ws site publish <file.html|dir|file.zip> --title "<페이지 이름>" --project <projectId> [--invite a@gmail.com,b@gmail.com]
+# 새로 올리기 — 설명형 주소(영문 kebab)를 고르고, 프로젝트에 연결하고, 외부인이면 초대 이메일 포함
+pnpm ws site publish <file.html|dir|file.zip> --title "<페이지 이름>" --slug <영문-kebab> --project <projectId> [--invite a@gmail.com,b@gmail.com]
 
 # 같은 링크로 새 버전 — 링크를 이미 공유했다면 반드시 이쪽
 pnpm ws site publish <path> --site <siteId>
+
+# 주소 바꾸기 — 옛 주소(무작위 포함)는 계속 열리고 새 주소로 넘어간다(308)
+pnpm ws site set <siteId> --slug <영문-kebab>
 
 pnpm ws site ls                          # 목록 (id · 제목 · 버전 · 초대 수 · 상태 · 링크)
 pnpm ws site show <siteId>               # 상세 · 버전 · 초대 목록
@@ -77,7 +82,11 @@ pnpm ws site disable|enable <siteId>     # 일시 비공개
 pnpm ws site api <siteId> http://127.0.0.1:<port>   # 페이지의 fetch('api/..') 를 로컬 서버로 (해제 --off)
 ```
 
-MCP 가 연결돼 있으면 `site_publish {path,title?,siteId?,invites?}` · `site_list` 도 된다.
+MCP 가 연결돼 있으면 `site_publish {path,title?,siteId?,invites?,slug?}` · `site_list` 도 된다.
+
+**주소(slug) 고르기**: 영문 소문자·숫자·하이픈, 3~60자(`banjang-handover`, `q4-cost-estimate`). 제목이 한글이어도 내용을 말하는 영어로 직접 고른다(자동 변환 없음). 예약어(`api`·`pub`·`new`·`admin`·`login` 등)와 이미 쓰는 주소(다른 사이트의 옛 주소 포함)는 거절된다 — 409 면 다른 이름으로. 생략하면 무작위 12자.
+
+**딥링크**: 하위 페이지는 `/s/<slug>/pages/<이름>`(`.html` 없이)으로 바로 열린다. `a/b` → `a/b.html` → `a/b/index.html` 순으로 찾는다. 그래서 번들에 `a.html` 과 `a/index.html` 이 **둘 다** 있으면 `/s/<slug>/a` 는 늘 `a.html` 을 열고 `a/index.html` 은 그 주소로 닿지 않는다 — 퍼블리시는 막지 않지만 응답 `warnings` 에 겹치는 쌍을 실어 주고 `ws site publish` 가 `⚠` 로 찍는다. 보이면 둘 중 하나의 이름을 바꾼다. 사이트 안에서 이동하면 주소창이 그 페이지 주소로 바뀌어 그대로 복사해 공유할 수 있다(`#섹션` 포함).
 
 **같은 내용을 고쳐 다시 올릴 때 새 사이트를 만들지 않는다.** 먼저 `site ls` 로 기존 siteId 를 찾고 `--site` 로 버전만 올린다 — 새로 만들면 이미 전달한 링크가 옛 내용에 머문다.
 

@@ -4,11 +4,11 @@
    새 세션(startup·clear)은 compact 컨텍스트(~9KB)를 받는다. 그런데 이어가기(resume)·
    자동 압축(compact)마다 같은 14~17KB 가 다시 실려 대화 컨텍스트를 반복해서 먹었다.
    이어가는 세션은 이미 전체를 한 번 읽었으므로, 여기선 '지금 붙잡을 것'만 준다:
-   프로젝트·스택 레슨 제목+id, 내 담당 + 진행 중 상위 5건, 나머지는 개수 한 줄.
+   필수·개인·프로젝트·스택 레슨 제목+id, 내 담당 + 진행 중 상위 5건, 나머지는 개수 한 줄.
    한도는 **바이트**로 잰다 — 한글은 UTF-8 로 3바이트라 글자 수로 재면 세 배까지 커진다.
    ===================================================================== */
 import type { LessonLite } from "@/lib/lessonInject";
-import { gistOf } from "@/lib/lessonInject";
+import { gistOf, lessonApplicability, lessonModeOf, lessonScopeOf } from "@/lib/lessonInject";
 import { ACCOUNT_SECTION_TITLE } from "@/lib/envVault/sessionAccounts";
 
 /** brief 전체 바이트 **목표치**(~2.5KB) — 강제 상한이 아니다. 실제로 자르는 건 섹션별 예산
@@ -28,6 +28,8 @@ export type BriefInput = {
   projectName: string | null;
   projectStack: string[];
   lessons: LessonLite[];
+  /** 이 세션의 사람(사람 세션 = 본인, 에이전트 토큰 = 발급자) — 개인 레슨은 이 사람 것만 */
+  personId?: string | null;
   tasks: BriefTask[];
   /** 내 담당 판정에 쓸 값들 — claim 은 actor.name 을, person 속성은 userId 를 저장한다. */
   me: string[];
@@ -37,6 +39,7 @@ export type BriefInput = {
 };
 
 const bytes = (s: string) => Buffer.byteLength(s, "utf8");
+const usedBytes = (lines: string[]) => lines.reduce((n, l) => n + bytes(l) + 1, 0);
 
 /** 줄 목록을 바이트 예산 안에서 앞에서부터 담는다(줄바꿈 1바이트 포함). 넘치면 more(n) 줄을 붙인다. */
 function capBytes(lines: string[], budget: number, more: (n: number) => string): string[] {
@@ -62,20 +65,39 @@ export function renderBrief(i: BriefInput): string {
   L.push("");
   if (i.accountLines?.length) L.push(ACCOUNT_SECTION_TITLE, i.accountLines[0], "");
 
-  // 레슨: 프로젝트 + 프로젝트 스택과 맞는 스택 레슨만 제목·id. 전역은 개수만.
-  const stackSet = new Set(i.projectId ? i.projectStack : []);
-  const project = i.projectId ? i.lessons.filter((l) => l.projectId === i.projectId) : [];
-  const stack = i.lessons.filter((l) => !l.projectId && l.stack && stackSet.has(l.stack));
-  const globalN = i.lessons.filter((l) => !l.projectId && !l.stack).length;
-  const head = [project.length ? `프로젝트 ${project.length}` : null, stack.length ? `스택 ${stack.length}` : null, `전역 ${globalN}`]
+  // 레슨: 필수(범위 무관) → 개인 → 프로젝트 → 프로젝트 스택과 맞는 스택 레슨 순서로 제목·id. 전역(기본)은 개수만.
+  // 대상 판정은 compact 와 같은 함수(lessonApplicability) — 다른 사람의 개인 레슨·ondemand 는 빠진다.
+  const scope = { projectId: i.projectId, projectStack: i.projectId ? i.projectStack : [], personId: i.personId ?? null };
+  const live = i.lessons.filter((l) => lessonApplicability(l, scope) === null);
+  const required = live.filter((l) => lessonModeOf(l) === "required");
+  const rest = live.filter((l) => lessonModeOf(l) !== "required");
+  const personal = rest.filter((l) => lessonScopeOf(l) === "personal");
+  const project = rest.filter((l) => lessonScopeOf(l) === "project");
+  const stack = rest.filter((l) => lessonScopeOf(l) === "stack");
+  const globalN = rest.filter((l) => lessonScopeOf(l) === "global").length;
+  const head = [
+    required.length ? `필수 ${required.length}` : null,
+    personal.length ? `개인 ${personal.length}` : null,
+    project.length ? `프로젝트 ${project.length}` : null,
+    stack.length ? `스택 ${stack.length}` : null,
+    `전역 ${globalN}`,
+  ]
     .filter(Boolean)
     .join(" · ");
   L.push(`## 팀 작업규칙·레슨 — 반드시 따른다 (${head})`);
-  // 예산은 개수 비례로 나누되 각 그룹이 최소 몇 줄은 보이게 한다(프로젝트 레슨이 스택을 통째로 밀어내지 않게).
   const lessonLine = (l: LessonLite) => `- ${gistOf(l.title, 60)} \`${l.id}\``;
+  // 예산 순서는 compact 와 같다: 필수가 먼저 가져가고, 남은 바이트를 좁은 범위부터(개인 → 프로젝트·스택).
+  const reqLines = capBytes(required.map(lessonLine), LESSON_BYTES, (n) => `- … 필수 외 ${n}개`);
+  L.push(...reqLines);
+  let left = Math.max(0, LESSON_BYTES - usedBytes(reqLines));
+  const laterGroups = (project.length ? 1 : 0) + (stack.length ? 1 : 0);
+  const personalLines = capBytes(personal.map(lessonLine), Math.max(0, left - laterGroups * MIN_GROUP_BYTES), (n) => `- … 개인 외 ${n}개`);
+  L.push(...personalLines);
+  left = Math.max(0, left - usedBytes(personalLines));
+  // 프로젝트·스택: 개수 비례로 나누되 각 그룹이 최소 몇 줄은 보이게 한다(프로젝트 레슨이 스택을 통째로 밀어내지 않게).
   const total = project.length + stack.length;
-  const stackBudget = stack.length ? Math.max(MIN_GROUP_BYTES, Math.floor((LESSON_BYTES * stack.length) / total)) : 0;
-  const projectBudget = LESSON_BYTES - stackBudget;
+  const stackBudget = stack.length ? Math.min(left, Math.max(MIN_GROUP_BYTES, Math.floor((left * stack.length) / total))) : 0;
+  const projectBudget = left - stackBudget;
   L.push(...capBytes(project.map(lessonLine), projectBudget, (n) => `- … 프로젝트 외 ${n}개`));
   L.push(...capBytes(stack.map(lessonLine), stackBudget, (n) => `- … 스택 외 ${n}개`));
   L.push(`_전역 ${globalN}건 — MCP lesson_list · 전문은 MCP lesson_get {id}_`);

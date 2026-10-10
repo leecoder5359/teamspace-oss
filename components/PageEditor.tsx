@@ -7,6 +7,7 @@ import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlock
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { wsSchema, CALLOUT_KINDS } from "./editor/schema";
+import { HeadingAnchors } from "./editor/headingAnchors";
 import { parseMarkdown } from "@/lib/md/parse";
 import { serializeMarkdown } from "@/lib/md/serialize";
 import { astToBlocks, blocksToAst } from "@/lib/md/blocknote";
@@ -35,7 +36,8 @@ type SaveState = "idle" | "loading" | "loadError" | "saving" | "saved" | "error"
 type PageLite = { id: string; title: string };
 
 export default function PageEditor({ pageId }: { pageId: string }) {
-  const editor = useCreateBlockNote({ schema: wsSchema });
+  // 헤딩 앵커: PM 데코레이션으로 헤딩 래퍼에 id — 편집기에서도 `#slug` 링크가 꽂힌다(결정 29e188d: DOM 직접 쓰기 금지)
+  const editor = useCreateBlockNote({ schema: wsSchema, extensions: [HeadingAnchors()] });
   const [title, setTitle] = useState("");
   // 저장 뒤 같은 제목 경고 — 제목이 바뀐 저장에서만 확인한다
   const [dupTitle, setDupTitle] = useState(false);

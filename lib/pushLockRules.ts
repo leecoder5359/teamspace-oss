@@ -6,6 +6,16 @@ export const LOCK_NAME_RE = /^[a-z0-9][a-z0-9:/._-]{0,80}$/;
 export const DEFAULT_TTL_MIN = 30;
 export const MAX_TTL_MIN = 240;
 
+/**
+ * 잠금 이름 정규형(2026-10-10): 공백 정리·소문자, 구분자 묶음 [\s/_:.-]+ 은 "/" 하나로, 앞뒤 "/" 제거.
+ * `teamspace-main`·`teamspace/main`·`TeamSpace_main`·`deploy:teamspace` → `teamspace/main`·`deploy/teamspace`.
+ * 철자가 달라도 같은 자원이면 같은 잠금이어야 서로를 배제한다. 서버가 잡기·해제·조회 모두 이걸로 맞추고,
+ * CLI·pre-push 훅도 같은 규칙으로 보낸다(훅에는 사본).
+ */
+export function canonicalLockName(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[\s/_:.-]+/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
 /** 이름 검증 — 문제가 있으면 사람이 읽을 메시지, 괜찮으면 null. */
 export function lockNameError(name: unknown): string | null {
   if (typeof name !== "string" || !name) return "잠금 이름이 필요합니다.";

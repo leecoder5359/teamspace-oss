@@ -5,12 +5,13 @@
    ===================================================================== */
 
 import { resolveRouteByCwd } from "@/lib/ingest";
+import { lessonModeOf, lessonScopeOf } from "@/lib/lessonInject";
 
 /* ── 연결 점검 ───────────────────────────────────────────────────────── */
 
 export type RuleLite = { id: string; cwdPrefix: string; projectId: string | null; priority: number; workspaceId: string };
 export type ProjectLite = { id: string; name: string; stack: string[] };
-export type LessonMeta = { id: string; title: string; projectId: string | null; stack: string | null };
+export type LessonMeta = { id: string; title: string; projectId: string | null; stack: string | null; userId?: string | null; mode?: string | null };
 
 export type LinkChecks = {
   /** ① 최근 주입 기록의 cwd 중 지금도 프로젝트로 해석되지 않는 것 */
@@ -147,7 +148,8 @@ export function injectionStats(i: {
   const lessons = i.lessons.map((l) => ({
     id: l.id,
     title: l.title,
-    scope: (l.projectId ? "project" : l.stack ? "stack" : "global") as "project" | "stack" | "global",
+    scope: lessonScopeOf(l),
+    mode: lessonModeOf(l),
     projectId: l.projectId,
     stack: l.stack,
     gist: g.get(l.id) ?? 0,
@@ -162,7 +164,8 @@ export function injectionStats(i: {
   const cg = new Set(compactRows.flatMap((r) => r.gistIds));
   const cSeen = new Set(compactRows.flatMap((r) => [...r.titleIds, ...r.omittedIds]));
   const alwaysTruncated = compactRows.length ? lessons.filter((l) => !cg.has(l.id) && cSeen.has(l.id)) : [];
-  const neverInjected = i.rows.length ? lessons.filter((l) => l.gist + l.titleOnly + l.omitted === 0) : [];
+  // ondemand 는 설계상 주입되지 않으므로 '한 번도 안 들어감' 후보에서 뺀다.
+  const neverInjected = i.rows.length ? lessons.filter((l) => l.mode !== "ondemand" && l.gist + l.titleOnly + l.omitted === 0) : [];
 
   const recent = i.rows
     .slice()
@@ -191,7 +194,7 @@ export function injectionStats(i: {
     lessons,
     cleanup: {
       alwaysTruncated: alwaysTruncated.map(({ id, title, titleOnly, omitted }) => ({ id, title, titleOnly, omitted })),
-      neverInjected: neverInjected.map(({ id, title, scope, stack }) => ({ id, title, scope, stack })),
+      neverInjected: neverInjected.map(({ id, title, scope, mode, stack }) => ({ id, title, scope, mode, stack })),
       similarTitles: similarTitlePairs(i.lessons),
     },
   };

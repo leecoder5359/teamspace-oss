@@ -7,7 +7,7 @@ import { Icon } from "./icons";
 import { inputStyle, primaryBtn } from "./Sites";
 
 type Detail = {
-  site: { id: string; slug: string; title: string; status: "active" | "disabled"; currentVersion: number; apiUpstream: string | null };
+  site: { id: string; slug: string; title: string; status: "active" | "disabled"; currentVersion: number; apiUpstream: string | null; aliases?: string[] };
   url: string;
   versions: { version: number; fileCount: number; sizeBytes: number; createdAt: string }[];
   invites: { email: string; createdAt: string; lastAccessAt: string | null }[];
@@ -44,6 +44,7 @@ export default function SiteDetail({ id }: { id: string }) {
   const router = useRouter();
   const [d, setD] = useState<Detail | null>(null);
   const [emails, setEmails] = useState("");
+  const [slug, setSlug] = useState("");
   const [share, setShare] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,6 +113,14 @@ export default function SiteDetail({ id }: { id: string }) {
     }
   }
 
+  /** 설명형 주소로 바꾸기 — 옛 주소는 계속 열리고 새 주소로 넘어간다. */
+  async function changeSlug() {
+    const next = slug.trim();
+    if (!next) return;
+    const data = await run(() => fetch(`/api/sites/${id}`, json("PATCH", { slug: next })));
+    if (data) setSlug("");
+  }
+
   async function upload(file: File) {
     const form = new FormData();
     form.set("file", file);
@@ -134,6 +143,22 @@ export default function SiteDetail({ id }: { id: string }) {
         <a className="ws-btn-soft" href={d.url} target="_blank" rel="noreferrer">미리보기</a>
       </div>
       {msg && <pre style={{ whiteSpace: "pre-wrap", fontSize: 12.5, color: "#c0392b" }}>{msg}</pre>}
+
+      <h2 style={h2}>주소</h2>
+      <div style={card}>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+          지금 주소는 <code>/s/{site.slug}</code> 입니다. 영문 소문자·숫자·하이픈으로 바꿀 수 있어요(예: banjang-handover). 안쪽 페이지는 <code>/s/{site.slug}/pages/이름</code> 처럼 바로 링크할 수 있고, 바꾼 뒤에도 옛 주소는 계속 열리며 새 주소로 넘어갑니다.
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="banjang-handover" aria-label="새 주소" style={{ ...inputStyle, flex: 1, minWidth: 200 }} />
+          <button onClick={changeSlug} disabled={busy || !slug.trim()} style={primaryBtn}>주소 바꾸기</button>
+        </div>
+        {site.aliases && site.aliases.length > 0 && (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
+            옛 주소(새 주소로 넘어감): {site.aliases.map((a) => `/s/${a}`).join(", ")}
+          </div>
+        )}
+      </div>
 
       <h2 style={h2}>초대</h2>
       <div style={card}>

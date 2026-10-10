@@ -5,7 +5,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     workspace: { findMany: vi.fn() },
     project: { findMany: vi.fn(), findFirst: vi.fn() },
-    page: { findMany: vi.fn() },
+    page: { findMany: vi.fn(), count: vi.fn() },
     dbProperty: { findMany: vi.fn() },
     dbRow: { findMany: vi.fn() },
     decision: { findMany: vi.fn() },
@@ -25,7 +25,7 @@ import { fireNotif } from "@/lib/notify";
 import { log } from "@/lib/log";
 import {
   channelCanSee,
-  excludeArchived,
+  canSeeUnarchived,
   collectDigest,
   digestItemCount,
   digestMarkerRef,
@@ -285,13 +285,44 @@ describe("mrkdwn 이스케이프·자르기", () => {
     const t = truncateMrkdwn("abcd📊efgh", 6); // 컷 5 가 📊 의 가운데
     expect(t).toBe("abcd…");
   });
+  it("truncateMrkdwn: 컷이 *…* 쌍 안쪽이면 여는 * 앞에서 자른다(stray * 없음)", () => {
+    const t = truncateMrkdwn("앞글 *긴 제목입니다 정말로* 뒷글", 9); // 컷 8 → '앞글 *긴 제목'
+    expect(t).toBe("앞글 …");
+    expect((t.match(/\*/g) ?? []).length % 2).toBe(0);
+  });
+  it("truncateMrkdwn: 컷이 `…` 쌍 안쪽이면 여는 ` 앞에서 자른다", () => {
+    expect(truncateMrkdwn("abc `code span here` end", 10)).toBe("abc …");
+  });
+  it("truncateMrkdwn: 이스케이프된 \\* 와 닫힌 쌍은 그대로 둔다", () => {
+    expect(truncateMrkdwn("a \\* b *c* defghij", 12)).toBe("a \\* b *c* …");
+    expect(truncateMrkdwn("plain text without marks", 10)).toBe("plain tex…");
+  });
+  it("truncateMrkdwn: 단어 내부 * 는 쌍 계산에서 제외한다", () => {
+    expect(truncateMrkdwn("a*b *bold* " + "x".repeat(50), 30)).toBe("a*b *bold* " + "x".repeat(18) + "…");
+  });
+  it("renderDigest: 제목에 단어 내부 * 가 있어도 긴 다이제스트가 첫 글머리에서 무너지지 않는다", () => {
+    const d = sample();
+    d.project.name = "5*3 " + "가".repeat(3000);
+    expect(renderDigest(d)).toBe("📊 …");
+  });
   it("renderDigest: 머리글만으로 2,500자를 넘어도 엔티티를 깨지 않고 자른다", () => {
     const d = sample();
     d.project.name = "&".repeat(1000); // &amp; ×1000 = 5,000자
     const t = renderDigest(d);
     expect(t.length).toBeLessThanOrEqual(2500);
     expect(t.endsWith("…")).toBe(true);
-    expect(t.slice(0, -1)).toMatch(/(&amp;)+$/);
+    // 이름은 *굵게* 로 감싸여 있어 컷이 그 안이면 여는 * 앞으로 물러난다 — 머리글이 통째로 "📊 …" 가 된다
+    expect(t.startsWith("📊 ")).toBe(true);
+    expect(t).toBe("📊 …");
+  });
+  it("truncateMrkdwn: * 와 떨어진 곳의 컷도 엔티티를 깨지 않는다", () => {
+    const s = "*x* " + "&amp;".repeat(100);
+    for (const max of [20, 21, 22, 23, 24, 25]) {
+      const t = truncateMrkdwn(s, max);
+      expect(t.length).toBeLessThanOrEqual(max);
+      expect(t.startsWith("*x* ")).toBe(true);
+      expect(t.slice(4, -1)).toMatch(/^(&amp;)*$/);
+    }
   });
 });
 
@@ -433,13 +464,14 @@ describe("channelCanSee (부여 없는 가상 멤버 시점)", () => {
   });
 });
 
-describe("excludeArchived (API 경로)", () => {
+describe("canSeeUnarchived (API 경로)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fixture();
   });
 
   it("보관된 부모 아래 문서는 다이제스트에서 빠진다", async () => {
+    m(prisma.page.count).mockResolvedValue(1); // 보관 행 1건 → 트리를 읽는다
     m(prisma.page.findMany).mockImplementation(async (args: { where: { kind?: string }; select: Record<string, boolean> }) => {
       if (args.select?.archivedAt) {
         return [
@@ -455,7 +487,8 @@ describe("excludeArchived (API 경로)", () => {
             { id: "d2", title: "살아 있는 문서", createdAt: inRange, updatedAt: inRange },
           ];
     });
-    const see = await excludeArchived("w1", () => true);
+    const see = await canSeeUnarchived("w1", () => true);
+    expect(m(prisma.page.count).mock.calls[0][0].where).toEqual({ workspaceId: "w1", deletedAt: null, archivedAt: { not: null } });
     expect(m(prisma.page.findMany).mock.calls[0][0].where).toEqual({ workspaceId: "w1", deletedAt: null });
     const d = await collectDigest(prisma, { workspaceId: "w1", projectId: "p1", since, until, canSee: see });
     expect(d!.docs.titles).toEqual(["살아 있는 문서"]);

@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { DATA_DIR } from "@/lib/dataDir";
 import { normalizeBundlePath, type BundleFile } from "./bundle";
+import { shellFileCandidates } from "./shellPath";
 
 /* 퍼블리시 파일 저장소: DATA_DIR/sites/<siteId>/v<n>/…
    쓰기는 임시 폴더 → rename 으로 원자적. 반쯤 쓰인 버전이 서빙되지 않게 한다.
@@ -59,6 +60,20 @@ export function resolveSiteFile(root: string, siteId: string, version: number, s
   const base = versionDir(root, siteId, version);
   const full = path.join(base, ...rel.split("/"));
   return isInside(base, full) ? full : null;
+}
+
+/** 셸 주소의 하위 경로(디코딩된 세그먼트) → 현재 버전에 실제로 있는 파일의 번들 상대경로.
+    후보 순서는 lib/sites/shellPath.shellFileCandidates. 이탈·없는 파일은 null(셸 404). */
+export async function resolveShellFile(root: string, siteId: string, version: number, segments: string[]): Promise<string | null> {
+  const candidates = shellFileCandidates(segments);
+  if (!candidates) return null;
+  for (const rel of candidates) {
+    const full = resolveSiteFile(root, siteId, version, rel.split("/"));
+    if (!full) continue;
+    const st = await fs.stat(full).catch(() => null);
+    if (st?.isFile()) return rel;
+  }
+  return null;
 }
 
 export function versionsToPrune(versions: number[], current: number, keep: number): number[] {

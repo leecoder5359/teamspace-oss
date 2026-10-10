@@ -764,9 +764,9 @@ add({
 // 즐겨찾기·최근 열람 (사람별 — 호출한 토큰의 사용자 기준)
 add({
   name: "fav ls",
-  usage: "fav ls   (내 즐겨찾기 목록 — 볼 수 없는 페이지 제외)",
+  usage: "fav ls [--archived]   (내 즐겨찾기 목록 — 볼 수 없는 페이지 제외, 보관 문서는 --archived 일 때만)",
   ep: ["favorites/route.ts"],
-  run: async () => out(await api("GET", "/api/favorites")),
+  run: async (a) => out(await api("GET", `/api/favorites${bool(a, "archived") ? "?archived=1" : ""}`)),
 });
 add({
   name: "fav add",
@@ -788,9 +788,10 @@ add({
 });
 add({
   name: "visit ls",
-  usage: "visit ls [--limit 8]   (최근 열람, 최대 20)",
+  usage: "visit ls [--limit 8] [--archived]   (최근 열람, 최대 20 — 보관 문서는 --archived 일 때만)",
   ep: ["visits/route.ts"],
-  run: async (a) => out(await api("GET", `/api/visits?limit=${encodeURIComponent(flag(a, "limit") ?? "8")}`)),
+  run: async (a) =>
+    out(await api("GET", `/api/visits?limit=${encodeURIComponent(flag(a, "limit") ?? "8")}${bool(a, "archived") ? "&archived=1" : ""}`)),
 });
 
 // 프로젝트
@@ -1245,43 +1246,64 @@ add({
 });
 add({
   name: "lesson ls",
-  usage: "lesson ls [--project <id>] [--q <제목 검색>] [--limit n]   (팀 작업규칙·레슨 — 컨텍스트 주입에 포함됨. limit 생략=전체, 최대 300)",
+  usage:
+    "lesson ls [--project <id>] [--q <제목 검색>] [--mode required|default|ondemand] [--limit n]   (팀 작업규칙·레슨 — 각 레슨에 scope(personal|project|stack|global)·mode. 개인 레슨은 내 것만(admin 은 전부). limit 생략=전체, 최대 300)",
   ep: ["lessons/route.ts"],
   run: async (a) => {
     const qs = new URLSearchParams();
     const pid = flag(a, "project");
     const q = flag(a, "q");
     const limit = flag(a, "limit");
+    const mode = flag(a, "mode");
     if (pid) qs.set("projectId", pid);
     if (q) qs.set("q", q);
+    if (mode) qs.set("mode", mode);
     if (limit) qs.set("limit", limit);
     out(await api("GET", `/api/lessons${qs.size ? `?${qs}` : ""}`));
   },
 });
 add({
   name: "lesson add",
-  usage: 'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…>]   (없으면 전역 — 모든 레포 세션에 주입)',
+  usage:
+    'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…> | --personal] [--mode required|default|ondemand]   (범위 없으면 전역 — 모든 레포 세션에 주입. --personal = 나(토큰이면 발급자) 세션에만. mode: required 필수(예산 먼저)·default·ondemand 세션 주입 제외)',
   ep: ["lessons/route.ts"],
-  run: async (a) => out(await api("POST", "/api/lessons", { title: a.pos[0], body: flag(a, "body"), projectId: flag(a, "project"), stack: flag(a, "stack") })),
+  run: async (a) =>
+    out(
+      await api("POST", "/api/lessons", {
+        title: a.pos[0],
+        body: flag(a, "body"),
+        projectId: flag(a, "project"),
+        stack: flag(a, "stack"),
+        ...(bool(a, "personal") ? { personal: true } : {}),
+        ...(flag(a, "mode") ? { mode: flag(a, "mode") } : {}),
+      }),
+    ),
 });
 add({
   name: "lesson show",
   usage: "lesson show <id>   (레슨 전문 — 세션 주입에는 제목·요약만 들어간다)",
   ep: ["lessons/[id]/route.ts"],
   run: async (a) => {
-    const { lesson } = (await api("GET", `/api/lessons/${a.pos[0]}`)) as { lesson: { title: string; body: string; projectId: string | null } };
-    out(`# ${lesson.title}${lesson.projectId ? `  [프로젝트 ${lesson.projectId}]` : "  [전역]"}\n\n${lesson.body}`);
+    const { lesson } = (await api("GET", `/api/lessons/${a.pos[0]}`)) as {
+      lesson: { title: string; body: string; projectId: string | null; stack?: string | null; personal?: boolean; mode?: string };
+    };
+    const scope = lesson.personal ? "개인" : lesson.projectId ? `프로젝트 ${lesson.projectId}` : lesson.stack ? `스택 ${lesson.stack}` : "전역";
+    const mode = lesson.mode && lesson.mode !== "default" ? ` · ${LESSON_MODE_KO[lesson.mode] ?? lesson.mode}` : "";
+    out(`# ${lesson.title}  [${scope}${mode}]\n\n${lesson.body}`);
   },
 });
 add({
   name: "lesson set",
-  usage: 'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --global]   (범위는 하나: 프로젝트·스택·전역)',
+  usage:
+    'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --personal | --global] [--mode required|default|ondemand]   (범위는 하나: 개인·프로젝트·스택·전역)',
   ep: ["lessons/[id]/route.ts"],
   run: async (a) => {
     const body: Record<string, unknown> = {};
     if (flag(a, "title")) body.title = flag(a, "title");
     if (flag(a, "body")) body.body = flag(a, "body");
-    if (bool(a, "global")) Object.assign(body, { projectId: null, stack: null });
+    if (flag(a, "mode")) body.mode = flag(a, "mode");
+    if (bool(a, "global")) Object.assign(body, { projectId: null, stack: null, personal: false });
+    else if (bool(a, "personal")) body.personal = true;
     else if (flag(a, "project")) body.projectId = flag(a, "project");
     else if (flag(a, "stack")) body.stack = flag(a, "stack");
     out(await api("PATCH", `/api/lessons/${a.pos[0]}`, body));
@@ -1295,7 +1317,8 @@ add({
 });
 // ── 레슨 주입 점검(설정 › 레슨 주입 점검) — 시뮬레이터·연결 점검 / 주입 기록·정리 후보 ──
 const LESSON_STATUS_KO: Record<string, string> = { gist: "요약 포함", title: "제목만", omitted: "잘림('외 N개')", not_applicable: "해당 없음" };
-const LESSON_SCOPE_KO: Record<string, string> = { project: "프로젝트", stack: "스택", global: "전역" };
+const LESSON_SCOPE_KO: Record<string, string> = { required: "필수", personal: "개인", project: "프로젝트", stack: "스택", global: "전역" };
+const LESSON_MODE_KO: Record<string, string> = { required: "필수", default: "기본", ondemand: "필요할 때만" };
 add({
   name: "lesson inspect",
   usage: "lesson inspect [--cwd <path> | --project <id>] [--md]   (세션 주입 시뮬레이션: 레슨별 상태·섹션 예산·연결 점검, --md 는 레슨 섹션 미리보기 — 편집자 이상)",
@@ -1313,7 +1336,9 @@ add({
       sections: Sec[];
       preview: string;
       statusCounts: Record<string, number>;
-      lessons: { id: string; title: string; scope: string; status: string }[];
+      modeCounts?: Record<string, number>;
+      scopeCounts?: Record<string, number>;
+      lessons: { id: string; title: string; scope: string; mode?: string; status: string; reason?: string | null }[];
       linkChecks: {
         windowDays: number;
         unmappedCwds: { cwd: string; count: number }[];
@@ -1337,10 +1362,17 @@ add({
       out(`  ${LESSON_SCOPE_KO[s.kind] ?? s.kind}${s.tag ? `:${s.tag}` : ""}\t${s.count}개 · 요약 ${s.gist} · 제목만 ${s.title} · 잘림 ${s.omitted} · ${s.used}/${s.budget ?? "—"}자`);
     }
     out(`■ 레슨 상태: ${Object.entries(r.statusCounts).map(([k, v]) => `${LESSON_STATUS_KO[k] ?? k} ${v}`).join(" · ")}`);
+    if (r.scopeCounts) out(`■ 범위: ${Object.entries(r.scopeCounts).map(([k, v]) => `${LESSON_SCOPE_KO[k] ?? k} ${v}`).join(" · ")}`);
+    if (r.modeCounts) out(`■ 주입 방식: ${Object.entries(r.modeCounts).map(([k, v]) => `${LESSON_MODE_KO[k] ?? k} ${v}`).join(" · ")}`);
+    const required = r.lessons.filter((l) => l.mode === "required");
+    if (required.length) {
+      out(`  필수 레슨 ${required.length}개:`);
+      for (const l of required) out(`    ${l.id}  [${LESSON_SCOPE_KO[l.scope] ?? l.scope}] ${LESSON_STATUS_KO[l.status] ?? l.status} — ${l.title}`);
+    }
     const omitted = r.lessons.filter((l) => l.status === "omitted");
     if (omitted.length) {
       out(`  잘린 레슨 ${omitted.length}개:`);
-      for (const l of omitted) out(`    ${l.id}  [${LESSON_SCOPE_KO[l.scope] ?? l.scope}] ${l.title}`);
+      for (const l of omitted) out(`    ${l.id}  [${LESSON_SCOPE_KO[l.scope] ?? l.scope}${l.mode && l.mode !== "default" ? `·${LESSON_MODE_KO[l.mode] ?? l.mode}` : ""}] ${l.title}`);
     }
     const c = r.linkChecks;
     const warn = c.unmappedCwds.length + c.emptyStackProjects.length + c.orphanStackLessons.length + c.brokenRouteRules.length;
@@ -1556,7 +1588,7 @@ add({
 add({
   name: "lock take",
   usage:
-    "lock take <name> [--ttl 30m] [--note \"...\"] [--cwd <path>]   (공유 브랜치·배포 예약 — 예: banjang/develop · teamspace/main · deploy:teamspace. 기본 30분·최대 4h, 내 것이면 연장, 남의 것이면 보유자·메모·남은 시간과 함께 실패)",
+    "lock take <name> [--ttl 30m] [--note \"...\"] [--cwd <path>]   (공유 브랜치·배포 예약 — 예: banjang/develop · teamspace/main · deploy/teamspace. 이름은 정규형으로 맞춤 — teamspace-main = teamspace/main. 기본 30분·최대 4h, 내 것이면 연장, 남의 것이면 보유자·메모·남은 시간과 함께 실패)",
   ep: ["locks/[name]/route.ts"],
   run: async (a) => lockTake(lockDeps(), a.pos[0], { ttl: flag(a, "ttl"), note: flag(a, "note"), cwd: flag(a, "cwd") }),
 });
@@ -1773,11 +1805,11 @@ const emailsArg = (a: Args) => [...a.pos.slice(1), ...(flag(a, "invite") ?? "").
 
 add({
   name: "site ls",
-  usage: "site ls   (퍼블리시한 HTML 페이지 목록 — 마지막 열은 API 프록시 upstream)",
+  usage: "site ls   (퍼블리시한 HTML 페이지 목록 — api 열은 API 프록시 upstream, 옛 주소가 있으면 마지막 열)",
   ep: ["sites/route.ts"],
   run: async () => {
-    const { sites } = (await api("GET", "/api/sites")) as { sites: { id: string; title: string; status: string; currentVersion: number; inviteCount: number; url: string; apiUpstream?: string | null }[] };
-    for (const s of sites) out(`${s.id}\t${s.title}\tv${s.currentVersion}\t초대 ${s.inviteCount}\t${s.status}\t${s.url}\tapi ${s.apiUpstream ?? "-"}`);
+    const { sites } = (await api("GET", "/api/sites")) as { sites: { id: string; title: string; status: string; currentVersion: number; inviteCount: number; url: string; apiUpstream?: string | null; aliases?: string[] }[] };
+    for (const s of sites) out(`${s.id}\t${s.title}\tv${s.currentVersion}\t초대 ${s.inviteCount}\t${s.status}\t${s.url}\tapi ${s.apiUpstream ?? "-"}${s.aliases?.length ? `\t옛 주소 ${s.aliases.join(",")}` : ""}`);
   },
 });
 add({
@@ -1814,17 +1846,20 @@ add({
 });
 add({
   name: "site publish",
-  usage: "site publish <file.html|dir|file.zip> [--title T] [--project <id>] [--invite a@gmail.com,b@gmail.com] [--site <id>(새 버전)]",
-  ep: ["sites/route.ts", "sites/[id]/versions/route.ts", "sites/[id]/invites/route.ts"],
+  usage: "site publish <file.html|dir|file.zip> [--title T] [--slug <영문-kebab>] [--project <id>] [--invite a@gmail.com,b@gmail.com] [--site <id>(새 버전)]",
+  ep: ["sites/route.ts", "sites/[id]/route.ts", "sites/[id]/versions/route.ts", "sites/[id]/invites/route.ts"],
   run: async (a) => {
     const src = a.pos[0];
     if (!src) throw new Error("경로가 필요합니다. 예: pnpm ws site publish ./dist --invite guest@gmail.com");
     const siteId = flag(a, "site");
     const invites = (flag(a, "invite") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const slug = flag(a, "slug");
     let id: string;
     let url: string;
     let payload: Record<string, unknown>;
     if (siteId) {
+      // 기존 사이트 주소 바꾸기 — 옛 주소는 별칭으로 남아 새 주소로 넘어간다. 형식·중복 오류면 올리기 전에 멈춘다.
+      if (slug) await api("PATCH", `/api/sites/${siteId}`, { slug });
       payload = await siteUpload(src, `/api/sites/${siteId}/versions`);
       id = siteId;
       url = ((await api("GET", `/api/sites/${siteId}`)) as { url: string }).url;
@@ -1834,6 +1869,7 @@ add({
       const extra: Record<string, string> = {};
       if (flag(a, "title")) extra.title = flag(a, "title")!;
       if (flag(a, "project")) extra.projectId = flag(a, "project")!;
+      if (slug) extra.slug = slug;
       if (invites.length) extra.invites = invites.join(",");
       payload = await siteUpload(src, "/api/sites", extra);
       id = (payload.site as { id: string }).id;
@@ -1844,6 +1880,20 @@ add({
     for (const w of (payload.warnings as string[] | undefined) ?? []) out(`⚠ ${w}`);
     out(`사이트 ${id}\n링크: ${url}`);
     if (invites.length) out(`보낼 문구: 이 링크를 열고 ${invites.join(", ")} 계정으로 Google 로그인하세요: ${url}`);
+  },
+});
+add({
+  name: "site set",
+  usage: "site set <siteId> [--slug <영문-kebab>] [--title T]   (주소·제목 바꾸기 — 옛 주소는 계속 열리고 새 주소로 308)",
+  ep: ["sites/[id]/route.ts"],
+  run: async (a) => {
+    const id = a.pos[0];
+    const body: Record<string, string> = {};
+    if (flag(a, "slug")) body.slug = flag(a, "slug")!;
+    if (flag(a, "title")) body.title = flag(a, "title")!;
+    if (!id || !Object.keys(body).length) throw new Error("사용법: pnpm ws site set <siteId> --slug banjang-handover [--title T]");
+    const { site, url } = (await api("PATCH", `/api/sites/${id}`, body)) as { site: { id: string; title: string; slug: string }; url: string };
+    out(`${site.id}\t${site.title}\t${url}`);
   },
 });
 add({
@@ -1925,12 +1975,12 @@ add({
 });
 add({
   name: "similar",
-  usage: "similar <pageId|--q 질의> [--limit n]   (벡터 유사도 — 격차 G2. 신경망 임베딩이 아니라 TF-IDF 코사인)",
+  usage: "similar <pageId|--q 질의> [--limit n] [--archived]   (벡터 유사도 — 격차 G2. 신경망 임베딩이 아니라 TF-IDF 코사인. 보관 문서는 --archived 일 때만)",
   ep: ["search/similar/route.ts"],
   run: async (a) => {
     const q = flag(a, "q");
     const qs = q ? `q=${encodeURIComponent(q)}` : `pageId=${a.pos[0]}`;
-    const r = (await api("GET", `/api/search/similar?${qs}&limit=${flag(a, "limit") ?? 5}`)) as {
+    const r = (await api("GET", `/api/search/similar?${qs}&limit=${flag(a, "limit") ?? 5}${bool(a, "archived") ? "&archived=1" : ""}`)) as {
       mode: string; method: string; indexed: number;
       results: { id: string; title: string; project: string | null; score: number }[];
     };
@@ -2151,10 +2201,10 @@ add({
 });
 add({
   name: "concept",
-  usage: 'concept <검색어>   (개념 검색 — LLM 질의확장으로 연관 문서까지 회수)',
+  usage: 'concept <검색어> [--archived]   (개념 검색 — LLM 질의확장으로 연관 문서까지 회수. 보관 문서는 --archived 일 때만)',
   ep: ["search/concept/route.ts"],
   run: async (a) => {
-    const r = (await api("GET", `/api/search/concept?q=${encodeURIComponent(a.pos[0] ?? "")}`)) as {
+    const r = (await api("GET", `/api/search/concept?q=${encodeURIComponent(a.pos[0] ?? "")}${bool(a, "archived") ? "&archived=1" : ""}`)) as {
       mode: string; expanded: string[]; results: { title: string; kind: string; heading: string | null }[];
     };
     out(`[${r.mode}] 확장어: ${r.expanded.join(", ") || "(없음)"}`);
@@ -2403,7 +2453,7 @@ add({
 });
 
 // 주간 지표 스냅샷(피드백 루프 ①) — 워커가 매주 1행. 화면 없음, CLI/API 로만 본다.
-type MetricsData = { docs: number; docsBytes: number; tasksOpen: number; tasksDone: number; graphNodes: number; graphEdges: number; llm: { calls: number; cacheHits: number; inputTokens: number; outputTokens: number; usd: number | null }; injection: { count: number; chars: number }; llmCacheRows: number };
+type MetricsData = { docs: number; docsBytes: number; tasksOpen: number; tasksDone: number; graphNodes: number; graphEdges: number; llm: { calls: number; cacheHits: number; inputTokens: number; outputTokens: number; usd?: number | null }; injection: { count: number; chars: number }; llmCacheRows: number };
 add({
   name: "metrics",
   usage: "metrics [--weeks 8] | metrics snapshot   (editor 이상 · 비용 llm.usd 행은 admin 만 · 주간 지표 표: 키·지난주·이번주·Δ · snapshot 은 이번 주 스냅샷을 지금 1회 생성 — admin)",

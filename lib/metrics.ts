@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { getTeamspaceUsage } from "@/lib/aiRoutes/llmCalls";
 import { isOpenStatus } from "@/lib/taskFilter";
+import { loadArchivedPageIds, excludeArchived } from "@/lib/pageArchive";
 
 /**
  * 주간 지표 스냅샷(피드백 루프 ①) — 워커가 매주 1행 남기고, 비교는 CLI/API 가 한다.
  * llm·injection 은 최근 7일 합, 나머지(docs·tasks·graph·llmCacheRows)는 찍는 시점의 현재 값.
+ * docs·docsBytes 는 "활성 문서" 기준 — 보관(조상 규칙) 페이지는 뺀다.
  */
 export type MetricData = {
   docs: number;
@@ -70,7 +72,10 @@ async function countTasks(workspaceId: string): Promise<{ open: number; done: nu
 
 export async function collectMetrics(workspaceId: string, now: Date = new Date()): Promise<MetricData> {
   const since = new Date(now.getTime() - 7 * DAY_MS);
-  const [pages, tasks, docNodes, projects, decisions, lessons, risks, rowNodes, graphEdges, usage, inj, llmCacheRows] = await Promise.all([
+  // 보관 집합을 먼저 읽는다 — 행 count 의 where 가 이 집합에 달려 있다(주 1회라 await 하나는 싸다).
+  const archived = await loadArchivedPageIds(prisma, workspaceId);
+  const archivedIds = [...archived];
+  const [allPages, tasks, docNodes, projects, decisions, lessons, risks, rowNodes, bodyRows, graphEdges, usage, inj, llmCacheRows] = await Promise.all([
     // GET /api/pages 와 같은 select(권한 거름 전 워크스페이스 전체)
     prisma.page.findMany({
       where: { workspaceId, deletedAt: null },
@@ -78,24 +83,48 @@ export async function collectMetrics(workspaceId: string, now: Date = new Date()
       select: { id: true, title: true, icon: true, parentId: true, position: true, kind: true, projectId: true, updatedAt: true, visibility: true, docType: true },
     }),
     countTasks(workspaceId),
-    // 그래프 노드 ≈ loadGraph 입력: 문서 + 프로젝트 + 결정 + 레슨 + 리스크 + 보드 행 (권한 거름 전, 가볍게 count)
+    // graphNodes = loadGraph(lib/graphLoad.ts loadRaw) 의 권한 거름 전 입력 노드 수와 같다. 유일한 잔여 차이:
+    //   여기 보관 집합은 모든 페이지 종류로 만들고 loadRaw 는 doc+database 만 본다.
+    //   활성 문서(조상 규칙 보관 제외, 보관 보드의 행 본문 문서 제외) + 프로젝트 + 결정 + 팀 레슨(userId null) + 리스크
+    //   + 활성 보드(삭제·보관 아님)의 행 중 행 본문 문서(contentPageId)가 보관되지 않은 것.
+    // 문서는 전체 count 에서 아래 archivedDocs·droppedBodyDocs 를 뺀다.
     prisma.page.count({ where: { workspaceId, kind: "doc", deletedAt: null } }),
     prisma.project.count({ where: { workspaceId } }),
     prisma.decision.count({ where: { workspaceId } }),
-    prisma.lesson.count({ where: { workspaceId } }),
+    prisma.lesson.count({ where: { workspaceId, userId: null } }),
     prisma.risk.count({ where: { workspaceId } }),
-    prisma.dbRow.count({ where: { database: { workspaceId, deletedAt: null } } }),
+    archived.size === 0
+      ? prisma.dbRow.count({ where: { database: { workspaceId, deletedAt: null } } })
+      : prisma.dbRow.count({
+          where: {
+            database: { workspaceId, deletedAt: null },
+            databasePageId: { notIn: archivedIds },
+            OR: [{ contentPageId: null }, { contentPageId: { notIn: archivedIds } }],
+          },
+        }),
+    // 보관 보드 행의 본문 문서 id(그래프는 이 문서도 노드에서 뺀다)
+    archived.size === 0
+      ? Promise.resolve([] as { contentPageId: string | null }[])
+      : prisma.dbRow.findMany({
+          where: { database: { workspaceId, deletedAt: null }, databasePageId: { in: archivedIds }, contentPageId: { not: null } },
+          select: { contentPageId: true },
+        }),
     prisma.graphEdge.count({ where: { workspaceId } }),
     getTeamspaceUsage(workspaceId, 7, { now, purge: false }),
     prisma.lessonInjection.aggregate({ where: { workspaceId, createdAt: { gte: since } }, _count: { _all: true }, _sum: { chars: true } }),
     prisma.llmCache.count(), // 캐시는 워크스페이스 키가 없는 머신 단위
   ]);
+  const pages = excludeArchived(allPages, archived);
+  const archivedDocs = allPages.filter((p) => p.kind === "doc" && archived.has(p.id)).length;
+  // 이미 보관 집합에 든 문서는 위에서 뺐으므로 한 번만 센다.
+  const bodyIds = new Set(bodyRows.map((r) => r.contentPageId).filter((id): id is string => !!id));
+  const droppedBodyDocs = allPages.filter((p) => p.kind === "doc" && bodyIds.has(p.id) && !archived.has(p.id)).length;
   return {
     docs: pages.length,
     docsBytes: JSON.stringify(pages).length,
     tasksOpen: tasks.open,
     tasksDone: tasks.done,
-    graphNodes: docNodes + projects + decisions + lessons + risks + rowNodes,
+    graphNodes: docNodes - archivedDocs - droppedBodyDocs + projects + decisions + lessons + risks + rowNodes,
     graphEdges,
     llm: {
       calls: usage.totals.calls,

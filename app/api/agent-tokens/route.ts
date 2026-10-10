@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { agentEmail, generateAgentToken, hashToken } from "@/lib/agentToken";
+import { viewerPersonId } from "@/lib/viewerPerson";
 import { isReservedAgentName } from "@/lib/bootstrapCtx";
 import type { Role } from "@/app/generated/prisma/enums";
 import { readBody } from "@/lib/apiBody";
@@ -62,6 +63,8 @@ export async function POST(req: Request) {
       data: {
         workspaceId: guard.workspaceId,
         userId: user.id,
+        // 발급자(사람) — 이 토큰 세션은 발급자의 개인 레슨을 받는다. 에이전트 토큰이 발급하면 그 토큰의 발급자를 잇는다.
+        issuedById: viewerPersonId(guard),
         name,
         role,
         tokenHash: hashToken(token),

@@ -1,7 +1,7 @@
 import { SITE_SANDBOX } from "@/lib/sites/headers";
 
 /* 상단 얇은 바 + 전체 화면 sandbox iframe. sandbox 문자열은 /pub 의 CSP 와 같은 상수를 쓴다. */
-export default function SiteFrame({ title, email, src, onSwitch }: { title: string; email: string; src: string; onSwitch: () => Promise<void> }) {
+export default function SiteFrame({ title, email, src, frameId, onSwitch }: { title: string; email: string; src: string; frameId?: string; onSwitch: () => Promise<void> }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "var(--surface-page, #fff)" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", borderBottom: "1px solid var(--border-subtle, #eee)", fontSize: 13 }}>
@@ -13,7 +13,7 @@ export default function SiteFrame({ title, email, src, onSwitch }: { title: stri
           </button>
         </form>
       </header>
-      <iframe title={title} src={src} sandbox={SITE_SANDBOX} referrerPolicy="no-referrer" style={{ flex: 1, width: "100%", border: 0 }} />
+      <iframe id={frameId} title={title} src={src} sandbox={SITE_SANDBOX} referrerPolicy="no-referrer" style={{ flex: 1, width: "100%", border: 0 }} />
     </div>
   );
 }

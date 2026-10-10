@@ -12,6 +12,7 @@ import { subgraph, renderKnowledgeMap } from "@/lib/graphInsights";
 import { buildLessonSection, capLines, gistOf } from "@/lib/lessonInject";
 import { recordLessonInjection, injectionIds, briefInjectionIds } from "@/lib/lessonInspect/log";
 import { renderBrief } from "@/lib/contextBrief";
+import { viewerPersonId } from "@/lib/viewerPerson";
 import { accountSection, buildAccountLines } from "@/lib/envVault/sessionAccounts";
 import { archivedPageIds } from "@/lib/pageArchive";
 import { withReq } from "@/lib/log";
@@ -135,7 +136,14 @@ export async function GET(request: Request) {
   const decisionWhere = { workspaceId, status: "accepted" as const, ...projFilter, ...notArchivedProject };
   const riskWhere = { workspaceId, status: "open" as const, ...projFilter, ...notArchivedProject };
   // 레슨: 전역 + (cwd 매핑 시) 해당 프로젝트 — 팀 작업규칙은 항상 주입된다 (W3 mem-9)
-  const lessonWhere = { workspaceId, ...(projectId ? { OR: [{ projectId: null }, { projectId }] } : {}) };
+  // 개인 레슨은 이 요청의 사람(사람 = 본인, 에이전트 토큰 = 발급자) 것만 — 다른 사람 것은 admin 이어도 읽지 않는다.
+  // ondemand·스택 불일치 등 세부 판정은 lib/lessonInject.lessonApplicability 가 한다(개수도 그 판정 뒤 숫자로).
+  const personId = viewerPersonId(guard);
+  const lessonWhere = {
+    workspaceId,
+    ...(projectId ? { OR: [{ projectId: null }, { projectId }] } : {}),
+    AND: [{ OR: [{ userId: null }, ...(personId ? [{ userId: personId }] : [])] }],
+  };
   // 개수는 count 로 — 목록 take(50/30/100/500)에 묶이지 않고, brief 는 목록을 아예 읽지 않는다.
   // 문서 개수는 볼 수 없는 페이지를 where 로 밀어 넣어 visibleOnly 와 같은 결과를 낸다.
   const hiddenDocIds = [...archivedIds, ...hiddenPageIds(access)];
@@ -149,7 +157,7 @@ export async function GET(request: Request) {
     prisma.lesson.findMany({
       where: lessonWhere,
       orderBy: { updatedAt: "desc" },
-      select: { id: true, title: true, body: true, projectId: true, stack: true },
+      select: { id: true, title: true, body: true, projectId: true, stack: true, userId: true, mode: true },
       take: 500,
     }),
     prisma.page.count({ where: docCountWhere }),
@@ -199,12 +207,13 @@ export async function GET(request: Request) {
       projectName,
       projectStack,
       lessons,
+      personId,
       tasks,
       me: [guard.actor?.name ?? "", guard.userId],
       counts,
       accountLines: buildAccountLines(accountTargets, { home, maxLines: 1, maxChars: 120 }),
     });
-    logInjection("brief", briefInjectionIds(md, lessons, projectId, projectStack), md.length);
+    logInjection("brief", briefInjectionIds(md, lessons, projectId, projectStack, personId), md.length);
     return respond(md);
   }
 
@@ -291,7 +300,7 @@ export async function GET(request: Request) {
 
   // compact: 전체 예산(CONTEXT_BUDGET)에서 다른 섹션이 쓰고 남은 만큼을 레슨에 준다(최소 LESSON_BUDGET) — lib/lessonInject.buildLessonSection.
   // 점검 화면(GET /api/lessons/inspect)이 같은 함수를 이 라우트를 통해 부른다(드리프트 방지).
-  const lessonSec = buildLessonSection({ lessons, projectId, projectName, projectStack, compact, restChars: L.join("\n").length });
+  const lessonSec = buildLessonSection({ lessons, projectId, projectName, projectStack, personId, compact, restChars: L.join("\n").length });
   L.splice(headerLen, 0, ...lessonSec.lines);
 
   const markdown = L.join("\n");

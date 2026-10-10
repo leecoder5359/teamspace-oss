@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { pushNotification, recordActivity } from "@/lib/activity";
 import type { Ctx } from "@/lib/workspace";
-import { DEFAULT_TTL_MIN, MAX_TTL_MIN, lockNameError } from "@/lib/pushLockRules";
+import { DEFAULT_TTL_MIN, MAX_TTL_MIN, canonicalLockName, lockNameError } from "@/lib/pushLockRules";
 
 /**
  * 공유 브랜치 푸시·배포 예약 잠금(Console 4). 결정: 예약 잠금 + pre-push **경고**(푸시는 절대 막지 않는다).
  *
- * - 이름은 자유 형식 자원 키(`banjang/develop`·`teamspace/main`·`deploy:teamspace`).
+ * - 이름은 자원 키(`banjang/develop`·`teamspace/main`·`deploy/teamspace`). 들어온 이름은 정규형
+ *   (canonicalLockName — `teamspace-main`·`TeamSpace_main` → `teamspace/main`)으로 맞춰 쓰고 새 행도 정규형으로 만든다.
+ *   정규화 전에 만든 옛 철자 행이 아직 살아 있으면(최대 4시간) 그 행을 같은 잠금으로 본다(resolveName).
  * - 이름당 한 행. 만료(expiresAt≤now)·해제(releasedAt)면 빈 잠금 → 누구나 잡을 수 있다.
  * - 잡기는 조건부 updateMany 두 번(① 내 것이면 연장 ② 비어 있으면 인수)이고, 행이 없을 때만 create —
  *   (workspaceId,name) unique 라 동시 create 는 한쪽만 성공하고 진 쪽은 다시 ①② 를 탄다. 경쟁에서 진 요청은 409.
@@ -14,7 +16,7 @@ import { DEFAULT_TTL_MIN, MAX_TTL_MIN, lockNameError } from "@/lib/pushLockRules
  *   (같은 토큰을 쓰는 다른 세션의 푸시도 경고 대상). 한쪽이라도 세션이 없으면 이름으로만 비교한다.
  */
 
-export { LOCK_NAME_RE, DEFAULT_TTL_MIN, MAX_TTL_MIN, lockNameError, parseTtlFlag } from "@/lib/pushLockRules";
+export { LOCK_NAME_RE, DEFAULT_TTL_MIN, MAX_TTL_MIN, canonicalLockName, lockNameError, parseTtlFlag } from "@/lib/pushLockRules";
 export const NOTIFY_THROTTLE_MS = 5 * 60 * 1000;
 
 /** 라우트 파라미터 → 잠금 이름. 슬래시가 든 이름은 CLI·훅이 encodeURIComponent 로 한 세그먼트에 담아 보낸다. */
@@ -74,7 +76,7 @@ export function isSameHolder(l: Pick<LockRow, "holderName" | "holderUserId" | "h
 export function lockView(l: LockRow, now: Date, me?: Me) {
   const active = isActive(l, now);
   return {
-    name: l.name,
+    name: canonicalLockName(l.name),
     active,
     holderName: l.holderName,
     holderSession: l.holderSession,
@@ -115,6 +117,24 @@ function checkName(name: string) {
   if (e) throw new LockError(400, e);
 }
 
+/**
+ * 들어온 이름 → 실제로 다룰 행의 이름. 정규형으로 맞춘 뒤 검증하고, 정규형 행이 살아 있지 않은데
+ * 정규형이 같은 옛 철자 행(정규화 전 `teamspace-main` 등)이 살아 있으면 그 행 이름을 돌려준다 —
+ * 그래야 옛 철자로 잡힌 잠금도 배제·해제·조회된다. 그 밖엔 정규형(새 행은 정규형으로 생긴다).
+ */
+export async function resolveName(workspaceId: string, raw: string, now: Date): Promise<string> {
+  const canon = canonicalLockName(raw);
+  checkName(canon);
+  const row = await prisma.pushLock.findUnique({ where: { workspaceId_name: { workspaceId, name: canon } }, select: { releasedAt: true, expiresAt: true } });
+  if (row && isActive(row, now)) return canon;
+  const alive = await prisma.pushLock.findMany({
+    where: { workspaceId, releasedAt: null, expiresAt: { gt: now }, NOT: { name: canon } },
+    select: { name: true },
+    orderBy: { takenAt: "asc" },
+  });
+  return alive.find((r) => canonicalLockName(r.name) === canon)?.name ?? canon;
+}
+
 async function conflict(workspaceId: string, name: string, now: Date, me: Me): Promise<never> {
   const cur = await prisma.pushLock.findUnique({ where: { workspaceId_name: { workspaceId, name } } });
   const v = cur ? lockView(cur, now, me) : null;
@@ -128,8 +148,8 @@ async function conflict(workspaceId: string, name: string, now: Date, me: Me): P
 export type TakeInput = { ttlMinutes?: unknown; note?: string | null; session?: string | null; cwd?: string | null; branch?: string | null };
 
 /** 잡기: 내 것이면 연장(refreshed), 비어 있으면 인수(taken), 남의 것이면 409. */
-export async function takeLock(ctx: Ctx, name: string, input: TakeInput, now = new Date()) {
-  checkName(name);
+export async function takeLock(ctx: Ctx, rawName: string, input: TakeInput, now = new Date()) {
+  const name = await resolveName(ctx.workspaceId, rawName, now);
   const ttl = ttlMinutesOf(input.ttlMinutes);
   const me = meOf(ctx, input.session);
   const expiresAt = new Date(now.getTime() + ttl * 60000);
@@ -175,8 +195,8 @@ export async function takeLock(ctx: Ctx, name: string, input: TakeInput, now = n
 }
 
 /** 연장: 내 잠금만. 비어 있으면 404, 남의 것이면 409. */
-export async function extendLock(ctx: Ctx, name: string, input: { ttlMinutes?: unknown; session?: string | null }, now = new Date()) {
-  checkName(name);
+export async function extendLock(ctx: Ctx, rawName: string, input: { ttlMinutes?: unknown; session?: string | null }, now = new Date()) {
+  const name = await resolveName(ctx.workspaceId, rawName, now);
   const ttl = ttlMinutesOf(input.ttlMinutes);
   const me = meOf(ctx, input.session);
   const r = await prisma.pushLock.updateMany({
@@ -193,8 +213,8 @@ export async function extendLock(ctx: Ctx, name: string, input: { ttlMinutes?: u
 }
 
 /** 해제: 보유자만. 관리자 로그인 세션은 force 로 강제 해제(보유자에게 알림). 이미 비어 있으면 released:false. */
-export async function releaseLock(ctx: Ctx, name: string, input: { session?: string | null; force?: boolean }, now = new Date()) {
-  checkName(name);
+export async function releaseLock(ctx: Ctx, rawName: string, input: { session?: string | null; force?: boolean }, now = new Date()) {
+  const name = await resolveName(ctx.workspaceId, rawName, now);
   const me = meOf(ctx, input.session);
   const mine = await prisma.pushLock.updateMany({ where: mineWhere(ctx.workspaceId, name, me, now), data: { releasedAt: now } });
   if (mine.count > 0) {
@@ -215,8 +235,8 @@ export async function releaseLock(ctx: Ctx, name: string, input: { session?: str
   return { released: r.count > 0, forced: true };
 }
 
-export async function getLock(ctx: Ctx, name: string, session?: string | null, now = new Date()) {
-  checkName(name);
+export async function getLock(ctx: Ctx, rawName: string, session?: string | null, now = new Date()) {
+  const name = await resolveName(ctx.workspaceId, rawName, now);
   const row = await prisma.pushLock.findUnique({ where: { workspaceId_name: { workspaceId: ctx.workspaceId, name } } });
   return { lock: row && isActive(row, now) ? lockView(row, now, meOf(ctx, session)) : null };
 }
@@ -237,11 +257,11 @@ export async function listLocks(ctx: Ctx, session?: string | null, now = new Dat
  */
 export async function notifyLockHolder(
   ctx: Ctx,
-  name: string,
+  rawName: string,
   input: { session?: string | null; branch?: string | null; cwd?: string | null },
   now = new Date(),
 ) {
-  checkName(name);
+  const name = await resolveName(ctx.workspaceId, rawName, now);
   const me = meOf(ctx, input.session);
   const cur = await prisma.pushLock.findUnique({ where: { workspaceId_name: { workspaceId: ctx.workspaceId, name } } });
   if (!cur || !isActive(cur, now)) return { notified: false, reason: "free" as const };

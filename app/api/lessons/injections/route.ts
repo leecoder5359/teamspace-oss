@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { personalLessonWhere } from "@/lib/lessonAccess";
+import { viewerPersonId } from "@/lib/viewerPerson";
 import { injectionStats } from "@/lib/lessonInspect/analyze";
 import { LESSON_LOG_RETENTION_DAYS, maybePurge } from "@/lib/lessonInspect/log";
 
@@ -18,6 +20,8 @@ export async function GET(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
+  // 개인 레슨은 본인(토큰이면 발급자) 것만 — admin 은 관리용으로 모두
+  const personal = personalLessonWhere({ personId: viewerPersonId(guard), role: guard.role });
   const raw = Number(new URL(request.url).searchParams.get("days") ?? 30);
   const days = Number.isFinite(raw) ? Math.min(LESSON_LOG_RETENTION_DAYS, Math.max(1, Math.round(raw))) : 30;
   const since = new Date(Date.now() - days * 86_400_000);
@@ -31,7 +35,12 @@ export async function GET(request: Request) {
       select: { id: true, createdAt: true, actorName: true, cwd: true, projectId: true, via: true, mode: true, gistIds: true, titleIds: true, omittedIds: true, chars: true },
     }),
     prisma.lessonRead.findMany({ where: { workspaceId, createdAt: { gte: since } }, select: { lessonId: true }, take: MAX_ROWS }),
-    prisma.lesson.findMany({ where: { workspaceId }, orderBy: { updatedAt: "desc" }, select: { id: true, title: true, projectId: true, stack: true, createdAt: true }, take: 500 }),
+    prisma.lesson.findMany({
+      where: { workspaceId, ...(personal ? { AND: [personal] } : {}) },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, title: true, projectId: true, stack: true, userId: true, mode: true, createdAt: true },
+      take: 500,
+    }),
     prisma.project.findMany({ where: { workspaceId, archivedAt: null }, select: { id: true, name: true } }),
   ]);
 

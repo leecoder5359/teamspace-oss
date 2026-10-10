@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage, visibleOnly } from "@/lib/pageGuard";
 import { computeBacklinks } from "@/lib/wikilink";
+import { loadArchivedPageIds, excludeArchived } from "@/lib/pageArchive";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     select: { id: true, title: true, markdown: true },
   });
   const back = computeBacklinks(pages);
-  // 못 보는 문서가 이 문서를 참조한다는 사실 자체가 제목 누출이다.
-  return NextResponse.json({ backlinks: visibleOnly(gate.idx, back[id] ?? []) });
+  // 못 보는 문서가 이 문서를 참조한다는 사실 자체가 제목 누출이다. 가시성으로 먼저 거른 뒤 보관 문서를 뺀다(D3).
+  const archived = await loadArchivedPageIds(prisma, workspaceId);
+  return NextResponse.json({ backlinks: excludeArchived(visibleOnly(gate.idx, back[id] ?? []), archived) });
 }

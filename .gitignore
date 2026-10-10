@@ -55,3 +55,6 @@ tasks/prd*.json
 
 # 런타임 데이터(첨부 등) — public/ 이 아니라 여기 쌓인다 (OSS 후속)
 /data/
+
+# subagent-driven-development scratch (briefs/reports/ledgers)
+.superpowers/

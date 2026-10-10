@@ -83,7 +83,8 @@ async function loadRaw(workspaceId: string) {
     }),
     prisma.project.findMany({ where: { workspaceId }, select: { id: true, name: true } }),
     prisma.decision.findMany({ where: { workspaceId }, select: { id: true, title: true, context: true, decision: true, projectId: true } }),
-    prisma.lesson.findMany({ where: { workspaceId }, select: { id: true, title: true, body: true, projectId: true } }),
+    // 개인 레슨(userId)은 그래프에 넣지 않는다 — 그래프 캐시는 워크스페이스 단위로 공유되어 사람별로 거를 수 없다.
+    prisma.lesson.findMany({ where: { workspaceId, userId: null }, select: { id: true, title: true, body: true, projectId: true } }),
     prisma.risk.findMany({ where: { workspaceId }, select: { id: true, title: true, description: true, projectId: true } }),
     prisma.dbRow.findMany({
       where: { database: { workspaceId, deletedAt: null } },

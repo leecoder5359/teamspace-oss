@@ -49,10 +49,16 @@ export function repoNameFromCommonDir(commonDir) {
   return basename(mainRoot).replace(/\.git$/, "") || null;
 }
 
-/** (repo, branch) → 잠금 이름. 규칙에 안 맞으면(대문자 외 특수문자 등) null — 그 푸시는 검사하지 않는다. */
+/** lib/pushLockRules.ts canonicalLockName 사본 — 구분자 묶음 [\s/_:.-]+ → "/", 소문자(서버도 같은 정규형으로 찾는다). */
+export function canonicalLockName(raw) {
+  return String(raw).trim().toLowerCase().replace(/[\s/_:.-]+/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+/** (repo, branch) → 잠금 이름(정규형). 규칙에 안 맞으면(허용 밖 특수문자 등) null — 그 푸시는 검사하지 않는다.
+    `teamspace` + `feature_x` → `teamspace/feature/x` — `ws lock take teamspace-feature-x` 와 같은 잠금. */
 export function lockNameFor(repo, branch) {
   if (!repo || !branch) return null;
-  const name = `${repo}/${branch}`.toLowerCase();
+  const name = canonicalLockName(`${repo}/${branch}`);
   return LOCK_NAME_RE.test(name) ? name : null;
 }
 

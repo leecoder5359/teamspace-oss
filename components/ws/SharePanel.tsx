@@ -106,7 +106,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
   const canManage = data?.canManage ?? false;
 
   return (
-    <div style={{ marginTop: 24, borderTop: "1px solid var(--border-subtle)", paddingTop: 16, maxWidth: 720 }}>
+    <div style={{ marginTop: 24, borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
       <button
         className="ws-btn-soft"
         onClick={() => setOpen((v) => !v)}

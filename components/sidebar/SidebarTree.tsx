@@ -74,7 +74,7 @@ export function SidebarTree({
 
   const commitRename = (id: string, title: string) => {
     setRenaming(null);
-    void rename(id, title);
+    void rename(id, title.trim());
   };
 
   const moreButton = (key: string, hidden: number) =>

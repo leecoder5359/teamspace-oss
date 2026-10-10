@@ -38,6 +38,12 @@ describe("validateBundle", () => {
     expect(r.ok && r.skipped.length).toBe(2);
   });
 
+  it("예약 폴더 __ts/ 는 담지 않는다(/pub 내비 스크립트 자리) — 최상위 폴더를 벗긴 뒤 기준", () => {
+    const r = validateBundle({ filename: "b.zip", data: zip({ "dist/index.html": "<p>", "dist/__ts/nav.js": "evil", "dist/pages/__ts.html": "<p>" }) });
+    expect(r.ok && r.files.map((f) => f.path).sort()).toEqual(["index.html", "pages/__ts.html"]);
+    expect(r.ok && r.skipped).toEqual([{ path: "__ts/nav.js", reason: "예약 경로(__ts/)" }]);
+  });
+
   it("index.html 이 없으면 발견한 html 을 알려주며 거부", () => {
     const r = validateBundle({ filename: "b.zip", data: zip({ "app.html": "<p>", "x/y.css": "a" }) });
     expect(r).toMatchObject({ ok: false });
@@ -75,6 +81,23 @@ describe("validateBundle", () => {
     const r = validateBundle({ filename: "b.zip", data: zip({ "index.html": '<script src="/assets/i.js"></script><a href="//cdn.x/y">', "assets/i.js": "1" }) });
     expect(r.ok).toBe(true);
     expect(r.ok && r.warnings.join()).toContain("/assets/i.js");
+  });
+
+  it("a.html 과 a/index.html 이 함께 있으면 같은 주소 경고(업로드는 허용)", () => {
+    const r = validateBundle({
+      filename: "b.zip",
+      data: zip({ "index.html": "<p>", "a.html": "1", "a/index.html": "2", "docs/b.html": "3", "docs/b/index.html": "4", "c.html": "5" }),
+    });
+    expect(r.ok).toBe(true);
+    const w = (r.ok && r.warnings.join("\n")) || "";
+    expect(w).toContain("/a → a.html (a/index.html 는 가려짐)");
+    expect(w).toContain("/docs/b → docs/b.html (docs/b/index.html 는 가려짐)");
+    expect(w).not.toContain("c.html");
+  });
+
+  it("겹치는 쌍이 없으면 경고 없음", () => {
+    const r = validateBundle({ filename: "b.zip", data: zip({ "index.html": "<p>", "a/index.html": "1", "b.html": "2" }) });
+    expect(r.ok && r.warnings).toEqual([]);
   });
 });
 

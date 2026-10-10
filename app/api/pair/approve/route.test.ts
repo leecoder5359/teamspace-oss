@@ -96,3 +96,24 @@ describe("POST /api/pair/approve — 동시 승인·재승인 (설치기 후속)
     expect(tx.workspaceMember.create).toHaveBeenCalled();
   });
 });
+
+describe("POST /api/pair/approve — 발급자(issuedById)", () => {
+  async function approveAs(ctx: Record<string, unknown>) {
+    (requireCtx as unknown as Mock).mockResolvedValue(ctx);
+    const tx = fakeTx(null);
+    (prisma.$transaction as unknown as Mock).mockImplementation(async (fn: (t: unknown) => Promise<void>) => fn(tx));
+    await POST(req({ code: "b".repeat(32) }));
+    return tx.agentToken.create.mock.calls[0][0].data as { userId: string; issuedById: string | null };
+  }
+
+  it("승인한 사람을 issuedById 로 남긴다 — userId 는 새 에이전트 시스템 User", async () => {
+    const data = await approveAs({ workspaceId: "w", userId: "human1", role: "admin", actor: { type: "user", id: "human1", name: "이준" }, personId: "human1" });
+    expect(data.issuedById).toBe("human1");
+    expect(data.userId).toBe("u_new");
+  });
+
+  it("에이전트 토큰이 승인하면 그 토큰의 발급자를 잇는다, 발급자 미상이면 null", async () => {
+    expect((await approveAs({ workspaceId: "w", userId: "agentU", role: "admin", actor: { type: "agent", id: "agentU", name: "a" }, personId: "human9" })).issuedById).toBe("human9");
+    expect((await approveAs({ workspaceId: "w", userId: "agentU", role: "admin", actor: { type: "agent", id: "agentU", name: "a" }, personId: null })).issuedById).toBeNull();
+  });
+});

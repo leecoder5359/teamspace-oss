@@ -5,6 +5,7 @@ import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { tokenize, rankSources, type SourceDoc } from "@/lib/ask";
 import { complete } from "@/lib/llm";
 import { buildExpansionPrompt, parseExpansion, mergeTerms } from "@/lib/semsearch";
+import { loadArchivedPageIds, excludeArchived } from "@/lib/pageArchive";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,9 @@ export async function GET(request: Request) {
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
-  const query = (new URL(request.url).searchParams.get("q") ?? "").trim();
+  const sp = new URL(request.url).searchParams;
+  const query = (sp.get("q") ?? "").trim();
+  const includeArchived = sp.get("archived") === "1";
   if (!query) return NextResponse.json({ query, expanded: [], terms: [], mode: "plain", results: [] });
 
   const base = tokenize(query);
@@ -48,9 +51,11 @@ export async function GET(request: Request) {
   ]);
 
   // D3: 답변 합성에 못 보는 문서가 섞이면 본문이 그대로 흘러나온다.
+  // 보관 문서(조상 규칙)는 가시성 거른 다음에 뺀다(?archived=1 이면 포함).
   const idx = await loadAccess(guard);
+  const archived = includeArchived ? new Set<string>() : await loadArchivedPageIds(prisma, workspaceId);
   const candidates: SourceDoc[] = [
-    ...visibleOnly(idx, docs).map((d) => ({ id: d.id, title: d.title, kind: "doc" as const, body: d.markdown ?? "" })),
+    ...excludeArchived(visibleOnly(idx, docs), archived).map((d) => ({ id: d.id, title: d.title, kind: "doc" as const, body: d.markdown ?? "" })),
     ...decisions.map((d) => ({
       id: d.id,
       title: d.title,

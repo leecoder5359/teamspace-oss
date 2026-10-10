@@ -21,7 +21,16 @@ KEEP=14
 mkdir -p "$DEST"
 
 echo "→ Postgres 덤프"
-docker exec teamspace-postgres pg_dump -U teamspace -d teamspace -Fc > "$DEST/teamspace.dump"
+# .partial 에 쓰고 성공해야 이름을 바꾼다 — 실패하면 0바이트 teamspace.dump 가 남아 ops 상태가
+# "백업 있음" 으로 오판하던 것(이슈 cmv1y6293). 실패 시 .partial 을 지우고 종료 코드를 그대로 낸다.
+if docker exec teamspace-postgres pg_dump -U teamspace -d teamspace -Fc > "$DEST/teamspace.dump.partial"; then
+  mv "$DEST/teamspace.dump.partial" "$DEST/teamspace.dump"
+else
+  rc=$?
+  rm -f "$DEST/teamspace.dump.partial"
+  echo "✗ pg_dump 실패(rc=$rc) — 덤프를 남기지 않는다"
+  exit "$rc"
+fi
 
 echo "→ docs/ 아카이브"
 tar -czf "$DEST/docs.tar.gz" -C "$REPO_DIR" docs

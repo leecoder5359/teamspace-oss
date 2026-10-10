@@ -6,7 +6,8 @@ import { join } from "node:path";
 /* P3c 세션 계정 주입 — 라우트 수준.
    골든 파일(__fixtures__/compact-no-targets.golden.txt)은 P3c 이전 라우트(a3e1fc8)로 만든 출력이다.
    반영 대상이 없는 프로젝트의 compact·brief 출력이 그것과 바이트 단위로 같아야 한다.
-   (다시 만들 일은 없어야 한다 — 만들 땐 이전 라우트로 CONTEXT_GOLDEN_WRITE=1) */
+   (다시 만들 일은 없어야 한다 — 만들 땐 이전 라우트로 CONTEXT_GOLDEN_WRITE=1)
+   2026-10-10 레슨 예산 개편(필수 먼저·좁은 범위 먼저)으로 레슨 요약 줄 배분만 바뀌어 다시 만들었다 — 계정 줄과 무관. */
 
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
 vi.mock("@/lib/pageGuard", () => ({

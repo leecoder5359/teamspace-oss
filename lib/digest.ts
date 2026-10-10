@@ -5,7 +5,7 @@ import { isoWeekKey } from "@/lib/metrics";
 import { isOpenStatus } from "@/lib/taskFilter";
 import { statusOf, titleOf, type PropLite } from "@/lib/notify.pure";
 import { buildAccessIndex, pageAccess } from "@/lib/pageAccess";
-import { archivedPageIds } from "@/lib/pageArchive";
+import { archivedPageIds, loadArchivedPageIds } from "@/lib/pageArchive";
 import { log } from "@/lib/log";
 
 /* =====================================================================
@@ -37,7 +37,7 @@ import { log } from "@/lib/log";
    ## 보관(F2)
    쿼리의 archivedAt:null 은 그 페이지 자신만 본다. 보관은 조상 기반이라(lib/pageArchive)
    보관된 부모 아래 문서·보드는 canSee 에서 걸러야 한다 — channelCanSee 는 스스로,
-   API 는 excludeArchived 로 감싼다.
+   API 는 canSeeUnarchived 로 감싼다.
    ===================================================================== */
 
 type Db = Pick<typeof prisma, "project" | "page" | "dbProperty" | "dbRow" | "decision" | "lesson" | "approval">;
@@ -239,6 +239,25 @@ export function escMrkdwn(s: string): string {
     });
 }
 
+/** s[0..cut) 안에 짝 없는 `*`(\\* 제외)·`` ` `` 가 있으면 그 여는 문자 앞으로 cut 을 당긴다. 코드 span 안의 `*` 는 서식이 아니라 센다. */
+function balancePairs(s: string, cut: number): number {
+  let star = -1;
+  let tick = -1;
+  for (let i = 0; i < cut; i++) {
+    const ch = s[i];
+    if (ch === "\\" && tick < 0) { i++; continue; }
+    if (ch === "`") tick = tick < 0 ? i : -1;
+    else if (ch === "*" && tick < 0) {
+      // 단어 내부 `*`(양옆이 글자·숫자)는 escMrkdwn 이 그대로 두고 서식으로도 안 읽힌다 → 쌍 계산에서 뺀다
+      const word = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
+      if (word(s[i - 1]) && word(s[i + 1])) continue;
+      star = star < 0 ? i : -1;
+    }
+  }
+  const open = [star, tick].filter((n) => n >= 0);
+  return open.length ? Math.min(...open) : cut;
+}
+
 const ENTITIES = ["&amp;", "&lt;", "&gt;"];
 /**
  * max 자 이하로 자르고 "…" 를 붙인다. 엔티티(&amp; &lt; &gt;) 한가운데나 서로게이트 쌍(이모지) 사이에서
@@ -256,6 +275,7 @@ export function truncateMrkdwn(s: string, max: number = SLACK_MAX): string {
   }
   const c = s.charCodeAt(cut - 1);
   if (c >= 0xd800 && c <= 0xdbff) cut--;
+  cut = balancePairs(s, cut);
   return s.slice(0, cut) + "…";
 }
 
@@ -362,13 +382,9 @@ export async function channelCanSee(workspaceId: string): Promise<(pageId: strin
   return (id) => !archived.has(id) && pageAccess(idx, id) !== "none";
 }
 
-/** canSee 를 "보관된 조상 아래가 아님" 조건으로 감싼다(API 경로용 — 페이지 한 번 조회). */
-export async function excludeArchived(workspaceId: string, canSee: (pageId: string) => boolean): Promise<(pageId: string) => boolean> {
-  const pages = await prisma.page.findMany({
-    where: { workspaceId, deletedAt: null },
-    select: { id: true, parentId: true, archivedAt: true },
-  });
-  const archived = archivedPageIds(pages);
+/** canSee 를 "보관된 조상 아래가 아님" 조건으로 감싼다(API 경로용). 보관 집합은 공용 헬퍼(보관 0건이면 트리를 읽지 않음)로 얻는다. */
+export async function canSeeUnarchived(workspaceId: string, canSee: (pageId: string) => boolean): Promise<(pageId: string) => boolean> {
+  const archived = await loadArchivedPageIds(prisma, workspaceId);
   return (id) => !archived.has(id) && canSee(id);
 }
 

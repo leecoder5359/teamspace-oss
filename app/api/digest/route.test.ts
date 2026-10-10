@@ -9,7 +9,7 @@ vi.mock("@/lib/digest", async (orig) => ({
   ...(await orig<typeof import("@/lib/digest")>()),
   collectDigest: vi.fn(),
   channelCanSee: vi.fn(async () => () => true),
-  excludeArchived: vi.fn(async (_w: string, f: (id: string) => boolean) => f),
+  canSeeUnarchived: vi.fn(async (_w: string, f: (id: string) => boolean) => f),
 }));
 
 import { NextResponse } from "next/server";

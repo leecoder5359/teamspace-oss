@@ -101,6 +101,14 @@ describe("injectionStats", () => {
     expect(s.recent[0].id).toBe("1");
   });
 
+  it("ondemand 는 '한 번도 안 들어감' 후보가 아니다(설계상 주입 안 함), 레슨 행에 scope·mode", () => {
+    const ls = [...lessons, { id: "od", title: "OD", projectId: null, stack: null, mode: "ondemand", createdAt: now }, { id: "me", title: "ME", projectId: null, stack: null, userId: "u1", createdAt: now }];
+    const s = injectionStats({ rows: [row("1", 1, "p", ["a", "b"], [], [])], reads: [], lessons: ls, projects: [], days: 30, now });
+    expect(s.cleanup.neverInjected.map((l) => l.id)).toEqual(["c", "me"]);
+    expect(s.lessons.find((l) => l.id === "od")).toMatchObject({ scope: "global", mode: "ondemand" });
+    expect(s.lessons.find((l) => l.id === "me")).toMatchObject({ scope: "personal", mode: "default" });
+  });
+
   it("'늘 잘림' 은 brief(이어가기) 기록으로는 판단하지 않는다", () => {
     const brief = { ...row("9", 1, "p", [], [], ["a", "b"]), mode: "brief" };
     const s = injectionStats({ rows: [row("1", 1, "p", ["a"], ["b"], []), brief], reads: [], lessons, projects: [], days: 30, now });
@@ -148,5 +156,16 @@ describe("log 헬퍼", () => {
     ];
     const md = renderBrief({ workspaceName: "W", projectId: "p", projectName: "P", projectStack: ["next"], lessons, tasks: [], me: [], counts: { docs: 0, decisions: 0, risks: 0, glossary: 0 } });
     expect(briefInjectionIds(md, lessons, "p", ["next"])).toEqual({ gistIds: [], titleIds: ["p1", "n1"], omittedIds: ["g1"] });
+  });
+
+  it("brief: 남의 개인 레슨·ondemand 는 대상이 아니라 기록하지 않는다, 내 개인 레슨은 기록한다", () => {
+    const lessons = [
+      { id: "g1", title: "전역", body: "x", projectId: null, stack: null },
+      { id: "m1", title: "내 것", body: "x", projectId: null, stack: null, userId: "me" },
+      { id: "y1", title: "남의 것", body: "x", projectId: null, stack: null, userId: "you" },
+      { id: "od", title: "필요할 때만", body: "x", projectId: "p", stack: null, mode: "ondemand" },
+    ];
+    const md = renderBrief({ workspaceName: "W", projectId: "p", projectName: "P", projectStack: [], lessons, personId: "me", tasks: [], me: [], counts: { docs: 0, decisions: 0, risks: 0, glossary: 0 } });
+    expect(briefInjectionIds(md, lessons, "p", [], "me")).toEqual({ gistIds: [], titleIds: ["m1"], omittedIds: ["g1"] });
   });
 });

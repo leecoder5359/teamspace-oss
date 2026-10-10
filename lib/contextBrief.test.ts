@@ -80,3 +80,30 @@ describe("renderBrief", () => {
     expect(md).toContain("MCP context_get");
   });
 });
+
+describe("renderBrief — 범위·주입 방식", () => {
+  const extra = [
+    { id: "cmreq_global", title: "필수 전역 규칙", body: "x", projectId: null, stack: null, mode: "required" },
+    { id: "cmmine", title: "내 개인 습관", body: "x", projectId: null, stack: null, userId: "u1" },
+    { id: "cmyours", title: "남의 개인 습관", body: "x", projectId: null, stack: null, userId: "u2" },
+    { id: "cmondemand", title: "필요할 때만 규칙", body: "x", projectId: "p1", stack: null, mode: "ondemand" },
+  ];
+
+  it("필수(전역이어도) → 개인 → 프로젝트 순서로 제목·id, 남의 개인·ondemand 는 빠진다", () => {
+    const md = renderBrief({ ...base, lessons: [...lessons, ...extra], personId: "u1" });
+    expect(md).toContain("(필수 1 · 개인 1 · 프로젝트 25 · 스택 10 · 전역 25)");
+    const [r, me, p] = ["`cmreq_global`", "`cmmine`", "`cmproj0000000000000000000`"].map((x) => md.indexOf(x));
+    expect(r).toBeGreaterThan(0);
+    expect(r).toBeLessThan(me);
+    expect(me).toBeLessThan(p);
+    expect(md).not.toContain("cmyours");
+    expect(md).not.toContain("cmondemand");
+    expect(Buffer.byteLength(md, "utf8")).toBeLessThan(3000);
+  });
+
+  it("사람을 모르면(personId 없음) 개인 레슨은 하나도 안 들어간다", () => {
+    const md = renderBrief({ ...base, lessons: [...lessons, ...extra] });
+    expect(md).not.toContain("cmmine");
+    expect(md).not.toContain("개인 ");
+  });
+});

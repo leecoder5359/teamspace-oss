@@ -14,6 +14,7 @@ import { siteAccessById } from "@/lib/sites/server";
 import { writeVersion } from "@/lib/sites/store";
 import { signSiteToken } from "@/lib/sites/token";
 import { readProxyIdentity } from "@/lib/sites/proxyIdentity";
+import { SITE_SANDBOX } from "@/lib/sites/headers";
 import { GET, POST, DELETE, OPTIONS } from "./route";
 
 const m = (f: unknown) => f as Mock;
@@ -72,6 +73,42 @@ describe("GET /pub/[token]/[...path]", () => {
     expect((await call(t, ["..", "..", "x"])).status).toBe(404);
     expect((await call(t, ["nope.html"])).status).toBe(404);
     expect((await call(t, ["a"])).status).toBe(404); // 디렉터리
+  });
+
+  it("HTML 에만 내비 보고 <script src> 를 붙이고, CSP·sandbox 는 그대로", async () => {
+    m(siteAccessById).mockResolvedValue({ result: "ok" });
+    await writeVersion(root, "cs1", 3, [
+      { path: "index.html", data: Buffer.from("<html><body><p>한글</p></body></html>") },
+      { path: "pages/x.html", data: Buffer.from("<p>x</p>") },
+      { path: "a.css", data: Buffer.from("p{}") },
+    ]);
+    const t = signSiteToken({ siteId: "cs1", version: 3, email: "g@gmail.com" });
+    const res = await call(t, ["index.html"]);
+    const body = await res.text();
+    expect(body).toBe(`<html><body><p>한글</p><script src="/pub/${t}/__ts/nav.js"></script></body></html>`);
+    expect(Number(res.headers.get("content-length"))).toBe(Buffer.byteLength(body));
+    const csp = res.headers.get("content-security-policy")!;
+    expect(csp).toBe(`sandbox ${SITE_SANDBOX}; frame-ancestors 'self'`);
+    expect(csp).not.toContain("allow-same-origin");
+    // 하위 폴더 페이지도 같은 절대 경로
+    expect(await (await call(t, ["pages", "x.html"])).text()).toBe(`<p>x</p><script src="/pub/${t}/__ts/nav.js"></script>`);
+    // HTML 이 아니면 원본 그대로
+    expect(await (await call(t, ["a.css"])).text()).toBe("p{}");
+    // ?download 는 원본 그대로
+    const dl = await GET(new Request("http://t/pub?download"), { params: Promise.resolve({ token: t, path: ["index.html"] }) });
+    expect(await dl.text()).toBe("<html><body><p>한글</p></body></html>");
+  });
+
+  it("__ts/nav.js 는 /pub 가 직접 답하고(같은 토큰 판정), 그 밖의 __ts/ 는 404", async () => {
+    m(siteAccessById).mockResolvedValue({ result: "ok" });
+    const t = signSiteToken({ siteId: "cs1", version: 2, email: "g@gmail.com" });
+    const res = await call(t, ["__ts", "nav.js"]);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(res.headers.get("content-security-policy")).toMatch(/^sandbox /);
+    expect(await res.text()).toContain("ts-site-nav");
+    expect((await call(t, ["__ts", "other.js"])).status).toBe(404);
+    expect((await call("forged.token", ["__ts", "nav.js"])).status).toBe(403);
   });
 });
 
@@ -247,7 +284,7 @@ describe("/pub/[token]/api/* — upstream 프록시", () => {
   it("upstream 이 있어도 api 밖 GET 은 파일", async () => {
     ok();
     const g = await GET(new Request("http://t/x"), params(tok(), ["index.html"]));
-    expect(await g.text()).toBe("<p>hi</p>");
+    expect(await g.text()).toMatch(/^<p>hi<\/p><script src=/);
     expect(seen).toHaveLength(0);
   });
 

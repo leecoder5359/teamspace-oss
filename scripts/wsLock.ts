@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { LOCK_NAME_RE, MAX_TTL_MIN, parseTtlFlag } from "../lib/pushLockRules";
+import { LOCK_NAME_RE, MAX_TTL_MIN, canonicalLockName, parseTtlFlag } from "../lib/pushLockRules";
 
 type Raw = { ok: boolean; status: number; data: unknown };
 type Env = Record<string, string | undefined>;
@@ -33,9 +33,11 @@ type LockView = {
 
 export const lockPath = (name: string) => `/api/locks/${encodeURIComponent(name)}`;
 
-function checkName(name: string | undefined): string {
-  if (!name) throw new Error("잠금 이름이 필요합니다 (예: banjang/develop · teamspace/main · deploy:teamspace).");
-  if (!LOCK_NAME_RE.test(name)) throw new Error(`잠금 이름 형식이 아닙니다: '${name}' — 소문자·숫자로 시작, 소문자·숫자·: / . _ - 만, 81자 이내.`);
+/** 이름을 정규형으로 맞춰 검증한다(teamspace-main·TeamSpace_main → teamspace/main). 서버도 같은 정규형을 쓴다. */
+export function checkName(raw: string | undefined): string {
+  if (!raw || !raw.trim()) throw new Error("잠금 이름이 필요합니다 (예: banjang/develop · teamspace/main · deploy/teamspace).");
+  const name = canonicalLockName(raw);
+  if (!LOCK_NAME_RE.test(name)) throw new Error(`잠금 이름 형식이 아닙니다: '${raw}' — 영문·숫자 단어를 / - _ : . 공백으로 잇고, 81자 이내(정규형: '${name}').`);
   return name;
 }
 

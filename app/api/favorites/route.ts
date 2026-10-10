@@ -4,16 +4,21 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, pageAccess } from "@/lib/pageGuard";
 import { listFavorites, addFavorite, removeFavorite, reorderFavorites } from "@/lib/favorites";
+import { loadArchivedPageIds } from "@/lib/pageArchive";
 
 // 사람별 즐겨찾기. 목록은 필터(D3): 볼 수 없는 페이지는 응답에서 뺀다. 단건 추가는 404 게이트.
+// 보관된 페이지(조상 규칙)는 목록에서 뺀다(?archived=1 이면 포함). 추가(POST)는 보관 페이지도 허용.
 const SELECT = { id: true, title: true, kind: true, docType: true, projectId: true } as const;
 
-export async function GET() {
+export async function GET(request: Request) {
   const guard = await requireCtx("viewer");
   if ("err" in guard) return guard.err;
+  const includeArchived = new URL(request.url).searchParams.get("archived") === "1";
   const favs = await listFavorites(guard.userId, guard.workspaceId);
   const access = await loadAccess(guard);
-  const ids = favs.map((f) => f.pageId).filter((id) => pageAccess(access, id) !== "none");
+  // 가시성 먼저, 보관 제외는 그다음(D3 — 보관 제외가 가시성을 넓히지 않는다).
+  const archived = includeArchived ? new Set<string>() : await loadArchivedPageIds(prisma, guard.workspaceId);
+  const ids = favs.map((f) => f.pageId).filter((id) => pageAccess(access, id) !== "none" && !archived.has(id));
   const pages = await prisma.page.findMany({ where: { id: { in: ids }, deletedAt: null }, select: SELECT });
   const byId = new Map(pages.map((p) => [p.id, p]));
   const favorites = ids.flatMap((id) => {

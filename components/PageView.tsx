@@ -70,10 +70,12 @@ export default function PageView({ pageId, fileBacked }: { pageId: string; fileB
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
           <div ref={bodyRef} style={{ flex: 1, minWidth: 0 }}>
             <PageEditor key={pageId} pageId={pageId} />
+            <div className="ws-share-panel">
+              <SharePanel pageId={pageId} />
+            </div>
           </div>
           <DocToc rootRef={bodyRef} />
         </div>
-        <SharePanel pageId={pageId} />
       </div>
     );
 
@@ -104,12 +106,13 @@ export default function PageView({ pageId, fileBacked }: { pageId: string; fileB
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <div ref={bodyRef} style={{ flex: 1, minWidth: 0 }}>
           {mode === "rich" ? <PageEditor key={pageId} pageId={pageId} /> : <RawDocEditor key={pageId} pageId={pageId} />}
+          {/* 공유 범위(격차 D3) — 편집기·원문 어느 모드에서도 보여야 한다 */}
+          <div className="ws-share-panel">
+            <SharePanel pageId={pageId} />
+          </div>
         </div>
         <DocToc rootRef={bodyRef} />
       </div>
-
-      {/* 공유 범위(격차 D3) — 편집기·원문 어느 모드에서도 보여야 한다 */}
-      <SharePanel pageId={pageId} />
     </div>
   );
 }

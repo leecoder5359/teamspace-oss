@@ -8,7 +8,7 @@
    ===================================================================== */
 
 import { prisma } from "@/lib/prisma";
-import type { LessonRenderReport } from "@/lib/lessonInject";
+import { lessonApplicability, type LessonRenderReport } from "@/lib/lessonInject";
 
 export const LESSON_LOG_RETENTION_DAYS = 90;
 
@@ -19,21 +19,23 @@ export function normalizeVia(raw: string | null | undefined): string {
 }
 
 /** 렌더 보고서 → 기록할 id 묶음. not_applicable 은 남기지 않는다(이 세션 대상이 아니므로). */
-export function injectionIds(report: Pick<LessonRenderReport, "statuses">): { gistIds: string[]; titleIds: string[]; omittedIds: string[] } {
+export function injectionIds(report: { statuses: (Pick<LessonRenderReport["statuses"][number], "id" | "status"> & Partial<LessonRenderReport["statuses"][number]>)[] }): { gistIds: string[]; titleIds: string[]; omittedIds: string[] } {
   const by = (s: string) => report.statuses.filter((x) => x.status === s).map((x) => x.id);
   return { gistIds: by("gist"), titleIds: by("title"), omittedIds: by("omitted") };
 }
 
 /** brief 모드(lib/contextBrief) 출력에서 id 묶음을 읽는다 — brief 는 요약 없이 제목+id 만 쓰므로
-    출력에 보인 id = 제목만, 대상이지만 안 보인 것(전역은 개수만, 넘친 건 '외 N개') = 잘림. */
+    출력에 보인 id = 제목만, 대상이지만 안 보인 것(전역은 개수만, 넘친 건 '외 N개') = 잘림.
+    대상 판정은 compact·brief 와 같은 lessonApplicability — 다른 사람의 개인 레슨·ondemand 는 기록하지 않는다. */
 export function briefInjectionIds(
   markdown: string,
-  lessons: { id: string; projectId: string | null; stack?: string | null }[],
+  lessons: { id: string; projectId: string | null; stack?: string | null; userId?: string | null; mode?: string | null }[],
   projectId: string | null,
   projectStack: string[],
+  personId: string | null = null,
 ): { gistIds: string[]; titleIds: string[]; omittedIds: string[] } {
-  const stackSet = new Set(projectId ? projectStack : []);
-  const eligible = lessons.filter((l) => (l.projectId ? l.projectId === projectId : !l.stack || stackSet.has(l.stack)));
+  const scope = { projectId, projectStack: projectId ? projectStack : [], personId };
+  const eligible = lessons.filter((l) => lessonApplicability(l, scope) === null);
   const titleIds: string[] = [];
   const omittedIds: string[] = [];
   for (const l of eligible) (markdown.includes(`\`${l.id}\``) ? titleIds : omittedIds).push(l.id);

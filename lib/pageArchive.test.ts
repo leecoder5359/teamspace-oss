@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { archivedPageIds } from "./pageArchive";
+import { describe, it, expect, vi } from "vitest";
+import { archivedPageIds, loadArchivedPageIds, excludeArchived } from "./pageArchive";
 
 const at = new Date("2026-10-09T00:00:00Z");
 const n = (id: string, parentId: string | null, archived = false) => ({ id, parentId, archivedAt: archived ? at : null });
@@ -26,5 +26,41 @@ describe("archivedPageIds", () => {
   });
   it("부모가 목록에 없으면(삭제됨) 거기서 끝", () => {
     expect(archivedPageIds([n("a", "gone")]).size).toBe(0);
+  });
+});
+
+describe("loadArchivedPageIds", () => {
+  const fake = (count: number, tree: ReturnType<typeof n>[]) => {
+    const page = { count: vi.fn(async () => count), findMany: vi.fn(async () => tree) };
+    return { db: { page }, page };
+  };
+  it("보관된 페이지가 하나도 없으면 트리를 읽지 않고 빈 집합", async () => {
+    const { db, page } = fake(0, [n("a", null)]);
+    const s = await loadArchivedPageIds(db, "w1");
+    expect(s.size).toBe(0);
+    expect(page.count).toHaveBeenCalledWith({ where: { workspaceId: "w1", deletedAt: null, archivedAt: { not: null } } });
+    expect(page.findMany).not.toHaveBeenCalled();
+  });
+  it("있으면 워크스페이스 트리를 읽어 조상 규칙으로 계산", async () => {
+    const { db, page } = fake(1, [n("f", null, true), n("c", "f"), n("x", null)]);
+    const s = await loadArchivedPageIds(db, "w1");
+    expect([...s].sort()).toEqual(["c", "f"]);
+    expect(page.findMany).toHaveBeenCalledWith({
+      where: { workspaceId: "w1", deletedAt: null },
+      select: { id: true, parentId: true, archivedAt: true },
+    });
+  });
+});
+
+describe("excludeArchived", () => {
+  it("보관 집합에 든 행을 빼고 순서를 유지", () => {
+    const rows = [{ id: "a", t: 1 }, { id: "b", t: 2 }, { id: "c", t: 3 }];
+    expect(excludeArchived(rows, new Set(["b"]))).toEqual([{ id: "a", t: 1 }, { id: "c", t: 3 }]);
+  });
+  it("빈 집합이면 그대로(복사본)", () => {
+    const rows = [{ id: "a" }];
+    const out = excludeArchived(rows, new Set());
+    expect(out).toEqual(rows);
+    expect(out).not.toBe(rows);
   });
 });

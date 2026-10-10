@@ -6,7 +6,7 @@ import { Icon } from "./icons";
 
 /* 레슨(팀 작업규칙) surface — /api/lessons.
    W3 메모리 일원화의 핵심 층: 여기 등록된 규칙은 모든 팀원·에이전트 세션에 자동 주입된다.
-   목록·추가·수정·삭제 + 프로젝트 스코프 표시. */
+   목록·추가·수정·삭제 + 범위(개인·프로젝트·스택·전역)·주입 방식(필수·기본·필요할 때만) 표시와 변경. */
 
 type Lesson = {
   id: string;
@@ -14,6 +14,8 @@ type Lesson = {
   body: string;
   projectId: string | null;
   stack?: string | null;
+  personal?: boolean;
+  mode?: Mode;
   createdById: string | null;
   updatedAt: string;
 };
@@ -30,6 +32,15 @@ type Proposal = {
 
 const REAL = (p: string) => p && p !== "__none__";
 
+type Mode = "required" | "default" | "ondemand";
+const MODE_LABEL: Record<Mode, string> = { required: "필수", default: "기본", ondemand: "필요할 때만" };
+const MODE_HINT: Record<Mode, string> = {
+  required: "범위 안이면 항상 제목+요약으로 먼저 주입",
+  default: "제목 먼저, 예산이 남으면 요약",
+  ondemand: "세션 시작 주입에서 빠짐 — 목록·검색·lesson_get 으로만",
+};
+const MODES: Mode[] = ["required", "default", "ondemand"];
+
 export default function LessonsSurface({ project }: { project: string }) {
   const [list, setList] = useState<Lesson[] | null>(null);
   const [q, setQ] = useState("");
@@ -37,9 +48,14 @@ export default function LessonsSurface({ project }: { project: string }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [scopeProject, setScopeProject] = useState(false);
+  const [personal, setPersonal] = useState(false);
+  const [mode, setMode] = useState<Mode>("default");
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [editMode, setEditMode] = useState<Mode>("default");
+  const [editPersonal, setEditPersonal] = useState(false);
+  const [editWasPersonal, setEditWasPersonal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Proposal[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -86,11 +102,15 @@ export default function LessonsSurface({ project }: { project: string }) {
         body: JSON.stringify({
           title: title.trim(),
           body: body.trim(),
-          projectId: scopeProject && REAL(project) ? project : undefined,
+          projectId: !personal && scopeProject && REAL(project) ? project : undefined,
+          ...(personal ? { personal: true } : {}),
+          mode,
         }),
       });
       setTitle("");
       setBody("");
+      setPersonal(false);
+      setMode("default");
       setOpen(false);
       await load();
     } finally {
@@ -105,7 +125,13 @@ export default function LessonsSurface({ project }: { project: string }) {
       await fetch(`/api/lessons/${editId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: editTitle.trim(), body: editBody.trim() }),
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          body: editBody.trim(),
+          mode: editMode,
+          // 개인 체크를 바꿨을 때만 범위를 건드린다(끄면 전역으로)
+          ...(editPersonal !== editWasPersonal ? { personal: editPersonal } : {}),
+        }),
       });
       setEditId(null);
       await load();
@@ -192,13 +218,22 @@ export default function LessonsSurface({ project }: { project: string }) {
                 rows={3}
                 style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}
               />
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {REAL(project) && (
                   <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
-                    <input type="checkbox" checked={scopeProject} onChange={(e) => setScopeProject(e.target.checked)} />
+                    <input type="checkbox" checked={scopeProject && !personal} disabled={personal} onChange={(e) => setScopeProject(e.target.checked)} />
                     이 프로젝트에만 적용
                   </label>
                 )}
+                <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입">
+                  <input type="checkbox" checked={personal} onChange={(e) => setPersonal(e.target.checked)} />
+                  나에게만(개인)
+                </label>
+                <select className="ws-db-filter" value={mode} onChange={(e) => setMode(e.target.value as Mode)} aria-label="주입 방식" title={MODE_HINT[mode]}>
+                  {MODES.map((m) => (
+                    <option key={m} value={m}>주입: {MODE_LABEL[m]}</option>
+                  ))}
+                </select>
                 <span style={{ flex: 1 }} />
                 <button className="ws-btn-soft" onClick={() => setOpen(false)}>취소</button>
                 <button style={primaryBtn} onClick={() => void create()} disabled={busy || !title.trim() || !body.trim()}>등록</button>
@@ -237,7 +272,17 @@ export default function LessonsSurface({ project }: { project: string }) {
                   <div key={l.id} style={card}>
                     <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inp} />
                     <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
-                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입. 끄면 전역">
+                        <input type="checkbox" checked={editPersonal} onChange={(e) => setEditPersonal(e.target.checked)} />
+                        나에게만(개인)
+                      </label>
+                      <select className="ws-db-filter" value={editMode} onChange={(e) => setEditMode(e.target.value as Mode)} aria-label="주입 방식" title={MODE_HINT[editMode]}>
+                        {MODES.map((m) => (
+                          <option key={m} value={m}>주입: {MODE_LABEL[m]}</option>
+                        ))}
+                      </select>
+                      <span style={{ flex: 1 }} />
                       <button className="ws-btn-soft" onClick={() => setEditId(null)}>취소</button>
                       <button style={primaryBtn} onClick={() => void saveEdit()} disabled={busy}>저장</button>
                     </div>
@@ -247,14 +292,32 @@ export default function LessonsSurface({ project }: { project: string }) {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ display: "flex", color: "var(--color-primary)" }}><Icon name="flag" size={15} /></span>
                       <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{l.title}</span>
-                      {l.projectId ? (
+                      {l.mode && l.mode !== "default" && (
+                        <span
+                          style={l.mode === "required" ? badge : { ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" }}
+                          title={MODE_HINT[l.mode]}
+                        >
+                          {MODE_LABEL[l.mode]}
+                        </span>
+                      )}
+                      {l.personal ? (
+                        <span style={badge} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입">개인</span>
+                      ) : l.projectId ? (
                         <span style={badge}>프로젝트</span>
                       ) : l.stack ? (
                         <span style={badge} title="이 스택을 쓰는 프로젝트 세션에만 주입">스택: {l.stack}</span>
                       ) : (
                         <span style={{ ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>전역</span>
                       )}
-                      <button className="ws-icon-btn" title="수정" onClick={() => { setEditId(l.id); setEditTitle(l.title); setEditBody(l.body); }}>
+                      <button className="ws-icon-btn" title="수정" onClick={() => {
+                          setEditId(l.id);
+                          setEditTitle(l.title);
+                          setEditBody(l.body);
+                          setEditMode(l.mode ?? "default");
+                          setEditPersonal(!!l.personal);
+                          setEditWasPersonal(!!l.personal);
+                        }}
+                      >
                         <Icon name="settings" size={14} />
                       </button>
                       <button className="ws-icon-btn" title="삭제" onClick={() => void remove(l.id)}>

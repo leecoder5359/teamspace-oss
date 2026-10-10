@@ -38,6 +38,12 @@ export async function siteAccessBySlug(slug: string, email: string | null | unde
   return evaluate(site, email);
 }
 
+/** 슬러그가 옛 주소(별칭)면 그 사이트의 현재 슬러그. 셸은 이 값으로 308 한 뒤 정식 주소에서 판정한다. */
+export async function currentSlugForAlias(slug: string): Promise<string | null> {
+  const alias = await prisma.siteSlugAlias.findUnique({ where: { slug }, select: { site: { select: { slug: true } } } });
+  return alias?.site.slug ?? null;
+}
+
 export async function siteAccessById(id: string, email: string | null | undefined): Promise<SiteAccess> {
   const site: SiteRow | null = await prisma.publishedSite.findUnique({ where: { id }, select: SELECT });
   return evaluate(site, email);

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { generateAgentToken, hashToken, agentEmail } from "@/lib/agentToken";
 import { isPairingCode } from "@/lib/pairing";
+import { viewerPersonId } from "@/lib/viewerPerson";
 
 export const runtime = "nodejs";
 
@@ -54,7 +55,8 @@ export async function POST(req: Request) {
       select: { id: true },
     });
     const t = await tx.agentToken.create({
-      data: { workspaceId: guard.workspaceId, userId: user.id, name, role: "editor", tokenHash: hashToken(token) },
+      // issuedById = 승인한 사람 — Pairing.userId 는 에이전트 시스템 User 라 발급자를 따로 남긴다(개인 레슨 기준).
+      data: { workspaceId: guard.workspaceId, userId: user.id, issuedById: viewerPersonId(guard), name, role: "editor", tokenHash: hashToken(token) },
     });
     await tx.user.update({ where: { id: user.id }, data: { email: agentEmail(t.id) } });
     await tx.workspaceMember.create({

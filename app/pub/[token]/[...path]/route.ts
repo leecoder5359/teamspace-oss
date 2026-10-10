@@ -4,7 +4,8 @@ import { verifySiteToken } from "@/lib/sites/token";
 import { siteAccessById } from "@/lib/sites/server";
 import { normalizeEmail } from "@/lib/sites/access";
 import { resolveSiteFile, sitesRoot } from "@/lib/sites/store";
-import { mimeFor } from "@/lib/sites/bundle";
+import { mimeFor, SITE_MIME } from "@/lib/sites/bundle";
+import { injectNavScript, NAV_SCRIPT, NAV_SCRIPT_PATH, RESERVED_SITE_DIR } from "@/lib/sites/shellPath";
 import { siteFileHeaders, SITE_DENY_HEADERS } from "@/lib/sites/headers";
 import {
   apiPathSegments,
@@ -45,6 +46,8 @@ export const runtime = "nodejs";
      x-teamspace-site-id·viewer·member 로 붙인다. 응답은 status·body·content-type 만 살린다.
    - 접근 이력(SiteAccess)은 남기지 않는다 — 셸 열람만 기록하는 규칙 유지.
    ===================================================================== */
+
+const NAV_SCRIPT_MIME = SITE_MIME.js;
 
 type Ctx = { params: Promise<{ token: string; path: string[] }> };
 
@@ -137,6 +140,13 @@ export async function GET(req: Request, { params }: Ctx) {
   } catch {
     return deny(404);
   }
+  // 예약 폴더 __ts/ — 번들 파일이 아니라 /pub 가 직접 답한다(번들 검증이 이 폴더를 뺀다).
+  if (segments[0] === RESERVED_SITE_DIR) {
+    if (segments.join("/") !== NAV_SCRIPT_PATH) return deny(404);
+    const js = Buffer.from(NAV_SCRIPT, "utf8");
+    return new NextResponse(new Uint8Array(js), { headers: siteFileHeaders(NAV_SCRIPT_MIME, js.length) });
+  }
+
   const file = resolveSiteFile(sitesRoot(), j.siteId, j.version, segments);
   const type = file ? mimeFor(file) : null;
   if (!file || !type) return deny(404);
@@ -148,6 +158,12 @@ export async function GET(req: Request, { params }: Ctx) {
     return deny(404);
   }
   const download = new URL(req.url).searchParams.has("download") ? segments[segments.length - 1] : undefined;
+  // HTML 이면 셸 주소창 동기화용 <script src> 를 붙인다. 같은 토큰 경로의 파일이라 CSP(sandbox) 를
+  // 넓히지 않고, 인라인 스크립트도 아니다. 다운로드로 받을 때는 원본 그대로.
+  if (!download && type.startsWith("text/html")) {
+    // latin1 왕복은 바이트를 그대로 보존한다(원본 인코딩과 무관, 태그는 ASCII).
+    data = Buffer.from(injectNavScript(data.toString("latin1"), `/pub/${token}/${NAV_SCRIPT_PATH}`), "latin1");
+  }
   return new NextResponse(new Uint8Array(data), { headers: siteFileHeaders(type, data.length, download) });
 }
 

@@ -26,13 +26,13 @@ export default function FilterPanel({
         필터{filter?.rules.length ? ` ${filter.rules.length}` : ""}
       </summary>
       <div
+        className="ws-filter-pop"
         style={{
-          position: "absolute", zIndex: 20, top: "calc(100% + 4px)", left: 0, minWidth: 430,
           background: "var(--surface-card)", border: "1px solid var(--border-subtle)",
           borderRadius: 10, padding: 10, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 8 }}>
           <select
             className="ws-db-filter"
             value={filter?.conj ?? "and"}
@@ -62,7 +62,7 @@ export default function FilterPanel({
             onChange({ conj: filter?.conj ?? "and", rules });
           };
           return (
-            <div key={i} style={{ display: "flex", gap: 5, marginBottom: 6, alignItems: "center" }}>
+            <div key={i} style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6, alignItems: "center" }}>
               <select
                 className="ws-db-filter"
                 value={rule.propId}

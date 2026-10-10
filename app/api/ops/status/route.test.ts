@@ -19,7 +19,7 @@ vi.mock("@/lib/opsStatus", async (orig) => {
       if (p === "/b/20261009-110000") return ["teamspace.dump"];
       throw new Error("ENOENT");
     },
-    stat: async () => ({ size: 10, mtimeMs: old, isFile: () => true }),
+    stat: async () => ({ size: 2048, mtimeMs: old, isFile: () => true }),
     statfs: async () => ({ bsize: 1, blocks: 100, bavail: 50 }),
     readFile: async () => { throw new Error("ENOENT"); },
   };
@@ -51,7 +51,7 @@ describe("GET /api/ops/status", () => {
     expect(body.status.health).toMatchObject({ db: true, worker: true });
     expect(body.status.llm).toEqual({ todayTokens: 200, todayUsd: 1.5, budgetTokens: 100, exceeded: true });
     expect(body.status.disk).toMatchObject({ path: "/data", freeRatio: 0.5 });
-    expect(body.status.backup).toMatchObject({ dir: "/b", latest: "20261009-110000", sizeBytes: 10 });
+    expect(body.status.backup).toMatchObject({ dir: "/b", latest: "20261009-110000", sizeBytes: 2048 });
     expect(getTeamspaceUsage).toHaveBeenCalledWith("w1", 1, { purge: false }); // 읽기 전용 호출은 정리하지 않는다
     expect(Array.isArray(body.warnings)).toBe(true);
     expect(body.warnings.map((w: { code: string }) => w.code)).toContain("llm_budget");

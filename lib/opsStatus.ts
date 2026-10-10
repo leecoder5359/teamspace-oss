@@ -21,6 +21,9 @@ export type OpsStatus = {
     inProgress?: boolean;
     /** 폴더 이름의 시각이 현재보다 미래 — 서버 시계가 어긋났거나 이름이 잘못됐다. ageHours 는 0 으로 두되 이 플래그로 드러낸다. */
     clockSkew?: boolean;
+    /** 가장 새 폴더에 덤프가 없고 1시간 넘게 아무 파일도 안 바뀌었다 — 만들다 죽은 실패 시도. 직전 완성본이 latest 가 된다. */
+    lastAttemptFailed?: boolean;
+    failedDir?: string;
   };
   /** path = 실제로 잰 경로, requestedPath = 데이터 디렉토리. 데이터 폴더가 아직 없으면 가장 가까운 상위 폴더로 재서 둘이 다르다. */
   disk: { path: string; requestedPath: string; freeBytes: number; totalBytes: number; freeRatio: number } | null;
@@ -30,7 +33,7 @@ export type OpsStatus = {
 
 export type OpsWarning = {
   level: "warn" | "crit";
-  code: "backup_stale" | "backup_missing" | "backup_in_progress" | "backup_clock_skew" | "disk_low" | "llm_budget" | "worker_down" | "db_down";
+  code: "backup_stale" | "backup_missing" | "backup_in_progress" | "backup_failed" | "backup_clock_skew" | "disk_low" | "llm_budget" | "worker_down" | "db_down";
   message: string;
 };
 
@@ -61,6 +64,10 @@ const LIST_CAP = 50;
 const BACKUP_DUMP = "teamspace.dump";
 /** 파일이 이만큼 안 바뀌어야 완성으로 본다(tar 가 아직 쓰는 중일 수 있다). */
 export const BACKUP_SETTLE_MS = 2 * 60_000;
+/** 덤프 없는 폴더가 이 시간 넘게 안 바뀌면 진행 중이 아니라 실패한 시도다. */
+export const BACKUP_STALE_MS = 60 * 60_000;
+/** backup.sh 는 `pg_dump > teamspace.dump` 라 덤프가 실패하면 0바이트 파일이 남는다 — 이보다 작으면 덤프 없음으로 본다. */
+export const MIN_DUMP_BYTES = 1024;
 
 export const defaultFs: OpsDeps["fs"] = {
   readdir: (p) => fsp.readdir(p),
@@ -93,15 +100,17 @@ async function inspectBackupDir(deps: OpsDeps, sub: string): Promise<BackupInfo 
   }
   let size = 0;
   let newestMtimeMs = 0;
+  let dumpSize = 0;
   for (const f of files) {
     try {
       const st = await deps.fs.stat(path.join(sub, f));
       if (!st.isFile()) continue;
       size += st.size;
+      if (f === BACKUP_DUMP) dumpSize = st.size;
       newestMtimeMs = Math.max(newestMtimeMs, st.mtimeMs);
     } catch { /* 지워진 파일은 건너뜀 */ }
   }
-  return { size, newestMtimeMs, hasDump: files.includes(BACKUP_DUMP) };
+  return { size, newestMtimeMs, hasDump: dumpSize >= MIN_DUMP_BYTES };
 }
 
 async function collectBackup(deps: OpsDeps, now: Date): Promise<OpsStatus["backup"]> {
@@ -119,12 +128,34 @@ async function collectBackup(deps: OpsDeps, now: Date): Promise<OpsStatus["backu
   let latest = sorted[0];
   let info = await inspectBackupDir(deps, path.join(dir, latest));
   let inProgress = false;
+  let failedDir: string | undefined;
+  // 직전 완성본 = 새 쪽에서 거슬러 올라가며 처음 만나는 덤프 있는 폴더. 덤프 없는 폴더(연속 실패)는 건너뛴다.
+  const previousComplete = async (): Promise<{ name: string; info: BackupInfo | null } | null> => {
+    for (const name of sorted.slice(1, LIST_CAP + 1)) {
+      const i = await inspectBackupDir(deps, path.join(dir, name));
+      if (i?.hasDump) return { name, info: i };
+    }
+    return null;
+  };
+  // 파일이 하나도 없으면 mtime 을 알 수 없다 → 폴더 자신의 mtime, 그것도 못 구하면 0(=알 수 없음, 실패로 단정하지 않음).
+  if (info && !info.hasDump && info.newestMtimeMs === 0) {
+    try { info.newestMtimeMs = (await deps.fs.stat(path.join(dir, latest))).mtimeMs; } catch { /* 알 수 없음 */ }
+  }
+  // 덤프도 없고 1시간 넘게 멈춘 폴더 = 실패한 시도. 진행 중으로 영원히 가리지 않고 직전 완성본을 쓴다.
+  if (info && !info.hasDump && info.newestMtimeMs > 0 && now.getTime() - info.newestMtimeMs > BACKUP_STALE_MS) {
+    failedDir = latest;
+    const prev = await previousComplete();
+    if (!prev) return { ...empty, lastAttemptFailed: true, failedDir };
+    latest = prev.name;
+    info = prev.info;
+  }
   // 지금 만드는 중인 폴더는 불완전해서 크기·나이를 그대로 믿으면 "방금 백업 성공" 으로 오판한다 → 직전 완성본을 쓴다.
-  if (info && (!info.hasDump || now.getTime() - info.newestMtimeMs < BACKUP_SETTLE_MS)) {
+  if (!failedDir && info && (!info.hasDump || now.getTime() - info.newestMtimeMs < BACKUP_SETTLE_MS)) {
     inProgress = true;
-    if (sorted.length < 2) return { ...empty, inProgress: true };
-    latest = sorted[1];
-    info = await inspectBackupDir(deps, path.join(dir, latest));
+    const prev = await previousComplete();
+    if (!prev) return { ...empty, inProgress: true };
+    latest = prev.name;
+    info = prev.info;
   }
 
   // 이름이 BACKUP_NAME 을 통과했으므로 시각은 늘 이름에서 나온다(mtime 폴백 불필요).
@@ -137,6 +168,10 @@ async function collectBackup(deps: OpsDeps, now: Date): Promise<OpsStatus["backu
     sizeBytes: info ? info.size : null,
   };
   if (inProgress) out.inProgress = true;
+  if (failedDir) {
+    out.lastAttemptFailed = true;
+    out.failedDir = failedDir;
+  }
   if (rawAgeMs !== null && rawAgeMs < 0) out.clockSkew = true;
   return out;
 }
@@ -200,6 +235,9 @@ export function evaluateOps(s: OpsStatus): OpsWarning[] {
   }
   if (s.backup.clockSkew) {
     w.push({ level: "warn", code: "backup_clock_skew", message: "백업 폴더 시각이 현재보다 미래입니다(서버 시계 확인)." });
+  }
+  if (s.backup.lastAttemptFailed) {
+    w.push({ level: "warn", code: "backup_failed", message: `마지막 백업 시도가 실패했습니다(${s.backup.failedDir}, 덤프 없음)` });
   }
   if (s.backup.latest === null || s.backup.ageHours === null) {
     // 첫 백업이 진행 중이면 '없음'이 아니라 '만드는 중' — crit 로 오탐하지 않는다.

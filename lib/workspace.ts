@@ -20,6 +20,9 @@ export type Ctx = {
   userId: string;
   role: Role;
   actor: { type: "user" | "agent"; id: string; name: string };
+  /** 이 요청의 사람 — 사람 세션 = 본인, 에이전트 토큰 = 발급자(AgentToken.issuedById), 부트스트랩·발급자 미상 = null.
+   *  개인 레슨의 기준(lib/viewerPerson.viewerPersonId 로 읽는다). */
+  personId?: string | null;
   /** AUTH_OPEN_API 부트스트랩(resolveLegacyCtx)에서만 true. 이름이 아니라 이 플래그로 판별한다. */
   bootstrap?: true;
 };
@@ -110,6 +113,7 @@ async function resolveSessionCtx(): Promise<Ctx | null | { err: NextResponse }> 
     userId: user.id,
     role: member.role,
     actor: { type: "user", id: user.id, name: user.name ?? user.email ?? user.id },
+    personId: user.id,
   };
 }
 
@@ -140,6 +144,7 @@ async function resolveLegacyCtx(): Promise<Ctx | { err: NextResponse }> {
     userId: user.id,
     role: "admin",
     actor: { type: "agent", id: user.id, name: LEGACY_ACTOR_NAME },
+    personId: null,
     bootstrap: true,
   };
 }
@@ -169,6 +174,7 @@ async function resolveAgentCtx(token: string): Promise<Ctx | { err: NextResponse
     userId: t.userId,
     role: t.role,
     actor: { type: "agent", id: t.userId, name: t.name },
+    personId: t.issuedById ?? null,
   };
 }
 

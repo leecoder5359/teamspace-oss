@@ -11,7 +11,7 @@ vi.mock("@/lib/activity", () => ({ recordActivity: vi.fn() }));
 vi.mock("@/lib/content", () => ({ pageFilePath: vi.fn(() => "w1/p.md"), writeContent: vi.fn() }));
 vi.mock("@/lib/docFiles", () => ({ writeDoc: vi.fn(), docFolderFor: vi.fn(() => "docs"), listDocFolder: vi.fn(async () => []), uniqueFileName: vi.fn(() => "t.md") }));
 vi.mock("@/lib/prisma", () => ({
-  prisma: { page: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() }, project: { findUnique: vi.fn() } },
+  prisma: { page: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() }, project: { findUnique: vi.fn() } },
 }));
 
 import { requireCtx } from "@/lib/workspace";
@@ -166,6 +166,7 @@ describe("POST /api/pages — folder·docType", () => {
 describe("POST /api/pages — 템플릿 조합", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    m(prisma.page.count).mockResolvedValue(0); // 보관 페이지 없음 — findSameTitleDocs 의 보관 제외 빠른 경로
     m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "editor" });
     m(visibleOnly).mockImplementation((_a: unknown, rows: unknown) => rows);
     m(loadAccess).mockResolvedValue({});
@@ -214,6 +215,7 @@ describe("POST /api/pages — 템플릿 조합", () => {
 describe("POST /api/pages — 같은 제목 경고(B5)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    m(prisma.page.count).mockResolvedValue(0); // 보관 페이지 없음 — findSameTitleDocs 의 보관 제외 빠른 경로
     m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "editor" });
     m(visibleOnly).mockImplementation((_a: unknown, rows: unknown) => rows);
     m(loadAccess).mockResolvedValue({});

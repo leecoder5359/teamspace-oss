@@ -111,4 +111,36 @@ describe("SidebarTree 우클릭 메뉴", () => {
     expect(menu.style.top).toBe("192px"); // 600 - 400 - 8
     expect(menu.style.left).toBe("592px"); // 800 - 200 - 8
   });
+
+  describe("이름 변경 UI", () => {
+    afterEach(cleanup);
+    function open(rename: SidebarTreeProps["rename"]) {
+      const r = mount(
+        <SidebarTree groups={groupByProject([page("doc-a", { title: "원래 제목" })], projects)} collapsed={new Set()} ready toggle={() => {}} activeId={null}
+          createPage={async () => null} createBoard={noop} busy={false} loaded move={noop} rename={rename} remove={noop} toggleFavorite={noop} setDocType={noop} />,
+      );
+      fireEvent.click(r.container.querySelector<HTMLElement>('button[title="더보기"]')!);
+      fireEvent.click(Array.from(r.container.querySelectorAll<HTMLElement>(".ws-ctx-item")).find((b) => b.textContent?.trim() === "이름 변경")!);
+      return r.container.querySelector<HTMLInputElement>("input.ws-tree-rename")!;
+    }
+
+    it("메뉴 → 이름 변경 → 입력 → Enter 면 rename(id, title) 을 부른다", () => {
+      const rename = vi.fn(async () => {});
+      const input = open(rename);
+      expect(input.value).toBe("원래 제목");
+      fireEvent.change(input, { target: { value: "  새 제목  " } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(rename).toHaveBeenCalledTimes(1);
+      expect(rename).toHaveBeenCalledWith("doc-a", "새 제목");
+    });
+
+    it("Escape 는 rename 을 부르지 않고 입력을 닫는다", () => {
+      const rename = vi.fn(async () => {});
+      const input = open(rename);
+      fireEvent.change(input, { target: { value: "버릴 제목" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(document.querySelector("input.ws-tree-rename")).toBeNull();
+      expect(rename).not.toHaveBeenCalled();
+    });
+  });
 });

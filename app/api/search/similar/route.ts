@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, visibleOnly, pageAccess } from "@/lib/pageGuard";
 import { buildIndex, similarTo, searchVectors } from "@/lib/vector";
+import { loadArchivedPageIds } from "@/lib/pageArchive";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
   const pageId = sp.get("pageId")?.trim();
   const q = sp.get("q")?.trim();
   const limit = Math.min(20, Math.max(1, Number(sp.get("limit") ?? 5) || 5));
+  const includeArchived = sp.get("archived") === "1";
 
   if (!pageId && !q) {
     return NextResponse.json({ error: "pageId 또는 q 가 필요합니다." }, { status: 400 });
@@ -39,7 +41,10 @@ export async function GET(req: Request) {
 
   // D3: 못 보는 문서는 색인에도 넣지 않는다 — 유사도 목록은 제목을 그대로 드러낸다.
   const idx0 = await loadAccess(guard);
-  const visible = visibleOnly(idx0, pages);
+  // 보관 문서(조상 규칙)는 가시성 거른 다음에 뺀다(?archived=1 이면 포함). 기준 문서는 보관이어도
+  // 색인에 남겨 이웃을 찾을 수 있게 한다 — similarTo 는 자기 자신을 결과에 넣지 않는다.
+  const archived = includeArchived ? new Set<string>() : await loadArchivedPageIds(prisma, guard.workspaceId);
+  const visible = visibleOnly(idx0, pages).filter((p) => p.id === pageId || !archived.has(p.id));
 
   // 기준 문서 자체도 볼 수 있어야 한다.
   if (pageId && pageAccess(idx0, pageId) === "none") {

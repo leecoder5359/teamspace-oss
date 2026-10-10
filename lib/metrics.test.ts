@@ -113,6 +113,41 @@ describe("collectMetrics", () => {
     const where = p.lessonInjection.aggregate.mock.calls[0][0].where;
     expect(where.createdAt.gte).toEqual(new Date("2026-10-02T00:00:00Z"));
   });
+
+  it("보관 문서(조상 규칙)는 docs·docsBytes 에서 빠진다", async () => {
+    const at = new Date("2026-10-01T00:00:00Z");
+    const rows = [{ id: "f", title: "F" }, { id: "c", title: "C" }, { id: "a", title: "A" }];
+    p.page.count.mockImplementation(async (args: { where: { archivedAt?: unknown } }) => (args.where.archivedAt ? 1 : 2));
+    p.page.findMany.mockImplementation(async (args: { select: Record<string, boolean> }) =>
+      args.select.title
+        ? rows
+        : [{ id: "f", parentId: null, archivedAt: at }, { id: "c", parentId: "f", archivedAt: null }, { id: "a", parentId: null, archivedAt: null }],
+    );
+    const m = await collectMetrics("w1", new Date("2026-10-09T00:00:00Z"));
+    expect(m.docs).toBe(1);
+    expect(m.docsBytes).toBe(JSON.stringify([{ id: "a", title: "A" }]).length);
+  });
+});
+
+describe("collectMetrics — graphNodes", () => {
+  it("보관 문서(조상 규칙)는 그래프 노드 수에서 빠진다", async () => {
+    vi.clearAllMocks();
+    const at = new Date("2026-10-01T00:00:00Z");
+    p.page.count.mockImplementation(async (args: { where: { archivedAt?: unknown } }) => (args.where.archivedAt ? 1 : 3));
+    p.page.findMany.mockImplementation(async (args: { select: Record<string, boolean> }) =>
+      args.select.title
+        ? [{ id: "f", kind: "doc" }, { id: "c", kind: "doc" }, { id: "a", kind: "doc" }]
+        : [{ id: "f", parentId: null, archivedAt: at }, { id: "c", parentId: "f", archivedAt: null }, { id: "a", parentId: null, archivedAt: null }],
+    );
+    for (const k of ["project", "decision", "lesson", "risk", "graphEdge", "llmCache"]) p[k].count.mockResolvedValue(0);
+    p.dbRow.count.mockResolvedValue(0);
+    p.dbRow.findMany.mockResolvedValue([]);
+    p.dbProperty.findMany.mockResolvedValue([]);
+    p.lessonInjection.aggregate.mockResolvedValue({ _count: { _all: 0 }, _sum: { chars: null } });
+    vi.mocked(getTeamspaceUsage).mockResolvedValue({ totals: { calls: 0, cacheHits: 0, inputTokens: 0, outputTokens: 0, usd: null } } as never);
+    const m = await collectMetrics("w1", new Date("2026-10-09T00:00:00Z"));
+    expect(m.graphNodes).toBe(1); // 문서 3 − 보관(폴더 + 그 자식) 2
+  });
 });
 
 describe("snapshotWeek", () => {
@@ -156,5 +191,83 @@ describe("stripCost", () => {
     const v = view();
     stripCost(v, false);
     expect(v.weeks[0].data.llm.usd).toBe(1.5);
+  });
+});
+
+describe("collectMetrics — graphNodes 는 loadGraph 입력과 일치", () => {
+  type Row = { databasePageId: string; contentPageId: string | null };
+  function setup(rows: Row[], pages: { id: string; parentId: string | null; archivedAt: Date | null; kind: string }[]) {
+    vi.clearAllMocks();
+    p.page.count.mockImplementation(async (args: { where: { archivedAt?: unknown; kind?: string } }) =>
+      args.where.archivedAt ? pages.filter((x) => x.archivedAt).length : pages.filter((x) => x.kind === "doc").length,
+    );
+    p.page.findMany.mockResolvedValue(pages);
+    for (const k of ["project", "decision", "risk", "graphEdge", "llmCache"]) p[k].count.mockResolvedValue(0);
+    p.lesson.count.mockImplementation(async (args: { where: { userId?: null } }) => (args.where.userId === null ? 1 : 2)); // 팀 1 + 개인 1
+    // where 를 실제로 평가하는 가짜 — notIn/in/OR/null 만 다룬다.
+    const match = (r: Row, where: Record<string, unknown>) => {
+      const dp = where.databasePageId as { notIn?: string[]; in?: string[] } | undefined;
+      if (dp?.notIn && dp.notIn.includes(r.databasePageId)) return false;
+      if (dp?.in && !dp.in.includes(r.databasePageId)) return false;
+      const or = where.OR as { contentPageId: null | { notIn: string[] } }[] | undefined;
+      if (or && !or.some((c) => (c.contentPageId === null ? r.contentPageId === null : r.contentPageId === null || !c.contentPageId.notIn.includes(r.contentPageId)))) return false;
+      const cp = where.contentPageId as { not?: null } | undefined;
+      if (cp && "not" in cp && r.contentPageId === null) return false;
+      return true;
+    };
+    p.dbRow.count.mockImplementation(async (args: { where: Record<string, unknown> }) => rows.filter((r) => match(r, args.where)).length);
+    p.dbRow.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) =>
+      rows.filter((r) => match(r, args.where)).map((r) => ({ contentPageId: r.contentPageId, databasePageId: r.databasePageId, props: {} })),
+    );
+    p.dbProperty.findMany.mockResolvedValue([]);
+    p.lessonInjection.aggregate.mockResolvedValue({ _count: { _all: 0 }, _sum: { chars: null } });
+    vi.mocked(getTeamspaceUsage).mockResolvedValue({ totals: { calls: 0, cacheHits: 0, inputTokens: 0, outputTokens: 0, usd: null } } as never);
+  }
+  const at = new Date("2026-10-01T00:00:00Z");
+  const now = new Date("2026-10-09T00:00:00Z");
+
+  it("보관 보드의 행 2개·행 본문 문서·개인 레슨은 노드에서 빠진다", async () => {
+    setup(
+      [
+        { databasePageId: "archBoard", contentPageId: null },
+        { databasePageId: "archBoard", contentPageId: "body1" },
+        { databasePageId: "liveBoard", contentPageId: null },
+      ],
+      [
+        { id: "archBoard", parentId: null, archivedAt: at, kind: "database" },
+        { id: "liveBoard", parentId: null, archivedAt: null, kind: "database" },
+        { id: "body1", parentId: null, archivedAt: null, kind: "doc" }, // 보드와 부모 관계는 없지만 행 본문이라 뺀다
+        { id: "doc1", parentId: null, archivedAt: null, kind: "doc" },
+      ],
+    );
+    const m = await collectMetrics("w1", now);
+    // 문서 doc1 만 + 팀 레슨 1 + 활성 보드 행 1
+    expect(m.graphNodes).toBe(1 + 1 + 1);
+    expect(p.lesson.count).toHaveBeenCalledWith({ where: { workspaceId: "w1", userId: null } });
+  });
+
+  it("보관된 행 본문 문서를 가진 활성 보드의 행도 뺀다", async () => {
+    setup(
+      [
+        { databasePageId: "liveBoard", contentPageId: "archBody" },
+        { databasePageId: "liveBoard", contentPageId: "okBody" },
+      ],
+      [
+        { id: "liveBoard", parentId: null, archivedAt: null, kind: "database" },
+        { id: "archBody", parentId: null, archivedAt: at, kind: "doc" },
+        { id: "okBody", parentId: null, archivedAt: null, kind: "doc" },
+      ],
+    );
+    const m = await collectMetrics("w1", now);
+    expect(m.graphNodes).toBe(1 /* okBody */ + 1 /* 팀 레슨 */ + 1 /* okBody 행 */);
+  });
+
+  it("보관이 없으면 행은 단일 count(notIn 없음)", async () => {
+    setup([{ databasePageId: "b", contentPageId: null }], [{ id: "d", parentId: null, archivedAt: null, kind: "doc" }]);
+    const m = await collectMetrics("w1", now);
+    expect(m.graphNodes).toBe(1 + 1 + 1);
+    expect(p.dbRow.count).toHaveBeenCalledTimes(1);
+    expect(p.dbRow.count.mock.calls[0][0]).toEqual({ where: { database: { workspaceId: "w1", deletedAt: null } } });
+    expect(p.dbRow.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ select: { contentPageId: true } }));
   });
 });

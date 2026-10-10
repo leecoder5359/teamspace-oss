@@ -31,6 +31,7 @@ export const runtime = "nodejs";
    ===================================================================== */
 
 const CANDIDATE_TAKE = 300;
+const POST_FILTER_TAKE = 500;
 /** 보관 id 가 이 수를 넘으면 notIn 대신 후보를 읽은 뒤 거른다. */
 const ARCHIVED_NOTIN_CAP = 2000;
 /** DB OR 에 싣는 변형 수 상한(원문 포함). queryVariants 는 랭킹용으로 최대 8개를 돌려주지만 쿼리는 이만큼만. */
@@ -66,16 +67,21 @@ export async function GET(request: Request) {
   // CANDIDATE_TAKE 를 채워 원문 일치를 밀어내는 일이 없게 한다. id 로 중복 제거.
   // 보관(F2): 조상이 보관된 하위 문서도 제외해야 하므로, 보관 페이지가 하나라도 있을 때만
   // 트리를 한 번 읽어 같은 집합을 만든다(대부분의 워크스페이스는 count 한 번으로 끝).
+  // 직접 보관된 행은 SQL(archivedAt: null)로 이미 빠진다 → 여기엔 보관된 조상의 '후손'(자기 archivedAt 은 null)만 모은다.
   let archivedIds: string[] = [];
   if (!includeArchived && (await prisma.page.count({ where: { workspaceId, deletedAt: null, archivedAt: { not: null } } })) > 0) {
     const tree = await prisma.page.findMany({ where: { workspaceId, deletedAt: null }, select: { id: true, parentId: true, archivedAt: true } });
-    archivedIds = [...archivedPageIds(tree)];
+    const own = new Map(tree.map((n) => [n.id, n.archivedAt]));
+    archivedIds = [...archivedPageIds(tree)].filter((id) => !own.get(id));
   }
   // notIn 이 너무 길면 쿼리 파라미터 한도·계획 비용이 문제 — 상한을 넘으면 id 필터를 빼고 후보를 읽은 뒤 거른다.
   const archivedSet = new Set(archivedIds);
   const postFilterArchived = archivedIds.length > ARCHIVED_NOTIN_CAP;
+  // 사후 거름 경로에선 후손이 후보 자리를 차지해 limit(최대 100) 을 못 채울 수 있다 → 500 으로 고정해 넉넉히 읽는다.
+  const pageTake = postFilterArchived ? POST_FILTER_TAKE : CANDIDATE_TAKE;
   const pageWhere = (vs: string[]) => ({
-    workspaceId, deletedAt: null, ...(archivedIds.length && !postFilterArchived ? { id: { notIn: archivedIds } } : {}), OR: vs.flatMap((v) => [{ title: ci(v) }, { markdown: ci(v) }]),
+    workspaceId, deletedAt: null, ...(includeArchived ? {} : { archivedAt: null }),
+    ...(archivedIds.length && !postFilterArchived ? { id: { notIn: archivedIds } } : {}), OR: vs.flatMap((v) => [{ title: ci(v) }, { markdown: ci(v) }]),
     // 태스크 설명은 기본 제외 — AND 로 묶어 위 OR 와 충돌하지 않게 한다.
     ...(includeTaskNotes ? {} : { AND: [TASK_NOTE_EXCLUDE] }),
   });
@@ -108,7 +114,7 @@ export async function GET(request: Request) {
     wantPages
       ? fetchWithFallback(
           async (vs) => {
-            const rows = await prisma.page.findMany({ where: pageWhere(vs), select: pageSelect, take: CANDIDATE_TAKE });
+            const rows = await prisma.page.findMany({ where: pageWhere(vs), select: pageSelect, take: pageTake });
             return postFilterArchived ? rows.filter((r) => !archivedSet.has(r.id)) : rows;
           },
           (p) => ({ id: p.id, kind: (p.kind === "database" ? "board" : "doc") as SearchKind, title: p.title, body: "", projectId: p.projectId, projectName: null, updatedAt: p.updatedAt }),

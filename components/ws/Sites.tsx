@@ -23,6 +23,7 @@ export default function Sites() {
   const [list, setList] = useState<SiteItem[] | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
   const [invites, setInvites] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export default function Sites() {
       const form = new FormData();
       form.set("file", file);
       if (title.trim()) form.set("title", title.trim());
+      if (slug.trim()) form.set("slug", slug.trim());
       if (invites.trim()) form.set("invites", invites);
       const res = await fetch("/api/sites", { method: "POST", body: form });
       const data = await res.json();
@@ -102,6 +104,7 @@ export default function Sites() {
       <div style={card}>
         <input type="file" accept=".html,.htm,.zip" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={inputStyle} />
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목(비우면 파일 이름)" style={{ ...inputStyle, marginTop: 8 }} />
+        <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="주소(영문 소문자·숫자·하이픈, 예: banjang-handover — 비우면 무작위)" aria-label="주소" style={{ ...inputStyle, marginTop: 8 }} />
         <textarea value={invites} onChange={(e) => setInvites(e.target.value)} placeholder="초대할 이메일 (쉼표·줄바꿈으로 여러 개)" rows={2} style={{ ...inputStyle, marginTop: 8, resize: "vertical" }} />
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
           <button onClick={create} disabled={busy || !file} style={primaryBtn}>
@@ -124,7 +127,7 @@ export default function Sites() {
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <Link href={`/sites/${s.id}`} style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{s.title}</Link>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                    v{s.currentVersion} · 초대 {s.inviteCount}명 · 마지막 열람 {fmt(s.lastAccessAt)}
+                    /s/{s.slug} · v{s.currentVersion} · 초대 {s.inviteCount}명 · 마지막 열람 {fmt(s.lastAccessAt)}
                     {s.status === "disabled" ? " · 비활성" : ""}
                   </div>
                 </div>

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireCtx } from "@/lib/workspace";
 import { prisma } from "@/lib/prisma";
 import { loadAccess, pageAccess, projectAccess } from "@/lib/pageGuard";
-import { channelCanSee, collectDigest, excludeArchived, digestItemCount, renderDigest, renderDigestMarkdown, weekRange } from "@/lib/digest";
+import { channelCanSee, collectDigest, canSeeUnarchived, digestItemCount, renderDigest, renderDigestMarkdown, weekRange } from "@/lib/digest";
 import { fireNotif } from "@/lib/notify";
 
 export const runtime = "nodejs";
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     projectId,
     ...period(week.data !== undefined, days.data),
     // 보관된 조상 아래 보드·문서는 빼고(F2) 요청자가 볼 수 있는 것만
-    canSee: await excludeArchived(guard.workspaceId, (id) => pageAccess(idx, id) !== "none"),
+    canSee: await canSeeUnarchived(guard.workspaceId, (id) => pageAccess(idx, id) !== "none"),
   });
   if (!digest) return notFound();
   return NextResponse.json({ digest, markdown: renderDigestMarkdown(digest) });

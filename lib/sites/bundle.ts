@@ -1,4 +1,5 @@
 import { readZip } from "@/lib/unzip";
+import { RESERVED_SITE_DIR, ambiguousShellPaths } from "./shellPath";
 
 /* =====================================================================
    퍼블리시 번들 검증 — 신뢰할 수 없는 업로드를 저장 가능한 파일 목록으로 바꾼다.
@@ -107,6 +108,12 @@ export function validateBundle({ filename, data }: { filename: string; data: Buf
       files.push({ path: p, data: e.data });
     }
     files = stripSingleRoot(files);
+    // `__ts/` 는 /pub 가 쓰는 예약 폴더(내비 보고 스크립트) — 번들 파일이 가로채지 못하게 뺀다.
+    files = files.filter((f) => {
+      if (f.path.split("/")[0] !== RESERVED_SITE_DIR) return true;
+      skipped.push({ path: f.path, reason: `예약 경로(${RESERVED_SITE_DIR}/)` });
+      return false;
+    });
   } else {
     return fail("HTML(.html) 또는 zip 파일만 올릴 수 있습니다.");
   }
@@ -139,6 +146,15 @@ export function validateBundle({ filename, data }: { filename: string; data: Buf
   if (abs.length) {
     warnings.push(
       `index.html 이 루트 기준 경로를 씁니다(${abs.slice(0, 5).join(", ")}) — 로드되지 않습니다. 상대경로로 빌드하세요(예: vite build --base=./).`,
+    );
+  }
+
+  const ambiguous = ambiguousShellPaths(files.map((f) => f.path));
+  if (ambiguous.length) {
+    const list = ambiguous.slice(0, 10).map((a) => `/${a.pretty} → ${a.file} (${a.shadowed} 는 가려짐)`).join(", ");
+    warnings.push(
+      `같은 주소로 열리는 파일 쌍이 있습니다 — ${list}${ambiguous.length > 10 ? ` 외 ${ambiguous.length - 10}쌍` : ""}. ` +
+        `셸 주소는 .html 을 먼저 열므로 폴더의 index.html 은 그 주소로 닿지 않습니다. 둘 중 하나의 이름을 바꾸세요.`,
     );
   }
 

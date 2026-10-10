@@ -48,7 +48,7 @@ describe("findDuplicateTitles", () => {
 describe("findSameTitleDocs", () => {
   const mk = () => {
     const findMany = vi.fn(async () => [{ id: "z", title: "T" }]);
-    return { db: { page: { findMany } } as never, findMany };
+    return { db: { page: { findMany, count: vi.fn(async () => 0) } } as never, findMany };
   };
   it("where 절(제목 조건 없이 같은 프로젝트 후보를 가져온다)", async () => {
     const { db, findMany } = mk();
@@ -71,7 +71,7 @@ describe("findSameTitleDocs", () => {
       { id: "3", title: "한글".normalize("NFD") },
       { id: "4", title: "other" },
     ]);
-    const db = { page: { findMany } } as never;
+    const db = { page: { findMany, count: vi.fn(async () => 0) } } as never;
     expect((await findSameTitleDocs(db, { workspaceId: "w", projectId: null, title: "a b" })).map((r) => r.id)).toEqual(["1", "2"]);
     expect((await findSameTitleDocs(db, { workspaceId: "w", projectId: null, title: "한글".normalize("NFC") })).map((r) => r.id)).toEqual(["3"]);
   });
@@ -79,5 +79,23 @@ describe("findSameTitleDocs", () => {
     const { db, findMany } = mk();
     expect(await findSameTitleDocs(db, { workspaceId: "w", projectId: null, title: "Untitled" })).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+  it("보관 문서(조상 규칙)는 중복으로 치지 않는다 — 보관된 '회의록'이 새 '회의록'을 막지 않는다", async () => {
+    const at = new Date("2026-10-01T00:00:00Z");
+    const findMany = vi.fn(async (args: { select: Record<string, boolean> }) =>
+      args.select.title
+        ? [{ id: "old", title: "회의록" }, { id: "live", title: "회의록" }]
+        : [{ id: "f", parentId: null, archivedAt: at }, { id: "old", parentId: "f", archivedAt: null }, { id: "live", parentId: null, archivedAt: null }],
+    );
+    const count = vi.fn(async () => 1);
+    const db = { page: { findMany, count } } as never;
+    expect(await findSameTitleDocs(db, { workspaceId: "w", projectId: null, title: "회의록" })).toEqual([{ id: "live", title: "회의록" }]);
+  });
+  it("같은 제목 후보가 없으면 보관 조회도 하지 않는다", async () => {
+    const findMany = vi.fn(async () => [{ id: "x", title: "다른" }]);
+    const count = vi.fn(async () => 1);
+    const db = { page: { findMany, count } } as never;
+    expect(await findSameTitleDocs(db, { workspaceId: "w", projectId: null, title: "회의록" })).toEqual([]);
+    expect(count).not.toHaveBeenCalled();
   });
 });

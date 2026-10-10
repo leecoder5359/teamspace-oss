@@ -24,17 +24,27 @@ function headingText(el: HTMLElement): string {
 }
 
 /**
- * 편집기 안 헤딩엔 id 를 쓰지 않는다 — ProseMirror 가 관리하는 DOM 이라 속성 변경이 DOM 변경 읽기를 일으키고
- * 다시 그릴 때 속성이 사라질 수 있다. 대신 `#해시` 는 아래 scrollToHash 가 목차 항목 → 요소 매핑으로 직접 처리한다.
+ * 편집기 안 헤딩엔 여기서 id 를 쓰지 않는다(결정 29e188d) — BlockNote 노드뷰엔 ignoreMutation 이 없어 속성 쓰기가
+ * ProseMirror 노드뷰 재생성 → MutationObserver 재수집 → 다시 id 쓰기로 ~200ms 마다 무한 반복된다.
+ * 편집기 헤딩의 id 는 ProseMirror 가 직접 그린다: components/editor/headingAnchors 의 노드 데코레이션이
+ * 헤딩 노드뷰 바깥 래퍼(`.bn-block-content`)에 id 를 단다. 그래서 목차는 그 래퍼 id 를 그대로 읽고,
+ * `#해시` 는 래퍼(헤딩을 감싼 요소)를 대상으로 스크롤한다. 데코레이션이 아직 없으면(빈 헤딩 등) 인덱스 폴백.
  */
 const isEditable = (el: HTMLElement) => !!el.closest('[contenteditable="true"]');
+
+/** 헤딩의 기존 id — 편집기 헤딩은 데코레이션이 단 래퍼 id 를 쓴다. */
+function existingId(el: HTMLElement): string | null {
+  if (el.id) return el.id;
+  if (!isEditable(el)) return null;
+  return el.closest<HTMLElement>(".bn-block-content")?.id || null;
+}
 
 export default function DocToc({ rootRef, minHeadings = 3 }: { rootRef: RefObject<HTMLElement | null>; minHeadings?: number }) {
   // 1024px 미만에선 숨긴다(본문 폭이 먼저)
   const narrow = useIsMobile(1023);
   const [items, setItems] = useState<TocItem[]>([]);
   const [active, setActive] = useState<string | null>(null);
-  // 목차 항목 → 실제 요소(편집기 헤딩은 id 가 없어 요소로 찾는다)
+  // 목차 항목 → 실제 헤딩 요소(편집기 헤딩은 id 가 래퍼에 있어 요소로 찾는다)
   const elsRef = useRef<HTMLElement[]>([]);
 
   useEffect(() => {
@@ -56,7 +66,7 @@ export default function DocToc({ rootRef, minHeadings = 3 }: { rootRef: RefObjec
     const collect = () => {
       // 임베드 카드(data-toc-skip) 안의 헤딩은 다른 문서의 것 — 목차·활성 판정에서 뺀다
       const els = Array.from(root.querySelectorAll<HTMLElement>(SELECTOR)).filter((el) => !el.closest("[data-toc-skip]"));
-      const toc = buildTocFromDom(els.map((el) => ({ level: Number(el.tagName[1]), text: headingText(el), id: el.id || null })));
+      const toc = buildTocFromDom(els.map((el) => ({ level: Number(el.tagName[1]), text: headingText(el), id: existingId(el) })));
       els.forEach((el, i) => {
         if (!el.id && !isEditable(el)) el.id = toc[i].id;
       });
@@ -67,8 +77,9 @@ export default function DocToc({ rootRef, minHeadings = 3 }: { rootRef: RefObjec
       scrollToHash();
     };
 
-    // 새로고침·공유 링크의 `#해시` — 편집기 헤딩은 id 가 없어 브라우저가 못 찾으니 목차 매핑으로 스크롤한다.
-    // 미리보기(id 가 있는 쪽)는 브라우저 기본 동작에 맡긴다.
+    // 새로고침·공유 링크의 `#해시` — 편집기는 본문을 비동기로 불러와 브라우저의 첫 해시 이동 땐 대상이 없다.
+    // 그래서 편집기 헤딩(데코레이션 래퍼 또는 id 없는 헤딩)은 여기서 직접 스크롤한다.
+    // 미리보기(헤딩 자체에 id 가 있는 쪽)는 브라우저 기본 동작에 맡긴다.
     let hashDone = false;
     const scrollToHash = (force = false) => {
       if (hashDone && !force) return;
@@ -82,8 +93,16 @@ export default function DocToc({ rootRef, minHeadings = 3 }: { rootRef: RefObjec
       const i = itemsRef.current.findIndex((it) => it.id === want);
       if (i < 0) return;
       hashDone = true;
-      const el = elsRef.current[i];
-      if (el && !el.id) el.scrollIntoView({ block: "start" });
+      const els = elsRef.current;
+      const byId = document.getElementById(want);
+      if (byId && els.includes(byId)) {
+        // 미리보기 — 헤딩 자체가 id 를 가진다. 브라우저가 처리한다.
+      } else if (byId && els.some((h) => h.closest(".bn-block-content") === byId)) {
+        byId.scrollIntoView({ block: "start" }); // 편집기 — 데코레이션 래퍼
+      } else {
+        const el = els[i];
+        if (el && !el.id) el.scrollIntoView({ block: "start" }); // id 없는 헤딩 — 인덱스 폴백
+      }
       setActive(want);
     };
     const onHash = () => scrollToHash(true);

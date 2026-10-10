@@ -102,7 +102,7 @@ describe("GET /api/context — brief(resume/compact 훅)", () => {
 
 // 빈 mock DB 만으로는 brief 가 실제 규모(레슨 수십·태스크 수백)에서 예산 안에 드는지, 렌더러에 올바른 입력이
 // 흘러가는지 알 수 없다 — 현실적 규모의 행을 prisma mock 에 실어 라우트 전체를 통과시킨다.
-// 개수 줄은 count() 로 센다(이슈 cmuzm1w7s001jw51ykj8511y0) — 목록 mock 과 같은 값을 count mock 에도 싣는다.
+// 개수 줄은 count() 로 센다 — 목록 mock 과 같은 값을 count mock 에도 싣는다.
 // take 상한을 넘는 개수는 route.counts.test.ts 가 본다.
 describe("GET /api/context — brief 현실적 fixture", () => {
   const pm = (f: unknown) => f as Mock;

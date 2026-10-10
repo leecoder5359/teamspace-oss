@@ -69,12 +69,23 @@ describe("GET /api/search neighbors", () => {
     it("보관된 부모의 하위 문서도 후보에서 제외", async () => {
       withArchived();
       await GET(new Request("http://t/api/search?q=배포"));
-      expect(whereOfCandidates().id.notIn.sort()).toEqual(["kid", "p"]);
+      // 직접 보관된 p 는 SQL archivedAt: null 로, 후손 kid 만 notIn 으로
+      expect(whereOfCandidates().archivedAt).toBeNull();
+      expect(whereOfCandidates().id.notIn).toEqual(["kid"]);
+    });
+    it("직접 보관만 있고 후손이 없으면 notIn 없이 archivedAt: null 만", async () => {
+      m(prisma.page.count).mockResolvedValue(1);
+      m(prisma.page.findMany).mockImplementation((async (args: { select: Record<string, unknown> }) =>
+        "parentId" in args.select ? [{ id: "p", parentId: null, archivedAt: at }, { id: "o", parentId: null, archivedAt: null }] : []) as never);
+      await GET(new Request("http://t/api/search?q=배포"));
+      expect(whereOfCandidates().archivedAt).toBeNull();
+      expect(whereOfCandidates()).not.toHaveProperty("id");
     });
     it("?archived=1 이면 제외하지 않고 트리도 읽지 않는다", async () => {
       withArchived();
       await GET(new Request("http://t/api/search?q=배포&archived=1"));
       expect(whereOfCandidates()).not.toHaveProperty("id");
+      expect(whereOfCandidates()).not.toHaveProperty("archivedAt");
       expect(m(prisma.page.count)).not.toHaveBeenCalled();
     });
   });
@@ -83,6 +94,8 @@ describe("GET /api/search neighbors", () => {
     const at = new Date("2026-10-09T00:00:00Z");
     const big = Array.from({ length: 2001 }, (_, i) => ({ id: `ar${i}`, parentId: null, archivedAt: at }));
     const cand = (id: string) => ({ id, title: "배포 " + id, markdown: "", kind: "doc", updatedAt: new Date(), projectId: null, project: null });
+    // 부모(보관) 1개 + 후손 2,001개 — 후손만 notIn/사후 거름 대상
+    const kids = [{ id: "root", parentId: null, archivedAt: at }, ...Array.from({ length: 2001 }, (_, i) => ({ id: `kid${i}`, parentId: "root", archivedAt: null }))];
     const setup = (tree: unknown[]) => {
       m(prisma.page.count).mockResolvedValue(1);
       m(prisma.page.findMany).mockImplementation((async (args: { select: Record<string, unknown> }) =>
@@ -90,15 +103,31 @@ describe("GET /api/search neighbors", () => {
     };
     const cands = () => m(prisma.page.findMany).mock.calls.map((c) => c[0]).filter((a) => !("parentId" in a.select));
     it("상한을 넘으면 notIn 없이 조회하고 결과에서 보관 문서를 거른다", async () => {
-      setup(big);
+      setup([...kids, { id: "ar5", parentId: "root", archivedAt: null }]);
       const j = await (await GET(new Request("http://t/api/search?q=배포"))).json();
       expect(cands().every((a) => !("id" in a.where))).toBe(true);
       expect(j.results.map((r: { id: string }) => r.id)).toEqual(["live"]);
     });
     it("상한 이하(2,000)면 여전히 notIn 을 쓴다", async () => {
-      setup(big.slice(0, 2000));
+      setup(kids.slice(0, 2001));
       await GET(new Request("http://t/api/search?q=배포"));
       expect(cands()[0].where.id.notIn).toHaveLength(2000);
+    });
+    it("직접 보관 2,001개만으로는 상한 경로로 가지 않는다(SQL 이 거른다)", async () => {
+      setup(big);
+      await GET(new Request("http://t/api/search?q=배포"));
+      expect(cands()[0].where).not.toHaveProperty("id");
+      expect(cands()[0].where.archivedAt).toBeNull();
+    });
+    it("사후 거름 경로: 앞쪽 300개 넘게 보관 후손이어도 take 500 으로 limit 개를 채운다", async () => {
+      m(prisma.page.count).mockResolvedValue(1);
+      const rows = [...Array.from({ length: 350 }, (_, i) => cand(`kid${i}`)), ...Array.from({ length: 100 }, (_, i) => cand(`live${i}`))];
+      m(prisma.page.findMany).mockImplementation((async (args: { select: Record<string, unknown>; take?: number }) =>
+        "parentId" in args.select ? kids : rows.slice(0, args.take)) as never);
+      const j = await (await GET(new Request("http://t/api/search?q=배포&limit=100"))).json();
+      expect(cands()[0].take).toBe(500);
+      expect(j.results).toHaveLength(100);
+      expect(j.results.every((r: { id: string }) => r.id.startsWith("live"))).toBe(true);
     });
   });
 

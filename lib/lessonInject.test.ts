@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderLessons, renderLessonsReport, buildLessonSection, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, type LessonLite } from "./lessonInject";
+import { renderLessons, renderLessonsReport, buildLessonSection, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, lessonApplicability, lessonScopeOf, lessonModeOf, parseLessonMode, type LessonLite } from "./lessonInject";
 import { legacyRenderLessons, legacyLessonBudget } from "./lessonInject.legacy.fixture";
 
 const L = (id: string, title: string, body: string, projectId: string | null = null) => ({ id, title, body, projectId });
@@ -219,5 +219,123 @@ describe("renderLessonsReport — 레슨별 상태·섹션 예산", () => {
     expect(by.o).toMatchObject({ status: "not_applicable", reason: "other_project" });
     expect(by.i).toMatchObject({ status: "not_applicable", reason: "stack_mismatch" });
     expect(report.sections.map((s) => [s.kind, s.tag])).toEqual([["project", null], ["stack", "next"], ["global", null]]);
+  });
+});
+
+/* ── 범위·주입 방식 개편(개인·필수·ondemand·좁은 범위 먼저) ───────────── */
+
+describe("lessonApplicability · lessonScopeOf · parseLessonMode", () => {
+  const S = { projectId: "proj", projectStack: ["next"], personId: "me" };
+  it("범위별 대상 판정", () => {
+    expect(lessonApplicability({ projectId: null, stack: null }, S)).toBeNull();
+    expect(lessonApplicability({ projectId: "proj" }, S)).toBeNull();
+    expect(lessonApplicability({ projectId: "other" }, S)).toBe("other_project");
+    expect(lessonApplicability({ projectId: null, stack: "next" }, S)).toBeNull();
+    expect(lessonApplicability({ projectId: null, stack: "ios" }, S)).toBe("stack_mismatch");
+    expect(lessonApplicability({ projectId: null, userId: "me" }, S)).toBeNull();
+    expect(lessonApplicability({ projectId: null, userId: "you" }, S)).toBe("other_person");
+    expect(lessonApplicability({ projectId: null, userId: "me" }, { ...S, personId: null })).toBe("other_person");
+    expect(lessonApplicability({ projectId: null, mode: "ondemand" }, S)).toBe("ondemand");
+    // 범위 밖이 먼저 — 남의 개인 레슨이 ondemand 여도 사유는 other_person
+    expect(lessonApplicability({ projectId: null, userId: "you", mode: "ondemand" }, S)).toBe("other_person");
+  });
+  it("scope 는 개인 > 프로젝트 > 스택 > 전역, 모르는 mode 는 default, 입력 mode 는 엄격", () => {
+    expect(lessonScopeOf({ userId: "u", projectId: null })).toBe("personal");
+    expect(lessonScopeOf({ projectId: "p" })).toBe("project");
+    expect(lessonScopeOf({ projectId: null, stack: "next" })).toBe("stack");
+    expect(lessonScopeOf({ projectId: null })).toBe("global");
+    expect(lessonModeOf({ mode: "weird" })).toBe("default");
+    expect(parseLessonMode("Required")).toEqual({ ok: true, mode: "required" });
+    expect(parseLessonMode("always")).toMatchObject({ ok: false });
+  });
+});
+
+describe("renderLessonsReport — 필수 먼저 · 좁은 범위 먼저 · ondemand 제외 · 개인", () => {
+  const mk = (id: string, extra: Partial<LessonLite> = {}): LessonLite => ({ id, title: `규칙 ${id}`, body: "처방: " + "본문 ".repeat(60), projectId: null, stack: null, ...extra });
+
+  it("필수 섹션이 맨 앞(범위 무관), 그다음 개인 → 프로젝트 → 스택 → 전역 순서이고 헤더에 개수", () => {
+    const lessons = [
+      mk("g"),
+      mk("gr", { mode: "required" }),
+      mk("p", { projectId: "proj" }),
+      mk("pr", { projectId: "proj", mode: "required" }),
+      mk("me", { userId: "me" }),
+      mk("n", { stack: "next" }),
+    ];
+    const { lines, report } = renderLessonsReport({ lessons, projectId: "proj", projectName: "P", projectStack: ["next"], personId: "me", mode: "compact" });
+    const md = lines.join("\n");
+    expect(md).toContain("## 팀 작업규칙·레슨 — 반드시 따른다 (필수 2 · 개인 1 · 프로젝트 1 · 스택 1 · 전역 1)");
+    const idx = ["### 필수 (2)", "### 개인 (1)", "### 프로젝트: P (1)", "### 스택: next (1)", "### 전역 (1)"].map((h) => md.indexOf(h));
+    expect(idx.every((x) => x >= 0)).toBe(true);
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx);
+    expect(report.sections.map((s) => s.kind)).toEqual(["required", "personal", "project", "stack", "global"]);
+    const by = Object.fromEntries(report.statuses.map((s) => [s.id, s]));
+    expect(by.gr).toMatchObject({ scope: "global", mode: "required", status: "gist" });
+    expect(by.pr).toMatchObject({ scope: "project", mode: "required", status: "gist" });
+    expect(by.me).toMatchObject({ scope: "personal", mode: "default", status: "gist" });
+  });
+
+  it("예산이 빠듯하면 필수는 요약까지 들어가고, 남은 예산은 좁은 범위가 먼저 요약을 가져간다(넓은 범위는 제목만)", () => {
+    const lessons = [
+      ...Array.from({ length: 3 }, (_, i) => mk(`r${i}`, { mode: "required" })),
+      ...Array.from({ length: 6 }, (_, i) => mk(`m${i}`, { userId: "me" })),
+      ...Array.from({ length: 6 }, (_, i) => mk(`g${i}`)),
+    ];
+    const { report } = renderLessonsReport({ lessons, projectId: null, projectName: null, personId: "me", mode: "compact", budget: 1800 });
+    const by = Object.fromEntries(report.statuses.map((s) => [s.id, s.status]));
+    expect([by.r0, by.r1, by.r2]).toEqual(["gist", "gist", "gist"]);
+    const personalGist = Array.from({ length: 6 }, (_, i) => by[`m${i}`]).filter((s) => s === "gist").length;
+    const globalGist = Array.from({ length: 6 }, (_, i) => by[`g${i}`]).filter((s) => s === "gist").length;
+    expect(personalGist).toBeGreaterThan(0);
+    expect(personalGist).toBeGreaterThanOrEqual(globalGist);
+    // 개인 섹션이 요약을 다 받기 전에는 전역이 요약을 받지 않는다(좁은 범위 먼저)
+    if (globalGist > 0) expect(personalGist).toBe(6);
+    // 커버리지: 모두 제목 이상으로 보인다(잘림 없음)
+    expect(Object.values(by).every((s) => s === "gist" || s === "title")).toBe(true);
+  });
+
+  it("필수가 예산을 넘으면 필수도 제목만 → '외 N개' 로 떨어지고, 다른 섹션도 개수는 드러낸다", () => {
+    const lessons = [...Array.from({ length: 40 }, (_, i) => mk(`r${i}`, { mode: "required" })), ...Array.from({ length: 10 }, (_, i) => mk(`g${i}`))];
+    const { lines, report } = renderLessonsReport({ lessons, projectId: null, projectName: null, mode: "compact", budget: 600 });
+    const md = lines.join("\n");
+    const req = report.sections.find((s) => s.kind === "required")!;
+    expect(req.omitted).toBeGreaterThan(0);
+    expect(req.gist + req.title + req.omitted).toBe(40);
+    expect(md).toContain(`외 ${req.omitted}개`);
+    expect(md).toContain("### 전역 (10)");
+    const glob = report.sections.find((s) => s.kind === "global")!;
+    expect(glob.gist + glob.title + glob.omitted).toBe(10);
+    if (glob.omitted) expect(md).toContain(`외 ${glob.omitted}개`);
+  });
+
+  it("ondemand 는 주입하지 않고 개수만 한 줄로 알린다 — 필수·전역 어느 범위든", () => {
+    const lessons = [mk("g"), mk("od", { mode: "ondemand" }), mk("odp", { projectId: "proj", mode: "ondemand" })];
+    for (const mode of ["compact", "full"] as const) {
+      const { lines, report } = renderLessonsReport({ lessons, projectId: "proj", projectName: "P", mode });
+      const md = lines.join("\n");
+      expect(md).not.toContain("`od`");
+      expect(md).not.toContain("규칙 odp");
+      expect(md).toContain("'필요할 때만' 레슨 2개");
+      expect(md).toContain("반드시 따른다 (전역 1)");
+      const by = Object.fromEntries(report.statuses.map((s) => [s.id, s]));
+      expect(by.od).toMatchObject({ status: "not_applicable", reason: "ondemand", mode: "ondemand" });
+    }
+  });
+
+  it("다른 사람의 개인 레슨은 빠지고(other_person), 사람을 모르면 개인 레슨은 하나도 안 들어간다", () => {
+    const lessons = [mk("g"), mk("mine", { userId: "me" }), mk("yours", { userId: "you", mode: "required" })];
+    const a = renderLessonsReport({ lessons, projectId: null, projectName: null, personId: "me", mode: "compact" });
+    expect(a.lines.join("\n")).toContain("`mine`");
+    expect(a.lines.join("\n")).not.toContain("yours");
+    expect(a.report.statuses.find((s) => s.id === "yours")).toMatchObject({ status: "not_applicable", reason: "other_person" });
+    const b = renderLessonsReport({ lessons, projectId: null, projectName: null, personId: null, mode: "compact" });
+    expect(b.lines.join("\n")).not.toContain("### 개인");
+    expect(b.report.statuses.filter((s) => s.reason === "other_person").map((s) => s.id)).toEqual(["mine", "yours"]);
+  });
+
+  it("buildLessonSection 은 personId 를 그대로 넘긴다", () => {
+    const lessons = [mk("mine", { userId: "me" })];
+    expect(buildLessonSection({ lessons, projectId: null, projectName: null, projectStack: [], personId: "me", compact: true, restChars: 0 }).lines.join("\n")).toContain("`mine`");
+    expect(buildLessonSection({ lessons, projectId: null, projectName: null, projectStack: [], compact: true, restChars: 0 }).lines.join("\n")).not.toContain("`mine`");
   });
 });

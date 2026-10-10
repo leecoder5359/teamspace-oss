@@ -135,6 +135,19 @@ body {
   padding: 48px 24px 120px;
 }
 
+.ws-share-panel {
+  max-width: 820px;
+  margin: -72px auto 0;
+  padding: 0 24px 48px;
+}
+
+.bn-block-content[id],
+.ws-page-view h1[id],
+.ws-page-view h2[id],
+.ws-page-view h3[id] {
+  scroll-margin-top: 16px;
+}
+
 .ws-title-input {
   width: 100%;
   border: none;
@@ -217,6 +230,10 @@ body {
     padding: 64px 16px 96px;
   }
 
+  .ws-share-panel {
+    padding: 0 16px 40px;
+  }
+
   .ws-title-input {
     font-size: 28px;
   }
@@ -224,6 +241,12 @@ body {
   .ws-db {
     padding: 56px 12px 96px;
   }
+}
+
+/* 필터 팝오버: 배치는 CSS 가 담당(인라인 금지). 좁은 화면에선 뷰포트 기준 고정 */
+.ws-filter-pop { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: min(430px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+@media (max-width: 768px) {
+  .ws-filter-pop { position: fixed; left: 16px; right: 16px; top: auto; min-width: 0; max-width: none; max-height: calc(100dvh - 120px); overflow: auto; }
 }
 
 /* ===== 데이터베이스 뷰 (표 / 보드) ===== */

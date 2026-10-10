@@ -1,4 +1,5 @@
 import type { prisma } from "@/lib/prisma";
+import { loadArchivedPageIds, excludeArchived } from "@/lib/pageArchive";
 
 /** 제목 비교용 정규화 — 공백 정리·NFC·소문자. */
 export function normalizeTitle(t: string): string {
@@ -37,6 +38,8 @@ export function findDuplicateTitles(
  * 같은 워크스페이스·프로젝트의 같은 제목 문서를 찾는다. 목록 배지와 같은 normalizeTitle 로 JS 에서
  * 비교한다(DB insensitive 비교는 안쪽 공백·NFC 를 못 맞춘다). 후보는 take 500 으로 자른다 —
  * "프로젝트 없음" 버킷이 커도 터지지 않게. 호출 측이 가시성 필터 후 상한(10)을 적용한다.
+ * 보관 문서(조상 규칙)는 중복으로 치지 않는다 — 보관된 '회의록'이 새 '회의록'을 막으면 안 된다.
+ * 보관 집합은 같은 제목 후보가 있을 때만 읽는다.
  */
 export async function findSameTitleDocs(
   db: Pick<typeof prisma, "page">,
@@ -55,5 +58,7 @@ export async function findSameTitleDocs(
     take: 500,
     select: { id: true, title: true },
   });
-  return rows.filter((r) => normalizeTitle(r.title) === want);
+  const same = rows.filter((r) => normalizeTitle(r.title) === want);
+  if (same.length === 0) return same;
+  return excludeArchived(same, await loadArchivedPageIds(db, args.workspaceId));
 }

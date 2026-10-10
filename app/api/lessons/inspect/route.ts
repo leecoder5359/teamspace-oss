@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { resolveRouteByCwd } from "@/lib/ingest";
-import { buildLessonSection, CONTEXT_BUDGET, LESSON_BUDGET, type LessonRenderReport, type LessonStatus, type LessonScope, type NotApplicableReason } from "@/lib/lessonInject";
+import { buildLessonSection, CONTEXT_BUDGET, LESSON_BUDGET, lessonApplicability, lessonModeOf, lessonScopeOf, type LessonRenderReport, type LessonStatus, type LessonScope, type NotApplicableReason } from "@/lib/lessonInject";
+import { personalLessonWhere } from "@/lib/lessonAccess";
+import { viewerPersonId } from "@/lib/viewerPerson";
 import { linkChecks } from "@/lib/lessonInspect/analyze";
 import { GET as contextGET } from "@/app/api/context/route";
 
@@ -26,12 +28,17 @@ const LINK_WINDOW_DAYS = 30;
  *     내부적으로 /api/context 핸들러를 inspect=1 로 불러(기록 안 남김) 다른 섹션이 쓴 글자 수까지 실제와 같게 맞춘다.
  *   projectId 만 주면 그 프로젝트를 가리키는 route-rule 의 cwd 로 시뮬레이션한다. 규칙이 없으면 실제로는 주입되지 않으므로
  *     resolution='project_unmapped' 로 표시하고 워크스페이스 기본 컨텍스트의 나머지 분량으로 추정한다.
+ *   범위·주입 방식: 레슨별 scope(personal|project|stack|global)·mode(required|default|ondemand). 시뮬레이션은 **요청한 사람**
+ *     (에이전트 토큰이면 발급자)의 세션으로 한다 — 개인 레슨은 그 사람 것만 들어가고, admin 이 보는 다른 사람의 개인 레슨은
+ *     not_applicable(other_person) 으로 보인다. ondemand 는 not_applicable(ondemand).
  *   연결 점검: 최근 30일 주입 cwd 중 미매핑 · stack 빈 프로젝트 · 맞는 프로젝트 없는 스택 레슨 · 없는 프로젝트를 가리키는 route-rule.
  */
 export async function GET(request: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
+  const personId = viewerPersonId(guard);
+  const personal = personalLessonWhere({ personId, role: guard.role });
   const url = new URL(request.url);
   const cwdParam = url.searchParams.get("cwd")?.trim() || null;
   const projectParam = url.searchParams.get("projectId")?.trim() || null;
@@ -40,7 +47,12 @@ export async function GET(request: Request) {
   const [rules, projects, lessons, cwdGroups] = await Promise.all([
     prisma.workspaceRouteRule.findMany({ where: { workspaceId }, select: { id: true, cwdPrefix: true, projectId: true, priority: true, workspaceId: true } }),
     prisma.project.findMany({ where: { workspaceId, archivedAt: null }, orderBy: { position: "asc" }, select: { id: true, name: true, stack: true } }),
-    prisma.lesson.findMany({ where: { workspaceId }, orderBy: { updatedAt: "desc" }, select: { id: true, title: true, body: true, projectId: true, stack: true, updatedAt: true }, take: 500 }),
+    prisma.lesson.findMany({
+      where: { workspaceId, ...(personal ? { AND: [personal] } : {}) },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, title: true, body: true, projectId: true, stack: true, userId: true, mode: true, updatedAt: true },
+      take: 500,
+    }),
     prisma.lessonInjection.groupBy({
       by: ["cwd"],
       where: { workspaceId, createdAt: { gte: since }, cwd: { not: null } },
@@ -84,7 +96,7 @@ export async function GET(request: Request) {
     // 매핑이 없으면 실제 세션엔 이 프로젝트 레슨이 안 들어간다 — '매핑했다면' 어떻게 들어갈지 추정해 보여 준다.
     const p = projects.find((x) => x.id === projectParam)!;
     const scoped = lessons.filter((l) => !l.projectId || l.projectId === p.id);
-    const sec = buildLessonSection({ lessons: scoped, projectId: p.id, projectName: p.name, projectStack: p.stack, compact: true, restChars: rep.restChars });
+    const sec = buildLessonSection({ lessons: scoped, projectId: p.id, projectName: p.name, projectStack: p.stack, personId, compact: true, restChars: rep.restChars });
     rep = {
       ...sec.report,
       lessonMarkdown: sec.lines.join("\n"),
@@ -95,17 +107,20 @@ export async function GET(request: Request) {
     };
   }
 
-  // 시뮬레이션에 안 실린 레슨(다른 프로젝트 것)은 not_applicable 로 채운다.
+  // 시뮬레이션에 안 실린 레슨(다른 프로젝트·다른 사람의 개인 레슨)은 not_applicable 로 채운다 — 사유는 같은 판정 함수로.
   const statusById = new Map(rep.statuses.map((s) => [s.id, s]));
+  const simScope = { projectId: rep.projectId, projectStack: rep.projectStack, personId };
   const rows = lessons.map((l) => {
     const s = statusById.get(l.id);
-    const scope: LessonScope = s?.scope ?? (l.projectId ? "project" : l.stack ? "stack" : "global");
+    const scope: LessonScope = s?.scope ?? lessonScopeOf(l);
     const status: LessonStatus = s?.status ?? "not_applicable";
-    const reason: NotApplicableReason | null = s?.reason ?? (s ? null : "other_project");
+    const reason: NotApplicableReason | null = s?.reason ?? (s ? null : (lessonApplicability(l, simScope) ?? "other_project"));
     return {
       id: l.id,
       title: l.title,
       scope,
+      mode: lessonModeOf(l),
+      personal: !!l.userId,
       projectId: l.projectId,
       projectName: l.projectId ? (projName.get(l.projectId) ?? null) : null,
       stack: l.stack,
@@ -116,6 +131,12 @@ export async function GET(request: Request) {
   });
   const statusCounts = { gist: 0, title: 0, omitted: 0, not_applicable: 0 } as Record<LessonStatus, number>;
   for (const r of rows) statusCounts[r.status]++;
+  const modeCounts = { required: 0, default: 0, ondemand: 0 };
+  const scopeCounts = { personal: 0, project: 0, stack: 0, global: 0 } as Record<LessonScope, number>;
+  for (const r of rows) {
+    modeCounts[r.mode]++;
+    scopeCounts[r.scope]++;
+  }
 
   const checks = linkChecks({
     rules,
@@ -144,6 +165,8 @@ export async function GET(request: Request) {
       sections: rep.sections,
       preview: rep.lessonMarkdown,
       statusCounts,
+      modeCounts,
+      scopeCounts,
       lessons: rows,
       linkChecks: { windowDays: LINK_WINDOW_DAYS, ...checks },
       projects: projects.map((p) => ({ id: p.id, name: p.name, stack: p.stack })),

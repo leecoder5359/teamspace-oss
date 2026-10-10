@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { collectOpsStatus, evaluateOps, parseBackupName, WORKER_FRESH_SEC, type OpsDeps, type OpsStatus } from "./opsStatus";
+import { collectOpsStatus, evaluateOps, parseBackupName, MIN_DUMP_BYTES, WORKER_FRESH_SEC, type OpsDeps, type OpsStatus } from "./opsStatus";
 
 const NOW = new Date(2026, 9, 9, 12, 0, 0); // 로컬 시각 — 백업 폴더명도 로컬 시각이다
 
 function deps(over: Partial<OpsDeps> & { files?: Record<string, number> } = {}): OpsDeps {
-  const files = over.files ?? { "/b/20261009-110000/docs.tar.gz": 100, "/b/20261009-110000/teamspace.dump": 50, "/b/20261008-110000/x": 1 };
+  const files = over.files ?? { "/b/20261009-110000/docs.tar.gz": 100, "/b/20261009-110000/teamspace.dump": 2000, "/b/20261008-110000/x": 1, "/b/20261008-110000/teamspace.dump": 2000 };
   return {
     fs: {
       readdir: async (p) => {
@@ -38,7 +38,7 @@ describe("collectOpsStatus", () => {
   it("정상 상태를 모은다", async () => {
     const s = await collectOpsStatus(deps());
     expect(s.health).toEqual({ db: true, worker: true, workerAgeSec: 30 });
-    expect(s.backup).toMatchObject({ dir: "/b", latest: "20261009-110000", sizeBytes: 150 });
+    expect(s.backup).toMatchObject({ dir: "/b", latest: "20261009-110000", sizeBytes: 2100 });
     expect(s.backup.ageHours).toBeCloseTo(1, 5);
     expect(s.disk).toEqual({ path: "/data", requestedPath: "/data", freeBytes: 250 * 4096, totalBytes: 1000 * 4096, freeRatio: 0.25 });
     expect(s.llm).toEqual({ todayTokens: 500, todayUsd: 0.42, budgetTokens: 1000, exceeded: false });
@@ -107,7 +107,10 @@ describe("워커 경계", () => {
 });
 
 describe("백업 진행 중·시계 어긋남", () => {
-  const withDirs = (dirs: Record<string, { name: string; size?: number; ageMs: number }[]>): Partial<OpsDeps> => ({
+  const withDirs = (
+    dirs: Record<string, { name: string; size?: number; ageMs: number }[]>,
+    dirAgeMs: Record<string, number> = {},
+  ): Partial<OpsDeps> => ({
     fs: {
       readdir: async (p) => {
         if (p === "/b") return Object.keys(dirs);
@@ -117,9 +120,10 @@ describe("백업 진행 중·시계 어긋남", () => {
       },
       stat: async (p) => {
         const [, , k, f] = p.split("/");
+        if (f === undefined && dirAgeMs[k] !== undefined) return { size: 0, mtimeMs: NOW.getTime() - dirAgeMs[k], isFile: () => false };
         const e = dirs[k]?.find((x) => x.name === f);
         if (!e) throw new Error("ENOENT");
-        return { size: e.size ?? 1, mtimeMs: NOW.getTime() - e.ageMs, isFile: () => true };
+        return { size: e.size ?? (e.name === "teamspace.dump" ? MIN_DUMP_BYTES : 1), mtimeMs: NOW.getTime() - e.ageMs, isFile: () => true };
       },
       statfs: async () => ({ bsize: 1, blocks: 100, bavail: 50 }),
       readFile: async () => { throw new Error("ENOENT"); },
@@ -130,9 +134,9 @@ describe("백업 진행 중·시계 어긋남", () => {
   it("가장 새 폴더에 덤프가 없으면 건너뛰고 직전 완성본 + inProgress", async () => {
     const s = await collectOpsStatus(deps(withDirs({
       "20261009-115900": [{ name: "docs.tar.gz", ageMs: OLD }],
-      "20261008-110000": [{ name: "teamspace.dump", size: 7, ageMs: OLD }],
+      "20261008-110000": [{ name: "teamspace.dump", size: 2048, ageMs: OLD }],
     })));
-    expect(s.backup).toMatchObject({ latest: "20261008-110000", sizeBytes: 7, inProgress: true });
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", sizeBytes: 2048, inProgress: true });
     expect(s.backup.ageHours).toBeCloseTo(25, 5);
   });
 
@@ -156,6 +160,102 @@ describe("백업 진행 중·시계 어긋남", () => {
   it("진행 중인데 직전 백업이 없으면 latest null + inProgress", async () => {
     const s = await collectOpsStatus(deps(withDirs({ "20261009-115900": [{ name: "docs.tar.gz", ageMs: 1000 }] })));
     expect(s.backup).toEqual({ dir: "/b", latest: null, ageHours: null, sizeBytes: null, inProgress: true });
+  });
+
+  it("덤프 없는 폴더가 30분 전이면 아직 진행 중", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-113000": [{ name: "docs.tar.gz", ageMs: 30 * 60_000 }],
+      "20261008-110000": [{ name: "teamspace.dump", ageMs: OLD }],
+    })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", inProgress: true });
+    expect(s.backup.lastAttemptFailed).toBeUndefined();
+  });
+
+  it("덤프 없는 폴더가 90분 전이면 실패 시도, inProgress 아님, 직전 폴더 나이", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-103000": [{ name: "docs.tar.gz", ageMs: 90 * 60_000 }],
+      "20261008-110000": [{ name: "teamspace.dump", size: 2048, ageMs: OLD }],
+    })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", sizeBytes: 2048, lastAttemptFailed: true, failedDir: "20261009-103000" });
+    expect(s.backup.inProgress).toBeUndefined();
+    expect(s.backup.ageHours).toBeCloseTo(25, 5);
+    expect(codes({ ...base, backup: s.backup })).toContain("warn:backup_failed");
+  });
+
+  it("연속 실패(덤프 없음 2개) 뒤 완성본까지 거슬러 올라가 나이를 센다", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-110000": [{ name: "docs.tar.gz", ageMs: 90 * 60_000 }],
+      "20261008-110000": [{ name: "docs.tar.gz", ageMs: 25 * OLD }],
+      "20261006-110000": [{ name: "teamspace.dump", size: 3000, ageMs: 49 * OLD }],
+    })));
+    expect(s.backup).toMatchObject({ latest: "20261006-110000", sizeBytes: 3000, lastAttemptFailed: true, failedDir: "20261009-110000" });
+    expect(s.backup.ageHours).toBeCloseTo(73, 5);
+    expect(codes({ ...base, backup: s.backup })).toEqual(["warn:backup_failed", "crit:backup_stale"]);
+  });
+
+  it("덤프 있는 폴더가 하나도 없으면 latest null + 실패 표시", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-110000": [{ name: "docs.tar.gz", ageMs: 90 * 60_000 }],
+      "20261008-110000": [{ name: "docs.tar.gz", ageMs: 25 * OLD }],
+    })));
+    expect(s.backup).toEqual({ dir: "/b", latest: null, ageHours: null, sizeBytes: null, lastAttemptFailed: true, failedDir: "20261009-110000" });
+  });
+
+  it("빈 폴더(파일 없음)는 mtime 을 모르므로 실패가 아니라 진행 중", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-103000": [],
+      "20261008-110000": [{ name: "teamspace.dump", ageMs: OLD }],
+    })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", inProgress: true });
+    expect(s.backup.lastAttemptFailed).toBeUndefined();
+  });
+
+  it("빈 폴더라도 폴더 mtime 이 90분 전이면 실패 시도(실 fs 경로)", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-103000": [],
+      "20261008-110000": [{ name: "teamspace.dump", ageMs: OLD }],
+    }, { "20261009-103000": 90 * 60_000 })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", lastAttemptFailed: true, failedDir: "20261009-103000" });
+    expect(s.backup.inProgress).toBeUndefined();
+  });
+
+  it("빈 폴더의 폴더 mtime 이 10분 전이면 진행 중(실 fs 경로)", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-103000": [],
+      "20261008-110000": [{ name: "teamspace.dump", ageMs: OLD }],
+    }, { "20261009-103000": 10 * 60_000 })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", inProgress: true });
+    expect(s.backup.lastAttemptFailed).toBeUndefined();
+  });
+
+  it("0바이트 덤프(pg_dump 실패 잔재)가 1시간 넘었으면 덤프 없음으로 보고 실패 시도", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-103000": [{ name: "teamspace.dump", size: 0, ageMs: 90 * 60_000 }],
+      "20261008-110000": [{ name: "teamspace.dump", size: 2048, ageMs: OLD }],
+    })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", sizeBytes: 2048, lastAttemptFailed: true, failedDir: "20261009-103000" });
+    expect(s.backup.inProgress).toBeUndefined();
+    expect(s.backup.ageHours).toBeCloseTo(25, 5);
+  });
+
+  it("0바이트 덤프가 10분 전이면 진행 중", async () => {
+    const s = await collectOpsStatus(deps(withDirs({
+      "20261009-115000": [{ name: "teamspace.dump", size: 0, ageMs: 10 * 60_000 }],
+      "20261008-110000": [{ name: "teamspace.dump", size: 2048, ageMs: OLD }],
+    })));
+    expect(s.backup).toMatchObject({ latest: "20261008-110000", inProgress: true });
+    expect(s.backup.lastAttemptFailed).toBeUndefined();
+  });
+
+  it("실패 시도뿐이고 직전 백업이 없으면 latest null, backup_missing crit 도 유지", async () => {
+    const s = await collectOpsStatus(deps(withDirs({ "20261009-103000": [{ name: "docs.tar.gz", ageMs: 90 * 60_000 }] })));
+    expect(s.backup).toEqual({ dir: "/b", latest: null, ageHours: null, sizeBytes: null, lastAttemptFailed: true, failedDir: "20261009-103000" });
+    expect(codes({ ...base, backup: s.backup })).toEqual(["warn:backup_failed", "crit:backup_missing"]);
+  });
+
+  it("실패 경고 문구", () => {
+    const w = evaluateOps({ ...base, backup: { ...base.backup, lastAttemptFailed: true, failedDir: "20261009-103000" } });
+    expect(w).toEqual([{ level: "warn", code: "backup_failed", message: "마지막 백업 시도가 실패했습니다(20261009-103000, 덤프 없음)" }]);
   });
 
   it("미래 이름은 조용히 0 으로 깎지 않고 clockSkew 로 드러낸다", async () => {

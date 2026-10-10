@@ -13,14 +13,16 @@ import { Pill, Table, Sub, td, tdNum, rowStyle, hint, empty, inputStyle } from "
    ===================================================================== */
 
 type Status = "gist" | "title" | "omitted" | "not_applicable";
-type Scope = "project" | "stack" | "global";
+type Scope = "personal" | "project" | "stack" | "global";
+type Mode = "required" | "default" | "ondemand";
+type Reason = "other_project" | "stack_mismatch" | "other_person" | "ondemand";
 type Inspect = {
   resolved: { resolution: "cwd" | "project_rule" | "project_unmapped" | "none"; cwd: string | null; projectId: string | null; projectName: string | null; projectStack: string[] };
   budget: { contextBudget: number; lessonMinBudget: number; lessonBudget: number | null; lessonChars: number; restChars: number; totalChars: number };
-  sections: { kind: Scope; tag: string | null; count: number; budget: number | null; used: number; gist: number; title: number; omitted: number }[];
+  sections: { kind: Scope | "required"; tag: string | null; count: number; budget: number | null; used: number; gist: number; title: number; omitted: number }[];
   preview: string;
   statusCounts: Record<Status, number>;
-  lessons: { id: string; title: string; scope: Scope; projectName: string | null; stack: string | null; status: Status; reason: "other_project" | "stack_mismatch" | null }[];
+  lessons: { id: string; title: string; scope: Scope; mode?: Mode; projectName: string | null; stack: string | null; status: Status; reason: Reason | null }[];
   linkChecks: {
     windowDays: number;
     unmappedCwds: { cwd: string; count: number; lastAt: string }[];
@@ -55,8 +57,9 @@ const STATUS: Record<Status, { label: string; color: string }> = {
   omitted: { label: "잘림", color: BAD },
   not_applicable: { label: "해당 없음", color: MUTED },
 };
-const SCOPE: Record<Scope, string> = { project: "프로젝트", stack: "스택", global: "전역" };
-const REASON = { other_project: "다른 프로젝트", stack_mismatch: "스택 안 맞음" } as const;
+const SCOPE: Record<Scope | "required", string> = { required: "필수", personal: "개인", project: "프로젝트", stack: "스택", global: "전역" };
+const MODE: Record<Mode, string> = { required: "필수", default: "기본", ondemand: "필요할 때만" };
+const REASON: Record<Reason, string> = { other_project: "다른 프로젝트", stack_mismatch: "스택 안 맞음", other_person: "다른 사람의 개인 레슨", ondemand: "필요할 때만 — 주입 안 함" };
 const RESOLUTION: Record<Inspect["resolved"]["resolution"], string> = {
   cwd: "입력한 폴더로 계산",
   project_rule: "이 프로젝트에 연결된 폴더로 계산",
@@ -196,7 +199,7 @@ export default function LessonInspect() {
             {shown.length === 0 ? (
               <p style={empty}>해당하는 레슨이 없습니다.</p>
             ) : (
-              <Table head={["상태", "레슨", "범위"]} numericFrom={9}>
+              <Table head={["상태", "레슨", "범위", "방식"]} numericFrom={9}>
                 {shown.map((l) => (
                   <tr key={l.id} style={rowStyle}>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>
@@ -214,6 +217,7 @@ export default function LessonInspect() {
                       {l.scope === "stack" && l.stack ? ` · ${l.stack}` : ""}
                       {l.reason ? ` (${REASON[l.reason]})` : ""}
                     </td>
+                    <td style={{ ...td, whiteSpace: "nowrap", color: l.mode === "required" ? "var(--text-strong)" : "var(--text-muted)" }}>{MODE[l.mode ?? "default"]}</td>
                   </tr>
                 ))}
               </Table>

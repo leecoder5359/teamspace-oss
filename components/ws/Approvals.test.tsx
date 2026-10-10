@@ -14,6 +14,7 @@ const mk = (id: string, title: string) => ({
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+const T = { timeout: 3_000 }; // 부하 시 두 번의 순차 fetch + 포커스 effect 가 기본 1초를 넘길 수 있다
 const fetchMock = vi.fn();
 const calls = (pre: string) => fetchMock.mock.calls.filter(([u]) => String(u).startsWith(pre));
 
@@ -27,7 +28,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Approvals ?id= 포커스", () => {
+describe("Approvals ?id= 포커스", { timeout: 15_000 }, () => {
   it("목록에 없으면 단건을 한 번 조회해 카드를 붙이고 포커스한다", async () => {
     search = "id=old1";
     fetchMock.mockImplementation(async (u: string) => {
@@ -36,8 +37,10 @@ describe("Approvals ?id= 포커스", () => {
       return json({}, 404);
     });
     render(<Approvals />);
-    await waitFor(() => expect(screen.getByText("오래된 건")).toBeTruthy());
-    await waitFor(() => expect(document.getElementById("approval-old1")?.getAttribute("data-flash")).toBe("1"));
+    await waitFor(() => {
+      expect(document.getElementById("approval-old1")?.getAttribute("data-flash")).toBe("1");
+      expect(screen.getByText("오래된 건")).toBeTruthy();
+    }, T);
     expect(calls("/api/approvals/old1")).toHaveLength(1);
     expect(screen.queryByText("해당 승인을 찾을 수 없어요")).toBeNull();
   });
@@ -49,7 +52,7 @@ describe("Approvals ?id= 포커스", () => {
       return json({ error: "Not found" }, 404);
     });
     render(<Approvals />);
-    await waitFor(() => expect(screen.getByText("해당 승인을 찾을 수 없어요")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("해당 승인을 찾을 수 없어요")).toBeTruthy(), T);
     expect(calls("/api/approvals/gone")).toHaveLength(1);
   });
 
@@ -57,7 +60,7 @@ describe("Approvals ?id= 포커스", () => {
     search = "id=n1";
     fetchMock.mockImplementation(async () => json({ approvals: [mk("n1", "최신 건")] }));
     render(<Approvals />);
-    await waitFor(() => expect(document.getElementById("approval-n1")?.getAttribute("data-flash")).toBe("1"));
+    await waitFor(() => expect(document.getElementById("approval-n1")?.getAttribute("data-flash")).toBe("1"), T);
     expect(calls("/api/approvals/")).toHaveLength(0);
   });
 
@@ -74,13 +77,13 @@ describe("Approvals ?id= 포커스", () => {
       return json({}, 404);
     });
     render(<Approvals />);
-    await waitFor(() => expect(screen.getByText("오래된 건")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("오래된 건")).toBeTruthy(), T);
     const toggle = screen.getByLabelText(/낮은 위험 자동 승인/);
     fireEvent.click(toggle); // PATCH 후 load() → 목록 교체
-    await waitFor(() => expect(screen.getByText("오래된 건 갱신")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("오래된 건 갱신")).toBeTruthy(), T);
     expect(calls("/api/approvals/old1").filter(([, i]) => !i?.method)).toHaveLength(2);
     fireEvent.click(toggle); // 끄기: load 없음
     fireEvent.click(toggle); // 다시 켜기 → load → 이번엔 404
-    await waitFor(() => expect(screen.getByText("해당 승인을 찾을 수 없어요")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("해당 승인을 찾을 수 없어요")).toBeTruthy(), T);
   });
 });
