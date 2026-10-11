@@ -4,6 +4,7 @@ import { resolveMemberRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { requireProject } from "@/lib/pageGuard";
 import { normalizeStack } from "@/lib/lessonInject";
+import { normalizeTerms } from "@/lib/lessonPromptMatch";
 import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
 
@@ -19,11 +20,13 @@ const ProjectPatchBody = z.object({
   docsDir: z.string().nullable().optional(),
   archived: z.boolean().optional(),
   stack: z.union([z.array(z.string()), z.string()]).nullable().optional(),
+  /** 프롬프트에 쓰는 짧은 이름("반장,banjang") — UserPromptSubmit 훅이 언급된 프로젝트를 찾는다. null·"" = 비움 */
+  aliases: z.union([z.array(z.string()), z.string()]).nullable().optional(),
 });
 
 const COLORS = ["blue", "orange", "purple", "green", "red", "gray"];
 
-// PATCH /api/projects/[id] → 이름/코드/색상/설명/리드 수정
+// PATCH /api/projects/[id] → 이름/코드/색상/설명/리드/스택/별칭(aliases) 수정
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const guard = await requireCtx("editor");
@@ -48,6 +51,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const st = normalizeStack(body.stack ?? []);
     if (!st.ok) return NextResponse.json({ error: st.error }, { status: 400 });
     data.stack = st.stack;
+  }
+  if (body.aliases !== undefined) {
+    // 별칭 — 사용자 메시지에 이 이름이 있으면 그 프로젝트 레슨이 열린다(lib/lessonPromptMatch). 2~40자, 소문자 정규화.
+    const al = normalizeTerms(body.aliases, "별칭");
+    if (!al.ok) return NextResponse.json({ error: al.error }, { status: 400 });
+    data.aliases = al.terms;
   }
   // 보관(F10): true=지금 시각(이미 보관이면 원래 시각 유지) · false=해제. 기존 쓰기 게이트(edit) 그대로.
   if (body.archived !== undefined) data.archivedAt = body.archived ? (project.archivedAt ?? new Date()) : null;

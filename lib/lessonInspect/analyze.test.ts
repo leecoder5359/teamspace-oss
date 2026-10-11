@@ -118,6 +118,31 @@ describe("injectionStats", () => {
     expect(onlyBrief.cleanup.neverInjected.map((l) => l.id)).toEqual(["c"]);
   });
 
+  // 2026-10-11: 'SessionStart 0건' 으로 보였다 — 최근 목록(CLI 10건)이 잦은 PostToolUse 에 묻혀서. 훅·모드별 횟수를 따로 낸다.
+  it("byVia — 훅·모드별 횟수(7일·기간), 많은 순", () => {
+    const r = (id: string, ago: number, via: string, mode: string) => ({ ...row(id, ago, "p", [], [], []), via, mode });
+    const s = injectionStats({
+      rows: [r("1", 1, "PostToolUse", "compact"), r("2", 1, "PostToolUse", "compact"), r("3", 2, "SessionStart", "brief"), r("4", 9, "SessionStart", "compact"), r("5", 1, "UserPromptSubmit", "prompt")],
+      reads: [],
+      lessons,
+      projects: [],
+      days: 30,
+      now,
+    });
+    expect(s.byVia).toEqual([
+      { via: "PostToolUse", mode: "compact", count: 2, last7: 2 },
+      { via: "SessionStart", mode: "brief", count: 1, last7: 1 },
+      { via: "SessionStart", mode: "compact", count: 1, last7: 0 },
+      { via: "UserPromptSubmit", mode: "prompt", count: 1, last7: 1 },
+    ]);
+  });
+
+  it("'늘 잘림' 은 prompt(UserPromptSubmit) 기록으로도 판단하지 않는다", () => {
+    const prompt = { ...row("8", 1, "p", ["b"], [], []), via: "UserPromptSubmit", mode: "prompt" };
+    const s = injectionStats({ rows: [row("1", 1, "p", ["a"], ["b"], []), prompt], reads: [], lessons, projects: [], days: 30, now });
+    expect(s.cleanup.alwaysTruncated.map((l) => l.id)).toEqual(["b"]);
+  });
+
   it("기록이 없으면 정리 후보(잘림·주입 0회)는 비운다", () => {
     const s = injectionStats({ rows: [], reads: [], lessons, projects: [], days: 30, now });
     expect(s.cleanup.alwaysTruncated).toEqual([]);
@@ -126,9 +151,10 @@ describe("injectionStats", () => {
 });
 
 describe("log 헬퍼", () => {
-  it("via 는 훅 두 종류만, 나머지는 unknown", () => {
+  it("via 는 훅 세 종류만, 나머지는 unknown", () => {
     expect(normalizeVia("SessionStart")).toBe("SessionStart");
     expect(normalizeVia("PostToolUse")).toBe("PostToolUse");
+    expect(normalizeVia("UserPromptSubmit")).toBe("UserPromptSubmit");
     expect(normalizeVia("evil")).toBe("unknown");
     expect(normalizeVia(null)).toBe("unknown");
   });

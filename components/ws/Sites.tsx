@@ -127,7 +127,7 @@ export default function Sites() {
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <Link href={`/sites/${s.id}`} style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{s.title}</Link>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                    /s/{s.slug} · v{s.currentVersion} · 초대 {s.inviteCount}명 · 마지막 열람 {fmt(s.lastAccessAt)}
+                    /pages/{s.slug} · v{s.currentVersion} · 초대 {s.inviteCount}명 · 마지막 열람 {fmt(s.lastAccessAt)}
                     {s.status === "disabled" ? " · 비활성" : ""}
                   </div>
                 </div>

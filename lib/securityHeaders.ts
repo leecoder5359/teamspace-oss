@@ -21,7 +21,7 @@ export const CSP_REPORT_ONLY = [
 export function securityHeaders(opts: { reportOnly: boolean }): { key: string; value: string }[] {
   const headers = [
     { key: "X-Content-Type-Options", value: "nosniff" },
-    // /s/<slug> 셸이 같은 출처의 /pub iframe 을 품는다 — SAMEORIGIN 이면 통과.
+    // /pages/<slug> 셸이 같은 출처의 /pub iframe 을 품는다 — SAMEORIGIN 이면 통과.
     { key: "X-Frame-Options", value: "SAMEORIGIN" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },

@@ -30,6 +30,7 @@ const RULES: Rule[] = [
   { name: "TEAMSPACE_DATA_DIR", severity: "warning", schema: z.string().startsWith("/"), message: "절대경로여야 합니다" },
   { name: "LLM_CALL_LOG", severity: "warning", lower: true, schema: onOff, message: "on 또는 off 여야 합니다" },
   { name: "LLM_CACHE", severity: "warning", lower: true, schema: onOff, message: "on 또는 off 여야 합니다" },
+  { name: "LESSON_HYGIENE", severity: "warning", lower: true, schema: onOff, message: "on 또는 off 여야 합니다" },
   { name: "RATE_LIMIT", severity: "warning", lower: true, schema: onOff, message: "on 또는 off 여야 합니다" },
   { name: "LOG_FORMAT", severity: "warning", lower: true, schema: z.enum(["json", "pretty"]), message: "json 또는 pretty 여야 합니다" },
   { name: "ASK_LLM_PROVIDER", severity: "error", lower: true, schema: z.enum(["api", "cli", "off"]), message: "api, cli, off 중 하나여야 합니다" },

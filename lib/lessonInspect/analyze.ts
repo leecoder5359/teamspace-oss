@@ -160,7 +160,8 @@ export function injectionStats(i: {
 
   // 정리 후보 — 기록이 하나도 없으면 판단 근거가 없으므로 비운다(새로 깐 서버에서 전부 '0회' 로 뜨지 않게).
   // '늘 잘림' 은 compact(새 세션) 기록으로만 판단한다 — brief(이어가기)는 설계상 요약이 없고 전역을 개수로만 접는다.
-  const compactRows = i.rows.filter((r) => r.mode !== "brief");
+  // prompt(UserPromptSubmit)는 메시지에 맞춘 것만 요약으로 넣으므로 '세션 시작에서 잘림' 판단에 섞지 않는다.
+  const compactRows = i.rows.filter((r) => r.mode === "compact");
   const cg = new Set(compactRows.flatMap((r) => r.gistIds));
   const cSeen = new Set(compactRows.flatMap((r) => [...r.titleIds, ...r.omittedIds]));
   const alwaysTruncated = compactRows.length ? lessons.filter((l) => !cg.has(l.id) && cSeen.has(l.id)) : [];
@@ -186,9 +187,21 @@ export function injectionStats(i: {
       chars: r.chars,
     }));
 
+  // 훅·모드별 횟수 — 최근 목록(20건)은 잦은 PostToolUse·UserPromptSubmit 에 SessionStart 가 묻혀 '0건' 처럼 보였다.
+  const byViaMap = new Map<string, { via: string; mode: string; count: number; last7: number }>();
+  for (const r of i.rows) {
+    const k = `${r.via}/${r.mode}`;
+    const e = byViaMap.get(k) ?? { via: r.via, mode: r.mode, count: 0, last7: 0 };
+    e.count++;
+    if (r.createdAt.getTime() >= since7) e.last7++;
+    byViaMap.set(k, e);
+  }
+  const byVia = [...byViaMap.values()].sort((a, b) => b.count - a.count || a.via.localeCompare(b.via) || a.mode.localeCompare(b.mode));
+
   return {
     days: i.days,
     totals: { injections: i.rows.length, last7: i.rows.filter((r) => r.createdAt.getTime() >= since7).length, reads: i.reads.length },
+    byVia,
     byProject,
     recent,
     lessons,

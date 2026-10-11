@@ -237,7 +237,7 @@ server.registerTool(
   "lesson_list",
   {
     description:
-      "팀 작업규칙·레슨 목록(id·제목·범위·주입 방식만 — 전문은 lesson_get). projectId 를 주면 전역+그 프로젝트(+내 개인). q 는 제목 부분일치(대소문자 무시), mode 로 거르기(ondemand = 세션에 주입되지 않는 '필요할 때만' 레슨 — 관련 작업이면 여기서 찾는다), limit 기본 100(최대 300). 응답 {total,shown,lessons} — scope 는 personal|<projectId>|stack:<tag>|global, mode 는 required|default|ondemand. total 은 필터 뒤·limit 앞의 건수.",
+      "팀 작업규칙·레슨 목록(id·제목·범위·주입 방식만 — 전문은 lesson_get). projectId 를 주면 전역+그 프로젝트(+내 개인). q 는 제목 부분일치(대소문자 무시), mode 로 거르기(ondemand = 세션에 주입되지 않는 '필요할 때만' 레슨 — 관련 작업이면 여기서 찾는다), limit 기본 100(최대 300). 응답 {total,shown,lessons} — scope 는 personal|<projectId>|stack:<tag>|global, mode 는 required|default|ondemand, keywords 는 프롬프트 매칭 키워드(있을 때만). total 은 필터 뒤·limit 앞의 건수.",
     inputSchema: {
       projectId: z.string().optional(),
       q: z.string().optional(),
@@ -253,7 +253,7 @@ server.registerTool(
     if (mode) qs.set("mode", mode);
     qs.set("limit", String(limit ?? 100));
     const { lessons, total } = (await api("GET", `/api/lessons?${qs}`)) as {
-      lessons: { id: string; title: string; projectId: string | null; stack: string | null; personal?: boolean; mode?: string }[];
+      lessons: { id: string; title: string; projectId: string | null; stack: string | null; personal?: boolean; mode?: string; keywords?: string[] }[];
       total: number;
     };
     return jsonResult({
@@ -264,6 +264,7 @@ server.registerTool(
         title: l.title,
         scope: l.personal ? "personal" : (l.projectId ?? (l.stack ? `stack:${l.stack}` : "global")),
         mode: l.mode ?? "default",
+        ...(l.keywords?.length ? { keywords: l.keywords } : {}),
       })),
     });
   },
@@ -279,7 +280,7 @@ server.registerTool(
   "lesson_add",
   {
     description:
-      "팀 작업규칙·레슨 등록 — 세션에 자동 주입된다. 범위를 정확히(하나만): 특정 레포에서만 의미 있으면 projectId, 특정 기술 스택(next·supabase 등)을 쓰는 프로젝트에만 해당하면 stack, 나(이 토큰을 발급한 사람)의 개인 습관·선호면 personal:true, 어느 레포에나 통하는 규범만 모두 비워 전역으로. 전역은 모든 레포 세션에 들어간다. mode: required(필수 — 항상 제목+요약, 예산 먼저; 어기면 사고 나는 규칙에만) · default(기본) · ondemand(세션 주입 제외 — lesson_list 로만 찾는 드문 상황용).",
+      "팀 작업규칙·레슨 등록 — 세션에 자동 주입된다. 범위를 정확히(하나만): 특정 레포에서만 의미 있으면 projectId, 특정 기술 스택(next·supabase 등)을 쓰는 프로젝트에만 해당하면 stack, 나(이 토큰을 발급한 사람)의 개인 습관·선호면 personal:true, 어느 레포에나 통하는 규범만 모두 비워 전역으로. 전역은 모든 레포 세션에 들어간다. mode: required(필수 — 항상 제목+요약, 예산 먼저; 어기면 사고 나는 규칙에만) · default(기본) · ondemand(세션 시작 주입 제외 — 사용자 메시지에 keywords 가 나오거나 그 프로젝트가 언급되면 UserPromptSubmit 훅이 넣는다). keywords: 사용자가 그 작업을 말할 때 쓸 단어(예: prisma, 마이그레이션) — 2~40자, 소문자로 저장.",
     inputSchema: {
       title: z.string(),
       body: z.string(),
@@ -287,6 +288,7 @@ server.registerTool(
       stack: z.string().optional(),
       personal: z.boolean().optional(),
       mode: z.enum(["required", "default", "ondemand"]).optional(),
+      keywords: z.array(z.string()).optional(),
     },
   },
   async (args) => jsonResult(await api("POST", "/api/lessons", args)),
@@ -346,7 +348,7 @@ server.registerTool(
 server.registerTool(
   "site_list",
   {
-    description: "퍼블리시한 HTML 페이지 목록(초대 이메일로만 열리는 /s/<slug> 링크).",
+    description: "퍼블리시한 HTML 페이지 목록(초대 이메일로만 열리는 /pages/<slug> 링크).",
     inputSchema: {},
   },
   async () => jsonResult(await api("GET", "/api/sites")),
@@ -356,7 +358,7 @@ server.registerTool(
   "site_publish",
   {
     description:
-      "로컬 HTML 파일·폴더·zip 을 퍼블리시한다. 초대한 이메일로 Google 로그인한 사람만 볼 수 있는 링크를 돌려준다. siteId 를 주면 그 사이트의 새 버전. 폴더는 index.html 이 최상위에 있어야 하고, 숨김 파일·node_modules 는 담지 않는다. slug 는 설명형 주소(영문 소문자·숫자·하이픈, 3~60자 — /s/<slug>)로, 없으면 무작위. siteId 와 함께 주면 그 사이트 주소를 바꾸고 옛 주소는 새 주소로 넘어간다. 하위 페이지는 /s/<slug>/pages/<이름> 으로 바로 링크된다.",
+      "로컬 HTML 파일·폴더·zip 을 퍼블리시한다. 초대한 이메일로 Google 로그인한 사람만 볼 수 있는 링크를 돌려준다. siteId 를 주면 그 사이트의 새 버전. 폴더는 index.html 이 최상위에 있어야 하고, 숨김 파일·node_modules 는 담지 않는다. slug 는 설명형 주소(영문 소문자·숫자·하이픈, 3~60자 — /pages/<slug>)로, 없으면 무작위. siteId 와 함께 주면 그 사이트 주소를 바꾸고 옛 주소는 새 주소로 넘어간다. 하위 페이지는 루트의 <영문-kebab>.html 로 두면 /pages/<slug>/<이름> 으로 바로 링크된다.",
     inputSchema: {
       path: z.string(),
       title: z.string().optional(),

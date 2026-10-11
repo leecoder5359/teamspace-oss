@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { resolveRouteByCwd } from "@/lib/ingest";
-import { buildLessonSection, CONTEXT_BUDGET, LESSON_BUDGET, lessonApplicability, lessonModeOf, lessonScopeOf, type LessonRenderReport, type LessonStatus, type LessonScope, type NotApplicableReason } from "@/lib/lessonInject";
+import { buildLessonSection, CONTEXT_BUDGET, lessonMinBudget, lessonApplicability, lessonModeOf, lessonScopeOf, type LessonRenderReport, type LessonStatus, type LessonScope, type NotApplicableReason } from "@/lib/lessonInject";
 import { personalLessonWhere } from "@/lib/lessonAccess";
 import { viewerPersonId } from "@/lib/viewerPerson";
 import { linkChecks } from "@/lib/lessonInspect/analyze";
@@ -156,7 +156,8 @@ export async function GET(request: Request) {
       },
       budget: {
         contextBudget: CONTEXT_BUDGET,
-        lessonMinBudget: LESSON_BUDGET,
+        // 레슨 최소 몫 = 필수 전부 요약 + 나머지 '외 N개' + 고정 줄(최소 5,000) — 나머지 섹션이 이만큼 양보한다
+        lessonMinBudget: lessonMinBudget({ lessons: lessons.filter((l) => !l.projectId || l.projectId === rep.projectId), projectId: rep.projectId, projectName: rep.projectName, projectStack: rep.projectStack, personId }),
         lessonBudget: rep.budget,
         lessonChars: rep.chars,
         restChars: rep.restChars,

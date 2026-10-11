@@ -119,6 +119,11 @@ export default auth((req) => {
   // 인증은 라우트가 서명 토큰 + 매 요청 초대 재판정으로 한다(app/pub/[token]/[...path]/route.ts).
   if (pathname.startsWith("/pub/")) return pass(req, id);
 
+  // 옛 공유 주소(/s/<slug>/…): 라우트가 판정 없이 /pages/<slug>/… 로 308 만 한다
+  // (app/s/[slug]/[[...path]]/route.ts). 여기서 로그인으로 보내면 callbackUrl 이 옛 주소로 남으므로 통과시키고,
+  // 로그인 게이트는 넘어간 /pages 셸(아래 UI 보호 + 셸 자체 판정)이 맡는다.
+  if (pathname.startsWith("/s/")) return pass(req, id);
+
   // ── API 보호 (fail-closed) ──
   // 엣지 미들웨어는 DB 를 못 보므로 토큰은 "존재"만 확인하고, 실제 검증
   // (레거시 timing-safe 비교·AgentToken 해시 조회·RBAC)은 라우트의 requireCtx 가 수행한다.

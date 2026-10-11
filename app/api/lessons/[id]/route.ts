@@ -4,6 +4,7 @@ import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
 import { parseLessonMode, parseLessonStack, type LessonMode } from "@/lib/lessonInject";
 import { recordLessonRead } from "@/lib/lessonInspect/log";
+import { normalizeTerms } from "@/lib/lessonPromptMatch";
 import { canSeeLesson, withLessonMeta, PERSONAL_NEEDS_PERSON, PERSONAL_SCOPE_CONFLICT } from "@/lib/lessonAccess";
 import { viewerPersonId } from "@/lib/viewerPerson";
 
@@ -24,7 +25,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ lesson: withLessonMeta(lesson) });
 }
 
-// PATCH /api/lessons/[id] { title?, body?, projectId?, stack?, personal?, mode? }
+// PATCH /api/lessons/[id] { title?, body?, projectId?, stack?, personal?, mode?, keywords? }
+// keywords: "a,b" | ["a","b"] = 통째로 바꾼다, null·"" = 비운다(프롬프트 매칭 키워드).
 // 범위는 넷 중 하나: 전역(모두 null) · 프로젝트 · 스택 · 개인(personal:true → 요청한 사람, 에이전트 토큰이면 발급자).
 // 한쪽을 새로 정하면 나머지는 비운다. personal:true 를 projectId·stack 과 함께 주면 거절한다. personal:false = 개인 해제(전역으로).
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -43,8 +45,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     stack?: string | null;
     personal?: boolean;
     mode?: string;
+    keywords?: string | string[] | null;
   };
-  const data: { title?: string; body?: string; projectId?: string | null; stack?: string | null; userId?: string | null; mode?: LessonMode } = {};
+  const data: { title?: string; body?: string; projectId?: string | null; stack?: string | null; userId?: string | null; mode?: LessonMode; keywords?: string[] } = {};
   if (body.title !== undefined) {
     const t = body.title.trim();
     if (!t) return NextResponse.json({ error: "title 이 비었습니다." }, { status: 400 });
@@ -70,6 +73,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const md = parseLessonMode(body.mode);
     if (!md.ok) return NextResponse.json({ error: md.error }, { status: 400 });
     data.mode = md.mode;
+  }
+  if (body.keywords !== undefined) {
+    if (body.keywords !== null && typeof body.keywords !== "string" && !(Array.isArray(body.keywords) && body.keywords.every((k) => typeof k === "string"))) {
+      return NextResponse.json({ error: "keywords 는 쉼표로 구분한 문자열이나 문자열 배열입니다." }, { status: 400 });
+    }
+    const kw = normalizeTerms(body.keywords);
+    if (!kw.ok) return NextResponse.json({ error: kw.error }, { status: 400 });
+    data.keywords = kw.terms;
   }
   if (body.personal !== undefined && typeof body.personal !== "boolean") {
     return NextResponse.json({ error: "personal 은 true/false 입니다." }, { status: 400 });

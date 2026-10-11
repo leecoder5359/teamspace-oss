@@ -16,6 +16,8 @@ type Lesson = {
   stack?: string | null;
   personal?: boolean;
   mode?: Mode;
+  /** 프롬프트 매칭 키워드 — 메시지에 있으면 UserPromptSubmit 훅이 주입 */
+  keywords?: string[];
   createdById: string | null;
   updatedAt: string;
 };
@@ -37,7 +39,7 @@ const MODE_LABEL: Record<Mode, string> = { required: "필수", default: "기본"
 const MODE_HINT: Record<Mode, string> = {
   required: "범위 안이면 항상 제목+요약으로 먼저 주입",
   default: "제목 먼저, 예산이 남으면 요약",
-  ondemand: "세션 시작 주입에서 빠짐 — 목록·검색·lesson_get 으로만",
+  ondemand: "세션 시작 주입에서 빠짐 — 메시지에 키워드가 나오면 주입, 그 밖엔 목록·검색·lesson_get 으로",
 };
 const MODES: Mode[] = ["required", "default", "ondemand"];
 
@@ -50,10 +52,13 @@ export default function LessonsSurface({ project }: { project: string }) {
   const [scopeProject, setScopeProject] = useState(false);
   const [personal, setPersonal] = useState(false);
   const [mode, setMode] = useState<Mode>("default");
+  const [keywords, setKeywords] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editMode, setEditMode] = useState<Mode>("default");
+  const [editKeywords, setEditKeywords] = useState("");
+  const [err, setErr] = useState<string | null>(null);
   const [editPersonal, setEditPersonal] = useState(false);
   const [editWasPersonal, setEditWasPersonal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,8 +100,9 @@ export default function LessonsSurface({ project }: { project: string }) {
   async function create() {
     if (!title.trim() || !body.trim() || busy) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/lessons", {
+      const res = await fetch("/api/lessons", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -105,9 +111,15 @@ export default function LessonsSurface({ project }: { project: string }) {
           projectId: !personal && scopeProject && REAL(project) ? project : undefined,
           ...(personal ? { personal: true } : {}),
           mode,
+          ...(keywords.trim() ? { keywords } : {}),
         }),
       });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "등록하지 못했습니다.");
+        return;
+      }
       setTitle("");
+      setKeywords("");
       setBody("");
       setPersonal(false);
       setMode("default");
@@ -121,18 +133,24 @@ export default function LessonsSurface({ project }: { project: string }) {
   async function saveEdit() {
     if (!editId || !editTitle.trim() || !editBody.trim() || busy) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch(`/api/lessons/${editId}`, {
+      const res = await fetch(`/api/lessons/${editId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           title: editTitle.trim(),
           body: editBody.trim(),
           mode: editMode,
+          keywords: editKeywords,
           // 개인 체크를 바꿨을 때만 범위를 건드린다(끄면 전역으로)
           ...(editPersonal !== editWasPersonal ? { personal: editPersonal } : {}),
         }),
       });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "저장하지 못했습니다.");
+        return;
+      }
       setEditId(null);
       await load();
     } finally {
@@ -218,6 +236,14 @@ export default function LessonsSurface({ project }: { project: string }) {
                 rows={3}
                 style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}
               />
+              <input
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder="키워드 (쉼표로 구분, 예: prisma, 마이그레이션) — 메시지에 나오면 이 규칙을 넣습니다"
+                aria-label="키워드"
+                style={inp}
+              />
+              {err && <div style={{ fontSize: 12.5, color: "#C0392B" }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {REAL(project) && (
                   <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -272,6 +298,14 @@ export default function LessonsSurface({ project }: { project: string }) {
                   <div key={l.id} style={card}>
                     <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inp} />
                     <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+                    <input
+                      value={editKeywords}
+                      onChange={(e) => setEditKeywords(e.target.value)}
+                      placeholder="키워드 (쉼표로 구분) — 메시지에 나오면 이 규칙을 넣습니다"
+                      aria-label="키워드"
+                      style={inp}
+                    />
+                    {err && <div style={{ fontSize: 12.5, color: "#C0392B" }}>{err}</div>}
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입. 끄면 전역">
                         <input type="checkbox" checked={editPersonal} onChange={(e) => setEditPersonal(e.target.checked)} />
@@ -314,6 +348,8 @@ export default function LessonsSurface({ project }: { project: string }) {
                           setEditTitle(l.title);
                           setEditBody(l.body);
                           setEditMode(l.mode ?? "default");
+                          setEditKeywords((l.keywords ?? []).join(", "));
+                          setErr(null);
                           setEditPersonal(!!l.personal);
                           setEditWasPersonal(!!l.personal);
                         }}
@@ -325,7 +361,10 @@ export default function LessonsSurface({ project }: { project: string }) {
                       </button>
                     </div>
                     <div style={{ fontSize: 13, color: "var(--text-body)", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{l.body}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>수정 {new Date(l.updatedAt).toLocaleString("ko-KR")}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                      수정 {new Date(l.updatedAt).toLocaleString("ko-KR")}
+                      {l.keywords?.length ? <span title="메시지에 이 단어가 나오면 주입"> · 키워드: {l.keywords.join(", ")}</span> : null}
+                    </div>
                   </div>
                 ),
               )}

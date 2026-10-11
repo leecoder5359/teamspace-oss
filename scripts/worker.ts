@@ -12,6 +12,7 @@ import { purgeOldLlmCache, LLM_CACHE_RETENTION_DAYS } from "@/lib/llmCache";
 import { validateEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 import { purgeOldLessonLogs, LESSON_LOG_RETENTION_DAYS } from "@/lib/lessonInspect/log";
+import { hygieneEnabled, hygieneWeekKey, inHygieneWindow, processHygieneDecisions, runWeeklyHygieneAll } from "@/lib/lessonHygiene/service";
 
 /**
  * 예약/비동기 작업 워커(컨테이너 엔트리포인트).
@@ -36,6 +37,8 @@ const PURGE_EVERY_MS = 3600_000;
 const digestWeeks = new Set<string>();
 /** 분기 복원 리허설 리마인더를 이번 프로세스에서 이미 처리한 분기. 1차 가드 — 재기동 뒤 중복은 NotifLog 마커가 막는다. */
 const rehearsalQuarters = new Set<string>();
+/** 레슨 주간 정리를 이번 프로세스에서 이미 돌린 주. 1차 가드 — 재기동 뒤 중복은 LessonHygieneRun(workspaceId, weekKey) unique 가 막는다. */
+const hygieneWeeks = new Set<string>();
 
 async function tick(): Promise<void> {
   try {
@@ -78,6 +81,26 @@ async function tick(): Promise<void> {
         if (rh.notified > 0) log.info("worker.rehearsal_reminder", { msg: `rehearsal reminder ${rh.quarter}: notified=${rh.notified} skipped=${rh.skipped}`, ...rh });
       } catch (e) {
         log.warn("worker.rehearsal_reminder_failed", { msg: "분기 복원 리허설 리마인더 실패", err: e });
+      }
+    }
+    // 레슨 주간 정리: Asia/Seoul 월요일 10시 이후 워크스페이스마다 한 번 제안 → 고위험 승인 카드(LESSON_HYGIENE_CHANNEL, 없으면 기본 채널).
+    // 실패한 워크스페이스가 있으면 Set 에 넣지 않아 다음 tick 에 재시도(이미 만든 워크스페이스는 unique 가 건너뛴다).
+    // 승인 결정 디스패처가 따로 없으므로 매 tick 승인 상태를 폴링해 approved → 적용(트랜잭션·백업), rejected → rejected.
+    if (hygieneEnabled()) {
+      if (inHygieneWindow(now) && !hygieneWeeks.has(hygieneWeekKey(now))) {
+        try {
+          const hy = await runWeeklyHygieneAll(now);
+          if (hy.failed === 0) hygieneWeeks.add(hy.weekKey);
+          if (hy.created || hy.failed) log.info("worker.lesson_hygiene", { msg: `lesson hygiene ${hy.weekKey}: created=${hy.created} failed=${hy.failed}`, ...hy });
+        } catch (e) {
+          log.warn("worker.lesson_hygiene_failed", { msg: "레슨 주간 정리 실패", err: e });
+        }
+      }
+      try {
+        const hd = await processHygieneDecisions(now);
+        if (hd.applied + hd.rejected + hd.failed > 0) log.info("worker.lesson_hygiene_decisions", { msg: `lesson hygiene decisions: applied=${hd.applied} rejected=${hd.rejected} failed=${hd.failed}`, ...hd });
+      } catch (e) {
+        log.warn("worker.lesson_hygiene_decisions_failed", { msg: "레슨 주간 정리 승인 처리 실패", err: e });
       }
     }
     // 끝난 LLM 잡 정리(피드백허브 후속) — payload 에 사장님 원문이 들어 있어 영구보관 금지

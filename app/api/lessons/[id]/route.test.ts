@@ -93,4 +93,17 @@ describe("PATCH /api/lessons/[id] — personal·mode", () => {
     m(prisma.lesson.findUnique).mockResolvedValue(lesson());
     expect((await patch({ personal: true })).status).toBe(400);
   });
+
+  it("keywords 는 통째로 바꾸고, null·빈 문자열은 비우며, 잘못된 값은 400", async () => {
+    m(requireCtx).mockResolvedValue(human("u1"));
+    m(prisma.lesson.findUnique).mockResolvedValue(lesson());
+    await patch({ keywords: "Deploy, 배포" });
+    expect(m(prisma.lesson.update).mock.calls[0][0].data).toEqual({ keywords: ["deploy", "배포"] });
+    await patch({ keywords: null });
+    expect(m(prisma.lesson.update).mock.calls[1][0].data).toEqual({ keywords: [] });
+    await patch({ keywords: "" });
+    expect(m(prisma.lesson.update).mock.calls[2][0].data).toEqual({ keywords: [] });
+    expect((await patch({ keywords: 3 })).status).toBe(400);
+    expect((await patch({ keywords: "x" })).status).toBe(400);
+  });
 });

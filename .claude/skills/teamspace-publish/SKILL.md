@@ -5,7 +5,7 @@ description: HTML 페이지·데모·견적표·리포트를 TeamSpace 에 퍼�
 
 # TeamSpace HTML 퍼블리시
 
-HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고 **초대한 이메일로 Google 로그인한 사람만** 본다(게스트는 워크스페이스 멤버가 아님). 엔드포인트·보안 설계 전체는 `teamspace` 스킬의 「HTML 퍼블리시」 절이 원본이다 — 이 스킬은 **실행 순서와 함정**만 담는다.
+HTML 파일·폴더·zip 을 올리면 `/pages/<slug>` 링크가 생기고 **초대한 이메일로 Google 로그인한 사람만** 본다(게스트는 워크스페이스 멤버가 아님). 엔드포인트·보안 설계 전체는 `teamspace` 스킬의 「HTML 퍼블리시」 절이 원본이다 — 이 스킬은 **실행 순서와 함정**만 담는다.
 
 ## 1. 올리기 전 점검
 
@@ -15,7 +15,7 @@ HTML 파일·폴더·zip 을 올리면 `/s/<slug>` 링크가 생기고 **초대�
 | **루트 기준 경로(`/assets/x.js`) 가 없는가** | 샌드박스 경로에서 로드되지 않는다. 상대경로로 빌드(`vite build --base=./`) |
 | **폴더·zip 이면 `index.html` 이 있는가** | 필수. 최상위 폴더 한 겹은 자동으로 벗긴다. 20MB·해제 50MB·파일 500개 |
 | **비밀값·개인정보가 없는가** | 초대 게스트 전용이어도 링크가 전달되는 순간 밖으로 나간 것이다 |
-| **여러 페이지면 `pages/<영문-kebab>.html` 인가** | 주소창에 그대로 보인다(`/s/<slug>/pages/supabase-setup`). `A1.html`·한글 파일명 대신 내용을 말하는 영문 소문자·하이픈 이름으로. 페이지끼리는 **상대 링크**(`pages/x.html`, 하위에서 `../index.html`) — 루트 기준(`/pages/x.html`)은 안 열린다 |
+| **여러 페이지면 루트에 `<영문-kebab>.html` 인가** | 하위 폴더(`pages/` 등) 없이 `index.html` 옆에 둔다 — 주소창에 그대로 보인다(`supabase-setup.html` → `/pages/<slug>/supabase-setup`). `A1.html`·한글 파일명 대신 내용을 말하는 영문 소문자·하이픈 이름으로. 페이지끼리는 **상대 링크**(`supabase-setup.html`, `index.html`, `supabase-setup.html#keys`) — 루트 기준(`/supabase-setup.html`)은 안 열린다 |
 | **`__ts/` 폴더가 없는가** | 예약 폴더(주소창 동기화 스크립트 자리) — 올리면 빠진다 |
 
 **감싸기** (doctype 없는 Artifact HTML → 정식 문서, 원본은 건드리지 않고 사본을 만든다):
@@ -86,7 +86,7 @@ MCP 가 연결돼 있으면 `site_publish {path,title?,siteId?,invites?,slug?}` 
 
 **주소(slug) 고르기**: 영문 소문자·숫자·하이픈, 3~60자(`banjang-handover`, `q4-cost-estimate`). 제목이 한글이어도 내용을 말하는 영어로 직접 고른다(자동 변환 없음). 예약어(`api`·`pub`·`new`·`admin`·`login` 등)와 이미 쓰는 주소(다른 사이트의 옛 주소 포함)는 거절된다 — 409 면 다른 이름으로. 생략하면 무작위 12자.
 
-**딥링크**: 하위 페이지는 `/s/<slug>/pages/<이름>`(`.html` 없이)으로 바로 열린다. `a/b` → `a/b.html` → `a/b/index.html` 순으로 찾는다. 그래서 번들에 `a.html` 과 `a/index.html` 이 **둘 다** 있으면 `/s/<slug>/a` 는 늘 `a.html` 을 열고 `a/index.html` 은 그 주소로 닿지 않는다 — 퍼블리시는 막지 않지만 응답 `warnings` 에 겹치는 쌍을 실어 주고 `ws site publish` 가 `⚠` 로 찍는다. 보이면 둘 중 하나의 이름을 바꾼다. 사이트 안에서 이동하면 주소창이 그 페이지 주소로 바뀌어 그대로 복사해 공유할 수 있다(`#섹션` 포함).
+**딥링크**: 하위 페이지는 `/pages/<slug>/<이름>`(`.html` 없이, 예 `/pages/banjang-handover/supabase-setup#keys`)으로 바로 열린다. `a/b` → `a/b.html` → `a/b/index.html` 순으로 찾는다. 그래서 번들에 `a.html` 과 `a/index.html` 이 **둘 다** 있으면 `/pages/<slug>/a` 는 늘 `a.html` 을 열고 `a/index.html` 은 그 주소로 닿지 않는다 — 퍼블리시는 막지 않지만 응답 `warnings` 에 겹치는 쌍을 실어 주고 `ws site publish` 가 `⚠` 로 찍는다. 보이면 둘 중 하나의 이름을 바꾼다. 사이트 안에서 이동하면 주소창이 그 페이지 주소로 바뀌어 그대로 복사해 공유할 수 있다(`#섹션` 포함).
 
 **같은 내용을 고쳐 다시 올릴 때 새 사이트를 만들지 않는다.** 먼저 `site ls` 로 기존 siteId 를 찾고 `--site` 로 버전만 올린다 — 새로 만들면 이미 전달한 링크가 옛 내용에 머문다.
 
@@ -95,14 +95,15 @@ MCP 가 연결돼 있으면 `site_publish {path,title?,siteId?,invites?,slug?}` 
 1. `pnpm ws site ls` 에 새 행(또는 올라간 버전)이 보이는지.
 2. 비로그인 요청이 로그인으로 넘어가는지 — 게이트가 살아 있다는 확인:
    ```bash
-   curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://teamspace.example.com/s/<slug>
-   # 307 -> .../login?callbackUrl=%2Fs%2F<slug> 이면 정상
+   curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://teamspace.example.com/pages/<slug>
+   # 307 -> .../login?callbackUrl=%2Fpages%2F<slug> 이면 정상
+   # 옛 링크 /s/<slug>/… 는 308 -> /pages/<slug>/… (판정 없이 넘기기만 한다)
    ```
 3. 화면이 실제로 뜨는지는 로그인 세션이 있어야 볼 수 있다. 확인하지 않았다면 **확인하지 않았다고 말한다.**
 
 ## 5. 사용자에게 안내할 것
 
-- **링크는 외부 주소로 바꿔서 준다.** CLI 는 `http://localhost:3002/s/<slug>` 를 출력하지만(웹 서비스 plist 에 `PUBLIC_BASE_URL` 이 없음) 사람에게는 `https://teamspace.example.com/s/<slug>` 를 준다.
+- **링크는 외부 주소로 바꿔서 준다.** CLI 는 `http://localhost:3002/pages/<slug>` 를 출력하지만(웹 서비스 plist 에 `PUBLIC_BASE_URL` 이 없음) 사람에게는 `https://teamspace.example.com/pages/<slug>` 를 준다. 이미 나간 `/s/<slug>` 링크는 계속 열린다(→ `/pages/` 308).
 - **초대 메일은 자동으로 가지 않는다.** 링크를 직접 전달해야 하고, 받는 사람은 **초대한 그 이메일의 Google 계정으로 로그인**해야 열린다.
 - 초대 0명이면 워크스페이스 멤버만 볼 수 있다 — 외부인에게 보여줄 거면 이메일을 받아 `site invite`.
 - 2번 표에서 막히는 기능(저장 유지·자동 복사 등)이 페이지에 있으면 어떻게 동작하는지 한 줄로 알린다.

@@ -61,6 +61,7 @@ const FEATURE_LABEL: Record<string, string> = {
   "onboarding-extract": "온보딩 뽑기",
   "entities-extract": "개체 뽑기",
   "feedback-classify": "피드백 분류",
+  "lesson-hygiene": "레슨 주간 정리",
   complete: "기타",
 };
 const PROVIDER_LABEL: Record<string, string> = { api: "Anthropic API", cli: "claude CLI(로컬 로그인)", off: "꺼짐" };

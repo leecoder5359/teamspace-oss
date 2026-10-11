@@ -78,8 +78,8 @@ describe("PATCH /api/sites/[id] — slug", () => {
     expect(prisma.publishedSite.update).toHaveBeenCalledWith({ where: { id: "cs1" }, data: { slug: "banjang-handover" } });
     expect(prisma.siteSlugAlias.create).toHaveBeenCalledWith({ data: { slug: "OLDrandom123", siteId: "cs1" } });
     const body = await res.json();
-    expect(body.url).toMatch(/\/s\/banjang-handover$/);
-    expect(recordActivity).toHaveBeenCalledWith(ctx, "주소를 /s/banjang-handover 로 바꿈", "site", "T", "cs1");
+    expect(body.url).toMatch(/\/pages\/banjang-handover$/);
+    expect(recordActivity).toHaveBeenCalledWith(ctx, "주소를 /pages/banjang-handover 로 바꿈", "site", "T", "cs1");
   });
 
   it("변경은 트랜잭션 안에서 advisory 락을 먼저 잡고 검사·쓰기", async () => {

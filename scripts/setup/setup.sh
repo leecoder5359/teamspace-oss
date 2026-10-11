@@ -153,8 +153,8 @@ if [ -n "${TS_DIR:-}" ] && [ -f "$TS_DIR/scripts/mcp-server.ts" ] && command -v 
   fi
 fi
 
-# 6) 전역 훅 4종 (서버 최신본으로 덮어씀)
-for h in teamspace-context teamspace-session-end deny-repo-docs teamspace-project-context; do
+# 6) 전역 훅 5종 (서버 최신본으로 덮어씀)
+for h in teamspace-context teamspace-session-end deny-repo-docs teamspace-project-context teamspace-prompt-lessons; do
   curl -sf "$BASE/setup/hooks/$h.mjs" -o "$HOME/.claude/hooks/$h.mjs" || die "$h 훅 내려받기 실패"
 done
 
@@ -165,6 +165,7 @@ TMP=$(mktemp)
 jq '
   .hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{matcher:"Write|Edit|MultiEdit|NotebookEdit",hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/deny-repo-docs.mjs\""}]}] | unique) |
   .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{matcher:"Read|Write|Edit|MultiEdit|NotebookEdit|Glob|Grep|Bash",hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-project-context.mjs\""}]}] | unique) |
+  .hooks.UserPromptSubmit = ((.hooks.UserPromptSubmit // []) + [{hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-prompt-lessons.mjs\"",timeout:5}]}] | unique) |
   .hooks.SessionStart = ((.hooks.SessionStart // []) + [{hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-context.mjs\""}]}] | unique) |
   .hooks.SessionEnd = ((.hooks.SessionEnd // []) + [{hooks:[{type:"command",command:"node \"$HOME/.claude/hooks/teamspace-session-end.mjs\""}]}] | unique) |
   .env = ((.env // {}) + {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS":"1"})
@@ -192,7 +193,7 @@ fi
 say "검증:"
 curl -sf "$BASE/api/health" >/dev/null && echo "  ✅ 중앙서버 도달" || echo "  ❌ 서버"
 [ -f "$CFG" ] && echo "  ✅ teamspace.json" || echo "  ❌ teamspace.json"
-ls "$HOME/.claude/hooks/"*.mjs >/dev/null 2>&1 && echo "  ✅ 전역 훅 3종" || echo "  ❌ 훅"
+ls "$HOME/.claude/hooks/"*.mjs >/dev/null 2>&1 && echo "  ✅ 전역 훅 5종" || echo "  ❌ 훅"
 if [ -n "$PLUGIN_SCOPE" ]; then
   claude plugin list 2>/dev/null | grep -q "$PLUGIN_SCOPE" && echo "  ✅ 플러그인 스택(@$PLUGIN_SCOPE)" || echo "  ⚠️ 플러그인 확인 필요"
 fi

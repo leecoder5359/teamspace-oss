@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
  *      해당 이메일의 invited/active 멤버십이 있으면 허용.
  *  (b) 도메인 — 이메일 도메인이 AUTH_ALLOWED_DOMAINS(콤마/공백 구분) 에 포함되면 허용.
  *  (c) 퍼블리시 게스트 — 살아 있는(active·미삭제) 퍼블리시 사이트의 SiteInvite 에 있는 이메일.
- *      멤버가 아니므로 볼 수 있는 건 /s/<slug> 뿐이다(워크스페이스는 requireCtx 가 막는다).
+ *      멤버가 아니므로 볼 수 있는 건 /pages/<slug> 뿐이다(워크스페이스는 requireCtx 가 막는다).
  *
  * AUTH_ALLOWED_DOMAINS 가 비어 있으면 (b)는 항상 불일치 → (a)·(c) 초대 전용 모드.
  * 하나라도 만족하면 로그인 허용.
@@ -68,7 +68,7 @@ export async function isSignInAllowed(
 
   // (c) 퍼블리시 사이트 게스트 — 살아 있는 사이트의 초대 목록에 있는 이메일.
   //     이 경로로 들어온 사람은 멤버가 아니므로 워크스페이스 화면·API 는 requireCtx 가 막고,
-  //     자동 가입도 canAutoJoinDefaultWorkspace 가 막는다. 볼 수 있는 건 /s/<slug> 뿐이다.
+  //     자동 가입도 canAutoJoinDefaultWorkspace 가 막는다. 볼 수 있는 건 /pages/<slug> 뿐이다.
   const invite = await prisma.siteInvite.findFirst({
     where: { email: normalized, site: { is: { status: "active", deletedAt: null } } },
     select: { id: true },

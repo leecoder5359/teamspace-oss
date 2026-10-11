@@ -22,6 +22,7 @@ const MAX_TOKENS: Record<string, number> = {
   "graph-infer": 800, // 최대 3×{id(cuid),reason} — 300 이면 잘려 [] → inferTriedAt 이 영구로 찍힌다
   provenance: 500,
   clip: 800,
+  "lesson-hygiene": 4000, // 병합 newBody(합친 본문)가 여러 건 — 1500 이면 잘려 JSON 파싱 실패 → 검토 항목으로만 떨어진다
 };
 const DEFAULT_MAX_TOKENS = 1500; // *-extract 와 미지정
 

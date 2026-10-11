@@ -1265,7 +1265,7 @@ add({
 add({
   name: "lesson add",
   usage:
-    'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…> | --personal] [--mode required|default|ondemand]   (범위 없으면 전역 — 모든 레포 세션에 주입. --personal = 나(토큰이면 발급자) 세션에만. mode: required 필수(예산 먼저)·default·ondemand 세션 주입 제외)',
+    'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…> | --personal] [--mode required|default|ondemand] [--keywords "a,b,c"]   (범위 없으면 전역 — 모든 레포 세션에 주입. --personal = 나(토큰이면 발급자) 세션에만. mode: required 필수(예산 먼저)·default·ondemand 세션 주입 제외. --keywords: 메시지에 이 단어가 있으면 UserPromptSubmit 훅이 주입)',
   ep: ["lessons/route.ts"],
   run: async (a) =>
     out(
@@ -1276,6 +1276,7 @@ add({
         stack: flag(a, "stack"),
         ...(bool(a, "personal") ? { personal: true } : {}),
         ...(flag(a, "mode") ? { mode: flag(a, "mode") } : {}),
+        ...(flag(a, "keywords") !== undefined ? { keywords: flag(a, "keywords") } : {}),
       }),
     ),
 });
@@ -1285,28 +1286,52 @@ add({
   ep: ["lessons/[id]/route.ts"],
   run: async (a) => {
     const { lesson } = (await api("GET", `/api/lessons/${a.pos[0]}`)) as {
-      lesson: { title: string; body: string; projectId: string | null; stack?: string | null; personal?: boolean; mode?: string };
+      lesson: { title: string; body: string; projectId: string | null; stack?: string | null; personal?: boolean; mode?: string; keywords?: string[] };
     };
     const scope = lesson.personal ? "개인" : lesson.projectId ? `프로젝트 ${lesson.projectId}` : lesson.stack ? `스택 ${lesson.stack}` : "전역";
     const mode = lesson.mode && lesson.mode !== "default" ? ` · ${LESSON_MODE_KO[lesson.mode] ?? lesson.mode}` : "";
-    out(`# ${lesson.title}  [${scope}${mode}]\n\n${lesson.body}`);
+    const kw = lesson.keywords?.length ? `\n_키워드: ${lesson.keywords.join(", ")}_` : "";
+    out(`# ${lesson.title}  [${scope}${mode}]${kw}\n\n${lesson.body}`);
   },
 });
 add({
   name: "lesson set",
   usage:
-    'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --personal | --global] [--mode required|default|ondemand]   (범위는 하나: 개인·프로젝트·스택·전역)',
+    'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --personal | --global] [--mode required|default|ondemand] [--keywords "a,b,c" | --keywords ""]   (범위는 하나: 개인·프로젝트·스택·전역. --keywords 는 통째로 바꿈, "" = 비움)',
   ep: ["lessons/[id]/route.ts"],
   run: async (a) => {
     const body: Record<string, unknown> = {};
     if (flag(a, "title")) body.title = flag(a, "title");
     if (flag(a, "body")) body.body = flag(a, "body");
     if (flag(a, "mode")) body.mode = flag(a, "mode");
+    if (flag(a, "keywords") !== undefined) body.keywords = flag(a, "keywords");
     if (bool(a, "global")) Object.assign(body, { projectId: null, stack: null, personal: false });
     else if (bool(a, "personal")) body.personal = true;
     else if (flag(a, "project")) body.projectId = flag(a, "project");
     else if (flag(a, "stack")) body.stack = flag(a, "stack");
     out(await api("PATCH", `/api/lessons/${a.pos[0]}`, body));
+  },
+});
+add({
+  name: "lesson match",
+  usage: 'lesson match "<메시지>" [--cwd <path>] [--exclude id1,id2] [--md]   (UserPromptSubmit 훅이 이 메시지에 넣을 레슨 미리 보기 — 기록 안 함. 기본 cwd = 현재 폴더)',
+  ep: ["context/prompt/route.ts"],
+  run: async (a) => {
+    const prompt = a.pos.join(" ");
+    if (!prompt.trim()) throw new Error('usage: ws lesson match "<메시지>" [--cwd <path>]');
+    const exclude = (flag(a, "exclude") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const r = (await api("POST", "/api/context/prompt", { prompt, cwd: flag(a, "cwd") ?? process.cwd(), exclude, preview: true })) as {
+      markdown: string;
+      lessonIds: string[];
+      projectIds: string[];
+      cwdProjectId?: string | null;
+      matches: { id: string; title: string; reason: "keyword" | "mention"; hits: string[]; shown: boolean }[];
+    };
+    out(`■ cwd 프로젝트: ${r.cwdProjectId ?? "(없음)"} · 언급된 프로젝트: ${r.projectIds.length ? r.projectIds.join(", ") : "(없음)"}`);
+    if (!r.matches.length) return out("■ 넣을 레슨 없음(짧은 메시지이거나 키워드·별칭이 안 맞음)");
+    out(`■ 후보 ${r.matches.length}개 · 주입 ${r.lessonIds.length}개 (${r.markdown.length}자)`);
+    for (const x of r.matches) out(`  ${x.shown ? "✓" : "…"} ${x.id}  ${x.reason === "keyword" ? `키워드 ${x.hits.join(",")}` : "언급 프로젝트(최근)"}  ${x.title}`);
+    if (bool(a, "md") && r.markdown) out(`\n${r.markdown}`);
   },
 });
 add({
@@ -1391,6 +1416,7 @@ add({
     const r = (await api("GET", `/api/lessons/injections?days=${encodeURIComponent(flag(a, "days") ?? "30")}`)) as {
       days: number;
       totals: { injections: number; last7: number; reads: number };
+      byVia?: { via: string; mode: string; count: number; last7: number }[];
       byProject: { projectName: string | null; projectId: string | null; last7: number; lastN: number }[];
       recent: { at: string; actorName: string | null; projectName: string | null; cwd: string | null; via: string; mode: string; gist: number; titleOnly: number; omitted: number; chars: number }[];
       lessons: { id: string; title: string; gist: number; titleOnly: number; omitted: number; reads: number }[];
@@ -1401,6 +1427,7 @@ add({
       };
     };
     out(`■ 최근 ${r.days}일 주입 ${r.totals.injections}회 (7일 ${r.totals.last7}회) · 에이전트 전문 조회 ${r.totals.reads}회`);
+    if (r.byVia?.length) out(`  훅별: ${r.byVia.map((v) => `${v.via}/${v.mode} ${v.count}(7일 ${v.last7})`).join(" · ")}`);
     for (const p of r.byProject) out(`  ${p.projectName ?? (p.projectId ? p.projectId : "(프로젝트 미매핑)")}\t7일 ${p.last7} · ${r.days}일 ${p.lastN}`);
     if (r.recent.length) {
       out("■ 최근 주입");
@@ -1413,6 +1440,86 @@ add({
     for (const l of c.alwaysTruncated) out(`  늘 잘림: ${l.id} ${l.title}`);
     for (const l of c.neverInjected) out(`  주입 0회: ${l.id} ${l.title}`);
     for (const p of c.similarTitles) out(`  비슷함(${p.score}): ${p.a.title} ↔ ${p.b.title}  (${p.a.id} · ${p.b.id})`);
+  },
+});
+type HygieneProposalOut = {
+  merges: { keepId: string; mergeIds: string[]; newTitle: string; reason: string }[];
+  drops: { id: string; reason: string }[];
+  review: { id: string; reason: string }[];
+  required: { id: string; to: string; reason: string }[];
+  ondemand: { id: string; keywords: string[] }[];
+  scopeFixes: { id: string; to: string; reason: string }[];
+};
+function printHygieneProposal(p: HygieneProposalOut, titles: Record<string, string> = {}): void {
+  const t = (id: string) => `${titles[id] ?? ""} (${id})`.trim();
+  for (const m of p.merges) out(`  병합: ${t(m.keepId)} ← ${m.mergeIds.map(t).join(", ")}\n        → ${m.newTitle}${m.reason ? `\n        이유: ${m.reason}` : ""}`);
+  for (const d of p.drops) out(`  삭제: ${t(d.id)} — ${d.reason}`);
+  for (const s of p.scopeFixes) out(`  범위: ${t(s.id)} → ${s.to} — ${s.reason}`);
+  for (const r of p.required) out(`  ${r.to === "required" ? "필수로" : "기본으로"}: ${t(r.id)} — ${r.reason}`);
+  for (const o of p.ondemand) out(`  키워드: ${t(o.id)} ← ${o.keywords.join(", ")}`);
+  for (const r of p.review) out(`  검토: ${t(r.id)} — ${r.reason}`);
+}
+add({
+  name: "lesson hygiene",
+  usage:
+    "lesson hygiene [--run-now] [--dry-run]   (레슨 주간 정리 — 플래그 없으면 최근 실행의 전체 제안. --run-now: 이번 주 실행을 지금 만들고 승인 카드 발송(이미 있으면 그대로, admin). --dry-run: 저장·카드 없이 제안만 미리 보기(admin))",
+  ep: ["lessons/hygiene/route.ts", "lessons/hygiene/[runId]/route.ts"],
+  run: async (a) => {
+    if (a.flags["dry-run"] !== undefined || a.flags["run-now"] !== undefined) {
+      const dryRun = a.flags["dry-run"] !== undefined;
+      const r = (await api("POST", "/api/lessons/hygiene", { dryRun })) as {
+        dryRun: boolean;
+        weekKey: string;
+        summary?: string;
+        proposal?: HygieneProposalOut;
+        created?: boolean;
+        run?: { id: string; status: string; summary: string; approvalId: string | null };
+        sent?: boolean;
+        error?: string;
+      };
+      if (r.dryRun) {
+        out(`■ ${r.weekKey} 미리 보기(저장·카드 없음)\n${r.summary ?? ""}`);
+        if (r.proposal) printHygieneProposal(r.proposal);
+        return;
+      }
+      const run = r.run;
+      out(`■ ${r.weekKey} ${r.created ? "새 실행" : "이미 있는 실행"} ${run?.id ?? ""} · ${run?.status ?? ""}${r.sent === false ? ` · 카드 발송 실패(${r.error ?? "?"})` : ""}`);
+      if (run?.summary) out(run.summary);
+      return;
+    }
+    const list = (await api("GET", "/api/lessons/hygiene?limit=1")) as { runs: { id: string }[] };
+    if (!list.runs.length) return out("레슨 주간 정리 실행이 아직 없습니다. 지금 미리 보기: pnpm ws lesson hygiene --dry-run");
+    const d = (await api("GET", `/api/lessons/hygiene/${list.runs[0].id}`)) as {
+      run: { id: string; weekKey: string; status: string; summary: string; proposal: HygieneProposalOut };
+      titles: Record<string, string>;
+    };
+    out(`■ ${d.run.weekKey} ${d.run.id} · ${d.run.status}\n${d.run.summary}`);
+    printHygieneProposal(d.run.proposal, d.titles);
+  },
+});
+add({
+  name: "lesson hygiene ls",
+  usage: "lesson hygiene ls [--limit 20]   (레슨 주간 정리 실행 목록 — 주·상태·건수, 편집자 이상)",
+  ep: ["lessons/hygiene/route.ts"],
+  run: async (a) => {
+    const r = (await api("GET", `/api/lessons/hygiene?limit=${encodeURIComponent(flag(a, "limit") ?? "20")}`)) as {
+      runs: { id: string; weekKey: string; status: string; counts: Record<string, number>; appliedAt: string | null }[];
+      enabled: boolean;
+    };
+    if (!r.enabled) out("(워커 주간 정리 꺼짐 — LESSON_HYGIENE=off)");
+    for (const x of r.runs) {
+      const c = x.counts;
+      out(`${x.id}\t${x.weekKey}\t${x.status}\t병합 ${c.merges} 삭제 ${c.drops} 범위 ${c.scopeFixes} 필수 ${c.required} 키워드 ${c.ondemand} 검토 ${c.review}${x.appliedAt ? `\t적용 ${x.appliedAt.slice(0, 16)}` : ""}`);
+    }
+  },
+});
+add({
+  name: "lesson hygiene revert",
+  usage: "lesson hygiene revert <runId>   (적용된 주간 정리를 적용 직전 백업으로 되돌림 — 지운 레슨은 원래 id 로 재생성, admin)",
+  ep: ["lessons/hygiene/[runId]/revert/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws lesson hygiene revert <runId>");
+    out(await api("POST", `/api/lessons/hygiene/${encodeURIComponent(a.pos[0])}/revert`));
   },
 });
 add({
@@ -1541,9 +1648,19 @@ add({
 });
 add({
   name: "project set",
-  usage: "project set <id> [--name <n>] [--desc <d>] [--color <c>] [--repo <url>] [--stack next,supabase]   (--stack: 스택 레슨 주입 대상)",
+  usage: 'project set <id> [--name <n>] [--desc <d>] [--color <c>] [--repo <url>] [--stack next,supabase] [--aliases "반장,banjang"]   (--stack: 스택 레슨 주입 대상 · --aliases: 메시지에 이 이름이 있으면 그 프로젝트 레슨 주입(UserPromptSubmit), "" = 비움)',
   ep: ["projects/[id]/route.ts"],
-  run: async (a) => out(await api("PATCH", `/api/projects/${a.pos[0]}`, { name: flag(a, "name"), description: flag(a, "desc"), color: flag(a, "color"), repoUrl: flag(a, "repo"), stack: flag(a, "stack") })),
+  run: async (a) =>
+    out(
+      await api("PATCH", `/api/projects/${a.pos[0]}`, {
+        name: flag(a, "name"),
+        description: flag(a, "desc"),
+        color: flag(a, "color"),
+        repoUrl: flag(a, "repo"),
+        stack: flag(a, "stack"),
+        ...(flag(a, "aliases") !== undefined ? { aliases: flag(a, "aliases") } : {}),
+      }),
+    ),
 });
 add({
   name: "project rm",

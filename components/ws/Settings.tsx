@@ -8,6 +8,7 @@ import DataTransfer from "./DataTransfer";
 import AiRoutes from "./AiRoutes";
 import OpsStatus from "./OpsStatus";
 import LessonInspect from "./LessonInspect";
+import LessonHygiene from "./LessonHygiene";
 import SkillRegistry from "./SkillRegistry";
 import LiveSessions from "./LiveSessions";
 import { StatusPill } from "./ui";
@@ -190,6 +191,13 @@ export default function Settings() {
       {(isAdmin || info.role === "editor") && (
         <Section title="레슨 주입 점검">
           <LessonInspect />
+        </Section>
+      )}
+
+      {/* 레슨 주간 정리 (편집자 이상, 미리 보기·되돌리기는 admin) — 슬랙 승인 카드의 '전체 보기' 링크가 /settings#lesson-hygiene 로 온다 */}
+      {(isAdmin || info.role === "editor") && (
+        <Section title="레슨 주간 정리" id="lesson-hygiene">
+          <LessonHygiene isAdmin={isAdmin} />
         </Section>
       )}
 

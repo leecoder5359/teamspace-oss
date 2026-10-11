@@ -12,7 +12,7 @@ import { lessonApplicability, type LessonRenderReport } from "@/lib/lessonInject
 
 export const LESSON_LOG_RETENTION_DAYS = 90;
 
-const VIA = new Set(["SessionStart", "PostToolUse"]);
+const VIA = new Set(["SessionStart", "PostToolUse", "UserPromptSubmit"]);
 /** 훅이 보낸 via 를 정규화 — 모르는 값·없음은 unknown. */
 export function normalizeVia(raw: string | null | undefined): string {
   return raw && VIA.has(raw) ? raw : "unknown";
@@ -48,7 +48,8 @@ export type LessonInjectionRecord = {
   cwd?: string | null;
   projectId?: string | null;
   via?: string | null;
-  mode: "compact" | "brief";
+  /** compact(새 세션) · brief(이어가기·압축) · prompt(UserPromptSubmit — 메시지에 맞춘 레슨, 전부 요약 줄) */
+  mode: "compact" | "brief" | "prompt";
   ids: { gistIds: string[]; titleIds: string[]; omittedIds: string[] };
   chars: number;
 };

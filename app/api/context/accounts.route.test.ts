@@ -7,7 +7,8 @@ import { join } from "node:path";
    골든 파일(__fixtures__/compact-no-targets.golden.txt)은 P3c 이전 라우트(a3e1fc8)로 만든 출력이다.
    반영 대상이 없는 프로젝트의 compact·brief 출력이 그것과 바이트 단위로 같아야 한다.
    (다시 만들 일은 없어야 한다 — 만들 땐 이전 라우트로 CONTEXT_GOLDEN_WRITE=1)
-   2026-10-10 레슨 예산 개편(필수 먼저·좁은 범위 먼저)으로 레슨 요약 줄 배분만 바뀌어 다시 만들었다 — 계정 줄과 무관. */
+   2026-10-10 레슨 예산 개편(필수 먼저·좁은 범위 먼저)으로 레슨 요약 줄 배분만 바뀌어 다시 만들었다 — 계정 줄과 무관.
+   2026-10-11 전체 예산 정합(레슨 예산이 고정 줄까지 포함·여유 400 → 1)으로 요약 줄 3개가 늘어 다시 만들었다 — 계정 줄과 무관. */
 
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
 vi.mock("@/lib/pageGuard", () => ({
@@ -140,5 +141,44 @@ describe("GET /api/context — 계정 줄(P3c)", () => {
     const res = await GET(new Request(`http://t/api/context?cwd=${encodeURIComponent(CWD)}&compact=1`));
     expect(res.status).toBe(200);
     expect(await res.text()).not.toContain("## 계정");
+  });
+});
+
+describe("GET /api/context — 전체 예산(CONTEXT_BUDGET) 정합", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    seed();
+  });
+
+  // 실측(2026-10-11, lesson inspect): 필수 13개 + 나머지 섹션이 꽉 찬 워크스페이스에서 10,017 / 9,000 으로 넘쳤다.
+  it("필수 레슨이 많고 나머지 섹션이 꽉 차도 전체는 예산 안, 필수는 전부 요약 — 줄어드는 건 나머지 섹션", async () => {
+    const required = Array.from({ length: 13 }, (_, i) => ({ id: `rq${i}`, title: `필수 규칙 ${i} — 반드시 지킨다`, body: `처방: 필수 규칙 ${i} 의 본문 `.repeat(12), projectId: null, stack: null, mode: "required" }));
+    db().lesson.findMany.mockResolvedValue([...required, ...lessons]);
+    db().page.findMany.mockImplementation(async (a: { where: { kind: string } }) =>
+      a.where.kind === "doc" ? Array.from({ length: 80 }, (_, i) => ({ id: `d${i}`, title: `아주 긴 문서 제목 ${i} — 설계·계획·리포트`, updatedAt: new Date(0) })) : [{ id: "board1" }],
+    );
+    db().dbProperty.findMany.mockResolvedValue([{ id: "t", name: "제목", type: "text", config: {} }]);
+    db().dbRow.findMany.mockResolvedValue(Array.from({ length: 60 }, (_, i) => ({ props: { t: `열린 태스크 ${i} — 꽤 길게 적은 태스크 제목` } })));
+    m(loadGraph).mockResolvedValue({
+      nodes: Array.from({ length: 40 }, (_, i) => ({ id: `n${i}`, title: `지식 지도 문서 ${i} — 허브 후보`, type: "doc", href: `/p/n${i}`, projectId: P })),
+      edges: Array.from({ length: 39 }, (_, i) => ({ from: "n0", to: `n${i + 1}`, kind: "link", kinds: ["link"], tag: "추출" })),
+    });
+    db().decision.findMany.mockResolvedValue(Array.from({ length: 30 }, (_, i) => ({ title: `결정 ${i}`, decision: "이렇게 간다 ".repeat(20) })));
+    db().risk.findMany.mockResolvedValue(Array.from({ length: 30 }, (_, i) => ({ title: `리스크 ${i} — 길게 적은 리스크 설명`, severity: "high" })));
+    db().glossaryTerm.findMany.mockResolvedValue(Array.from({ length: 100 }, (_, i) => ({ term: `용어${i}`, definition: "뜻" })));
+    const md = await get("compact=1");
+    expect(md.length).toBeLessThanOrEqual(CONTEXT_BUDGET);
+    for (let i = 0; i < 13; i++) expect(md).toMatch(new RegExp(`- \\*\\*필수 규칙 ${i} — 반드시 지킨다\\*\\* — .+\`rq${i}\``));
+    expect(md).toContain("## 문서 (12)"); // 섹션 제목·개수는 남는다
+    expect(md).toContain("## 태스크 보드 — 열린 60건");
+    expect(md).toMatch(/- … 외 \d+건 \(MCP `doc_list`\)/); // 넘친 건 '외 N건' 으로
+  });
+
+  it("inspect 보고서의 totalChars 도 같은 정합(시뮬레이터 = 실제 주입)", async () => {
+    const res = await GET(new Request(`http://t/api/context?cwd=${encodeURIComponent(CWD)}&compact=1&format=json&inspect=1`));
+    const j = (await res.json()) as { markdown: string; lessonReport: { totalChars: number; chars: number; budget: number } };
+    expect(j.lessonReport.totalChars).toBe(j.markdown.length);
+    expect(j.lessonReport.totalChars).toBeLessThanOrEqual(CONTEXT_BUDGET);
+    expect(j.lessonReport.chars).toBeLessThanOrEqual(j.lessonReport.budget);
   });
 });

@@ -67,7 +67,7 @@ describe("POST /api/sites", () => {
     const res = await POST(upload("보고서.html", Buffer.from("<p>"), { invites: "g@gmail.com, bad" }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.url).toMatch(/\/s\/SLUG$/);
+    expect(body.url).toMatch(/\/pages\/SLUG$/);
     expect(body.invites).toEqual({ added: ["g@gmail.com"], invalid: ["bad"] });
     expect(tx.siteVersion.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siteId: "cs1", version: 1, fileCount: 1 }) });
     expect(tx.siteInvite.createMany).toHaveBeenCalledWith({ data: [{ siteId: "cs1", email: "g@gmail.com", createdById: "u1" }], skipDuplicates: true });
@@ -94,7 +94,7 @@ describe("POST /api/sites — slug(설명형 주소)", () => {
     const res = await POST(upload("a.html", Buffer.from("<p>"), { slug: "banjang-handover" }));
     expect(res.status).toBe(201);
     expect(tx.publishedSite.create.mock.calls[0][0].data.slug).toBe("banjang-handover");
-    expect((await res.json()).url).toMatch(/\/s\/banjang-handover$/);
+    expect((await res.json()).url).toMatch(/\/pages\/banjang-handover$/);
   });
 
   it("slug 미지정이면 무작위 12자", async () => {
@@ -162,7 +162,7 @@ describe("GET /api/sites", () => {
     ]);
     const body = await (await GET(new Request("http://t/api/sites"))).json();
     expect(body.sites[0]).toMatchObject({ slug: "new-one", aliases: ["OLDrandom123"] });
-    expect(body.sites[0].url).toMatch(/\/s\/new-one$/);
+    expect(body.sites[0].url).toMatch(/\/pages\/new-one$/);
   });
   it("워크스페이스 사이트만, 삭제 제외로 조회", async () => {
     m(requireCtx).mockResolvedValue(ctx);

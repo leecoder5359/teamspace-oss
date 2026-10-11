@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderLessons, renderLessonsReport, buildLessonSection, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, lessonApplicability, lessonScopeOf, lessonModeOf, parseLessonMode, type LessonLite } from "./lessonInject";
+import { renderLessons, renderLessonsReport, buildLessonSection, lessonMinBudget, lessonBudgetFor, CONTEXT_BUDGET, LESSON_BUDGET, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, lessonApplicability, lessonScopeOf, lessonModeOf, parseLessonMode, type LessonLite } from "./lessonInject";
 import { legacyRenderLessons, legacyLessonBudget } from "./lessonInject.legacy.fixture";
 
 const L = (id: string, title: string, body: string, projectId: string | null = null) => ({ id, title, body, projectId });
@@ -337,5 +337,54 @@ describe("renderLessonsReport — 필수 먼저 · 좁은 범위 먼저 · ondem
     const lessons = [mk("mine", { userId: "me" })];
     expect(buildLessonSection({ lessons, projectId: null, projectName: null, projectStack: [], personId: "me", compact: true, restChars: 0 }).lines.join("\n")).toContain("`mine`");
     expect(buildLessonSection({ lessons, projectId: null, projectName: null, projectStack: [], compact: true, restChars: 0 }).lines.join("\n")).not.toContain("`mine`");
+  });
+});
+
+describe("compact 예산 = 레슨 섹션 전체 글자 수(2026-10-11)", () => {
+  const req = (n: number) => Array.from({ length: n }, (_, i) => ({ ...L(`r${i}`, `필수 규칙 ${i}`, "처방: " + "필수 본문 ".repeat(40)), mode: "required" }));
+  const glob = (n: number) => Array.from({ length: n }, (_, i) => L(`g${i}`, `전역 규칙 ${i}`, "처방: " + "본문 ".repeat(60)));
+  const proj = (n: number) => Array.from({ length: n }, (_, i) => L(`p${i}`, `프로젝트 규칙 ${i}`, "처방: " + "본문 ".repeat(60), "P"));
+
+  it("머리·섹션 제목·꼬리·안내 줄까지 합쳐 budget 을 넘지 않는다(종전엔 레슨 줄에만 걸려 ~300자 넘쳤다)", () => {
+    const lessons = [...req(13), ...glob(60), ...proj(40), { ...L("od", "필요할 때만", "본문"), mode: "ondemand" }, { ...L("st", "스택", "본문"), stack: "ios" }];
+    const scope = { lessons, projectId: "P", projectName: "프로젝트", projectStack: ["next"] };
+    const min = lessonMinBudget(scope);
+    for (const budget of [1500, 3000, min, 7000]) {
+      const { lines, report } = renderLessonsReport({ ...scope, mode: "compact", budget });
+      const md = lines.join("\n");
+      if (budget >= min) expect(md.length).toBeLessThanOrEqual(budget);
+      expect(report.chars).toBe(md.length);
+      // 개수는 항상 드러난다 — 대상인데 상태가 빠진 레슨이 없다
+      expect(report.statuses.filter((s) => s.status !== "not_applicable")).toHaveLength(13 + 60 + 40);
+    }
+  });
+
+  it("최소 몫 안이면 필수는 전부 요약 — 나머지가 '외 N개' 로 양보한다", () => {
+    const lessons = [...req(13), ...glob(200)];
+    const min = lessonMinBudget({ lessons, projectId: null, projectName: null, projectStack: [] });
+    expect(min).toBeGreaterThanOrEqual(LESSON_BUDGET);
+    const { lines, report } = renderLessonsReport({ lessons, projectId: null, projectName: null, mode: "compact", budget: min });
+    expect(lines.join("\n").length).toBeLessThanOrEqual(min);
+    expect(report.sections[0]).toMatchObject({ kind: "required", count: 13, gist: 13, omitted: 0 });
+    expect(report.sections[1].omitted).toBeGreaterThan(0);
+  });
+
+  it("필수가 많으면 최소 몫이 LESSON_BUDGET 보다 커진다", () => {
+    expect(lessonMinBudget({ lessons: req(40), projectId: null, projectName: null, projectStack: [] })).toBeGreaterThan(LESSON_BUDGET);
+  });
+
+  it("lessonBudgetFor — 남는 만큼(줄바꿈 1자 몫 제외), 최소값 보장", () => {
+    expect(lessonBudgetFor(2000)).toBe(CONTEXT_BUDGET - 2001);
+    expect(lessonBudgetFor(6000)).toBe(LESSON_BUDGET);
+    expect(lessonBudgetFor(6000, 6500)).toBe(6500);
+  });
+
+  it("buildLessonSection: 나머지 + 줄바꿈 + 레슨 섹션 ≤ CONTEXT_BUDGET (나머지가 최소 몫을 남겼을 때)", () => {
+    const lessons = [...req(13), ...glob(120)];
+    const min = lessonMinBudget({ lessons, projectId: null, projectName: null, projectStack: [] });
+    for (const restChars of [0, 1500, CONTEXT_BUDGET - 1 - min]) {
+      const sec = buildLessonSection({ lessons, projectId: null, projectName: null, projectStack: [], compact: true, restChars });
+      expect(restChars + 1 + sec.report.chars).toBeLessThanOrEqual(CONTEXT_BUDGET);
+    }
   });
 });

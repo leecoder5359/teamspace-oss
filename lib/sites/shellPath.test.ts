@@ -9,6 +9,8 @@ import {
   navTargetForEvent,
   injectNavScript,
   NAV_SCRIPT,
+  splitLegacyShellPath,
+  isSharedPagePath,
 } from "./shellPath";
 
 describe("shellFileCandidates — 셸 하위 경로 → 파일 후보", () => {
@@ -50,14 +52,18 @@ describe("prettyPath — 파일 → 주소창 경로", () => {
 });
 
 describe("shellPath·navTarget", () => {
-  it("세그먼트마다 인코딩하고 항상 /s/ 로 시작", () => {
-    expect(shellPath("banjang-handover", "")).toBe("/s/banjang-handover");
-    expect(shellPath("banjang-handover", "pages/설정 안내")).toBe("/s/banjang-handover/pages/%EC%84%A4%EC%A0%95%20%EC%95%88%EB%82%B4");
+  it("세그먼트마다 인코딩하고 항상 /pages/ 로 시작", () => {
+    expect(shellPath("banjang-handover", "")).toBe("/pages/banjang-handover");
+    expect(shellPath("banjang-handover", "pages/설정 안내")).toBe("/pages/banjang-handover/pages/%EC%84%A4%EC%A0%95%20%EC%95%88%EB%82%B4");
   });
   it("메시지 → 예쁜 경로 + 해시", () => {
-    expect(navTarget("b-h", { type: "ts-site-nav", path: "pages/y.html", hash: "#step-2" })).toBe("/s/b-h/pages/y#step-2");
-    expect(navTarget("b-h", { type: "ts-site-nav", path: "index.html", hash: "" })).toBe("/s/b-h");
-    expect(navTarget("b-h", { type: "ts-site-nav", path: "docs/index.html" })).toBe("/s/b-h/docs");
+    expect(navTarget("b-h", { type: "ts-site-nav", path: "pages/y.html", hash: "#step-2" })).toBe("/pages/b-h/pages/y#step-2");
+    expect(navTarget("b-h", { type: "ts-site-nav", path: "index.html", hash: "" })).toBe("/pages/b-h");
+    expect(navTarget("b-h", { type: "ts-site-nav", path: "docs/index.html" })).toBe("/pages/b-h/docs");
+    // 권장 배치(루트의 <영문-kebab>.html) — /pages/<slug>/<이름>#해시
+    expect(navTarget("banjang-handover", { type: "ts-site-nav", path: "supabase-setup.html", hash: "#keys" })).toBe(
+      "/pages/banjang-handover/supabase-setup#keys",
+    );
   });
   it("모양이 틀린 메시지는 무시", () => {
     for (const bad of [
@@ -79,7 +85,7 @@ describe("shellPath·navTarget", () => {
   it("navTargetForEvent: 우리 iframe(source)·샌드박스 origin(\"null\") 만", () => {
     const frame = {};
     const data = { type: "ts-site-nav", path: "pages/y.html", hash: "" };
-    expect(navTargetForEvent({ source: frame, origin: "null", data }, frame, "b-h")).toBe("/s/b-h/pages/y");
+    expect(navTargetForEvent({ source: frame, origin: "null", data }, frame, "b-h")).toBe("/pages/b-h/pages/y");
     expect(navTargetForEvent({ source: {}, origin: "null", data }, frame, "b-h")).toBeNull();
     expect(navTargetForEvent({ source: frame, origin: "https://evil.example", data }, frame, "b-h")).toBeNull();
     expect(navTargetForEvent({ source: null, origin: "null", data }, null, "b-h")).toBeNull();
@@ -139,5 +145,20 @@ describe("ambiguousShellPaths", () => {
   });
   it("셸 후보 순서와 일치 — .html 이 먼저", () => {
     expect(shellFileCandidates(["a"])?.[0]).toBe("a.html");
+  });
+});
+
+describe("옛 /s/ 주소", () => {
+  it("splitLegacyShellPath — 슬러그는 풀고 나머지는 원본 그대로", () => {
+    expect(splitLegacyShellPath("/s/banjang-handover")).toEqual({ slug: "banjang-handover", rawSlug: "banjang-handover", rest: "" });
+    expect(splitLegacyShellPath("/s/b-h/docs/%EC%84%A4")).toEqual({ slug: "b-h", rawSlug: "b-h", rest: "/docs/%EC%84%A4" });
+    expect(splitLegacyShellPath("/s/")).toBeNull();
+    expect(splitLegacyShellPath("/pages/b-h")).toBeNull();
+    expect(splitLegacyShellPath("/s/%E0%A4%A")).toBeNull();
+  });
+  it("isSharedPagePath — /pages/·/s/ 만", () => {
+    expect(isSharedPagePath("/pages/b-h/x")).toBe(true);
+    expect(isSharedPagePath("/s/b-h")).toBe(true);
+    for (const p of ["/", "/pagesx", "/sites", "/setup/pair?code=1"]) expect(isSharedPagePath(p), p).toBe(false);
   });
 });

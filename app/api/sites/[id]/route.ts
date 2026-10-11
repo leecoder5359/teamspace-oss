@@ -37,7 +37,7 @@ export async function GET(req: Request, { params }: Params) {
   });
   if (!site) return notFound();
   const { versions, invites, aliases, ...rest } = site;
-  // aliases: 옛 주소(슬러그) — /s/<옛 슬러그>/… 는 현재 슬러그로 308 된다.
+  // aliases: 옛 주소(슬러그) — /pages/<옛 슬러그>/…(옛 /s/… 포함)는 현재 슬러그로 308 된다.
   return NextResponse.json({ site: { ...rest, aliases: aliases.map((a) => a.slug) }, url: siteUrl(req, site.slug), versions, invites });
 }
 
@@ -111,7 +111,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (data.currentVersion && data.currentVersion !== site.currentVersion) recordActivity(ctx, `v${data.currentVersion}로 롤백함`, "site", updated.title, id);
   // 게스트가 로컬 서버를 호출할 수 있게 되는 변경이라 기록한다(주소는 활동 로그에 싣지 않는다).
   if (data.apiUpstream !== undefined && data.apiUpstream !== site.apiUpstream) recordActivity(ctx, data.apiUpstream ? "API 프록시를 연결함" : "API 프록시를 해제함", "site", updated.title, id);
-  if (nextSlug) recordActivity(ctx, `주소를 /s/${nextSlug} 로 바꿈`, "site", updated.title, id);
+  if (nextSlug) recordActivity(ctx, `주소를 /pages/${nextSlug} 로 바꿈`, "site", updated.title, id);
   return NextResponse.json({ site: updated, url: siteUrl(req, updated.slug) });
 }
 

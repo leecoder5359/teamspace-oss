@@ -36,6 +36,8 @@ type Injections = {
   days: number;
   totals: { injections: number; last7: number; reads: number };
   byProject: { projectId: string | null; projectName: string | null; last7: number; lastN: number }[];
+  /** 훅·모드별 횟수(SessionStart/compact·brief · PostToolUse/compact · UserPromptSubmit/prompt · unknown) */
+  byVia?: { via: string; mode: string; count: number; last7: number }[];
   recent: { id: string; at: string; actorName: string | null; cwd: string | null; projectName: string | null; via: string; mode: string; gist: number; titleOnly: number; omitted: number; chars: number }[];
   lessons: { id: string; title: string; scope: Scope; gist: number; titleOnly: number; omitted: number; reads: number }[];
   cleanup: {
@@ -318,6 +320,22 @@ function InjectionStats() {
               </Table>
             )}
           </Sub>
+
+          {!!data.byVia?.length && (
+            <Sub label="훅별 주입 횟수">
+              <Table head={["훅 / 방식", "최근 7일", `최근 ${data.days}일`]} numericFrom={1}>
+                {data.byVia.map((v) => (
+                  <tr key={`${v.via}/${v.mode}`} style={rowStyle}>
+                    <td style={{ ...td, fontWeight: 600, color: v.via === "unknown" ? "var(--text-muted)" : "var(--text-strong)" }}>
+                      {v.via} / {v.mode}
+                    </td>
+                    <td style={tdNum}>{n(v.last7)}</td>
+                    <td style={tdNum}>{n(v.count)}</td>
+                  </tr>
+                ))}
+              </Table>
+            </Sub>
+          )}
 
           {data.recent.length > 0 && (
             <Sub label={`최근 주입 ${data.recent.length}건`}>

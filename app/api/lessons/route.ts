@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { parseLessonMode, parseLessonStack } from "@/lib/lessonInject";
+import { normalizeTerms } from "@/lib/lessonPromptMatch";
 import { clampLessonLimit, normalizeLessonQ, lessonTitleWhere } from "@/lib/lessonQuery";
 import { personalLessonWhere, withLessonMeta, PERSONAL_NEEDS_PERSON, PERSONAL_SCOPE_CONFLICT } from "@/lib/lessonAccess";
 import { viewerPersonId } from "@/lib/viewerPerson";
@@ -17,6 +18,8 @@ const LessonBody = z.object({
   personal: z.boolean().optional(),
   /** required | default | ondemand (생략 = default) */
   mode: z.string().optional(),
+  /** 프롬프트 매칭 키워드 — "a,b" 또는 ["a","b"] (UserPromptSubmit 훅이 메시지에 이 단어가 있으면 이 레슨을 넣는다) */
+  keywords: z.union([z.array(z.string()), z.string()]).nullable().optional(),
 });
 
 export const runtime = "nodejs";
@@ -54,7 +57,8 @@ export async function GET(req: Request) {
   return NextResponse.json({ lessons: lessons.map(withLessonMeta), total });
 }
 
-// POST /api/lessons { title, body, projectId?, stack?, personal?, mode? } → 레슨 등록 (mode 가 ondemand 가 아니면 컨텍스트 주입에 포함됨)
+// POST /api/lessons { title, body, projectId?, stack?, personal?, mode?, keywords? } → 레슨 등록 (mode 가 ondemand 가 아니면 컨텍스트 주입에 포함됨)
+// keywords = 프롬프트 매칭 단어(소문자 정규화, 2~40자, 30개까지) — 메시지에 있으면 UserPromptSubmit 훅이 이 레슨을 넣는다.
 export async function POST(req: Request) {
   const guard = await requireCtx("editor");
   if ("err" in guard) return guard.err;
@@ -85,6 +89,8 @@ export async function POST(req: Request) {
   }
   const md = body.mode === undefined ? null : parseLessonMode(body.mode);
   if (md && !md.ok) return NextResponse.json({ error: md.error }, { status: 400 });
+  const kw = normalizeTerms(body.keywords ?? null);
+  if (!kw.ok) return NextResponse.json({ error: kw.error }, { status: 400 });
   const lesson = await prisma.lesson.create({
     data: {
       workspaceId: guard.workspaceId,
@@ -92,6 +98,7 @@ export async function POST(req: Request) {
       stack: st.stack,
       userId,
       ...(md?.ok ? { mode: md.mode } : {}),
+      ...(kw.terms.length ? { keywords: kw.terms } : {}),
       title,
       body: text,
       createdById: guard.userId,

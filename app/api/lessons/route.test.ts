@@ -133,4 +133,14 @@ describe("POST /api/lessons — personal·mode", () => {
     expect(data).not.toHaveProperty("mode");
     expect(data.userId).toBeNull();
   });
+
+  it("keywords 는 소문자·중복 제거로 저장, 생략하면 넣지 않고, 1자 키워드는 400", async () => {
+    await post({ ...base, keywords: "Prisma, 마이그레이션 ,prisma" });
+    expect(m(prisma.lesson.create).mock.calls[0][0].data.keywords).toEqual(["prisma", "마이그레이션"]);
+    await post({ ...base, keywords: ["반장", "BANJANG"] });
+    expect(m(prisma.lesson.create).mock.calls[1][0].data.keywords).toEqual(["반장", "banjang"]);
+    await post(base);
+    expect(m(prisma.lesson.create).mock.calls[2][0].data).not.toHaveProperty("keywords");
+    expect((await post({ ...base, keywords: "a" })).status).toBe(400);
+  });
 });

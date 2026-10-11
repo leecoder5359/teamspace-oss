@@ -1,4 +1,4 @@
-/* 셸 주소(/s/<slug>/<경로>) ↔ 사이트 파일 경로 사이의 순수 함수. 서버(셸 페이지)와
+/* 셸 주소(/pages/<slug>/<경로>) ↔ 사이트 파일 경로 사이의 순수 함수. 서버(셸 페이지)와
    클라이언트(주소창 동기화) 양쪽에서 쓰므로 node 모듈을 들이지 않는다.
 
    주소 → 파일 후보(앞에서부터 처음 있는 파일):
@@ -38,7 +38,7 @@ export function shellFileCandidates(segments: readonly string[]): string[] | nul
 }
 
 /** 같은 셸 주소로 열리는 `a.html` + `a/index.html` 쌍. shellFileCandidates 가 `.html` 을 먼저 보므로
-    `/s/<slug>/a` 는 늘 `a.html` 을 열고 `a/index.html` 은 그 주소로 닿지 않는다(`a/index.html` 로 직접은 열림).
+    `/pages/<slug>/a` 는 늘 `a.html` 을 열고 `a/index.html` 은 그 주소로 닿지 않는다(`a/index.html` 로 직접은 열림).
     번들 검사가 경고로 알린다 — 거부하진 않는다. */
 export function ambiguousShellPaths(paths: readonly string[]): { pretty: string; file: string; shadowed: string }[] {
   const set = new Set(paths);
@@ -60,10 +60,30 @@ export function prettyPath(file: string): string {
   return p;
 }
 
-/** /s/<slug>/<pretty> — 세그먼트마다 인코딩한다. */
+/** 공유 셸 주소의 첫 세그먼트. 옛 `/s/` 는 이리로 308 한다(app/s/[slug]/[[...path]]/route.ts). */
+export const SHELL_PREFIX = "/pages";
+
+/** /pages/<slug>/<pretty> — 세그먼트마다 인코딩한다. */
 export function shellPath(slug: string, pretty: string): string {
   const rest = pretty ? `/${pretty.split("/").map(encodeURIComponent).join("/")}` : "";
-  return `/s/${encodeURIComponent(slug)}${rest}`;
+  return `${SHELL_PREFIX}/${encodeURIComponent(slug)}${rest}`;
+}
+
+/** 공유 셸 주소인가(/pages/… 또는 옛 /s/…) — 로그인 화면이 계정 선택을 띄울지 정할 때 쓴다. */
+export function isSharedPagePath(path: string): boolean {
+  return path.startsWith(`${SHELL_PREFIX}/`) || path.startsWith("/s/");
+}
+
+/** 옛 공유 주소 /s/<raw slug>/<raw rest> → 디코딩한 슬러그·원본 슬러그·원본 나머지(앞 "/" 포함, 없으면 "").
+    모양이 틀리거나 퍼센트 인코딩이 깨졌으면 null. (308 처리: app/s/[slug]/[[...path]]/route.ts) */
+export function splitLegacyShellPath(pathname: string): { slug: string; rawSlug: string; rest: string } | null {
+  const m = pathname.match(/^\/s\/([^/]+)(\/.*)?$/);
+  if (!m) return null;
+  try {
+    return { slug: decodeURIComponent(m[1]), rawSlug: m[1], rest: m[2] ?? "" };
+  } catch {
+    return null;
+  }
 }
 
 export type NavMessage = { path: string; hash: string };
@@ -80,7 +100,7 @@ export function parseNavMessage(data: unknown): NavMessage | null {
   return { path: d.path, hash };
 }
 
-/** 메시지 → 셸 주소창에 둘 같은 사이트 경로(항상 /s/ 로 시작). 모양이 틀리면 null. */
+/** 메시지 → 셸 주소창에 둘 같은 사이트 경로(항상 /pages/ 로 시작). 모양이 틀리면 null. */
 export function navTarget(slug: string, data: unknown): string | null {
   const m = parseNavMessage(data);
   if (!m) return null;

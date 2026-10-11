@@ -47,7 +47,7 @@ const site = { id: "cs1", slug: "banjang-handover", title: "T", workspaceId: "w1
 
 type El = { props: { children: { props: Record<string, unknown> }[] } };
 
-describe("/s/[slug]/[[...path]] 셸", () => {
+describe("/pages/[slug]/[[...path]] 셸", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     m(auth).mockResolvedValue({ user: { email: "g@gmail.com" } });
@@ -58,17 +58,17 @@ describe("/s/[slug]/[[...path]] 셸", () => {
 
   it("비로그인 → 로그인, callbackUrl 에 하위 경로까지", async () => {
     m(auth).mockResolvedValue(null);
-    const s = await signal(run("banjang-handover", ["pages", "supabase-setup"]));
+    const s = await signal(run("banjang-handover", ["supabase-setup"]));
     expect(s.kind).toBe("redirect");
-    expect(s.url).toBe(`/login?callbackUrl=${encodeURIComponent("/s/banjang-handover/pages/supabase-setup")}`);
+    expect(s.url).toBe(`/login?callbackUrl=${encodeURIComponent("/pages/banjang-handover/supabase-setup")}`);
   });
 
   it("하위 경로 → 그 파일을 iframe src 로, 열람 기록·초대 lastAccessAt", async () => {
-    m(resolveShellFile).mockResolvedValue("pages/supabase-setup.html");
-    const el = (await run("banjang-handover", ["pages", "supabase-setup"])) as unknown as El;
-    expect(resolveShellFile).toHaveBeenCalledWith("/tmp/sites", "cs1", 3, ["pages", "supabase-setup"]);
+    m(resolveShellFile).mockResolvedValue("supabase-setup.html");
+    const el = (await run("banjang-handover", ["supabase-setup"])) as unknown as El;
+    expect(resolveShellFile).toHaveBeenCalledWith("/tmp/sites", "cs1", 3, ["supabase-setup"]);
     const [frame, sync] = el.props.children;
-    expect(frame.props.src).toBe("/pub/TOK.SIG/pages/supabase-setup.html");
+    expect(frame.props.src).toBe("/pub/TOK.SIG/supabase-setup.html");
     expect(sync.props.slug).toBe("banjang-handover");
     expect(sync.props.frameId).toBe(frame.props.frameId);
     expect(prisma.siteInvite.update).toHaveBeenCalled();
@@ -83,10 +83,10 @@ describe("/s/[slug]/[[...path]] 셸", () => {
   });
 
   it("인코딩된 세그먼트는 풀어서 찾고, src 는 다시 인코딩", async () => {
-    m(resolveShellFile).mockResolvedValue("pages/설정.html");
-    const el = (await run("banjang-handover", ["pages", encodeURIComponent("설정")])) as unknown as El;
-    expect(resolveShellFile).toHaveBeenCalledWith("/tmp/sites", "cs1", 3, ["pages", "설정"]);
-    expect(el.props.children[0].props.src).toBe(`/pub/TOK.SIG/pages/${encodeURIComponent("설정")}.html`);
+    m(resolveShellFile).mockResolvedValue("설정.html");
+    const el = (await run("banjang-handover", [encodeURIComponent("설정")])) as unknown as El;
+    expect(resolveShellFile).toHaveBeenCalledWith("/tmp/sites", "cs1", 3, ["설정"]);
+    expect(el.props.children[0].props.src).toBe(`/pub/TOK.SIG/${encodeURIComponent("설정")}.html`);
   });
 
   it("없는 파일·이탈 경로 → 404, 열람 기록 없음", async () => {
@@ -102,9 +102,9 @@ describe("/s/[slug]/[[...path]] 셸", () => {
   it("옛 슬러그(별칭) → 같은 하위 경로로 308, 판정은 새 주소에서", async () => {
     m(siteAccessBySlug).mockResolvedValue({ result: "not_found", site: null, inviteId: null, member: false });
     m(currentSlugForAlias).mockResolvedValue("banjang-handover");
-    const s = await signal(run("OLDrandom123", ["pages", "x"]));
+    const s = await signal(run("OLDrandom123", ["x"]));
     expect(s.kind).toBe("permanentRedirect");
-    expect(s.url).toBe("/s/banjang-handover/pages/x");
+    expect(s.url).toBe("/pages/banjang-handover/x");
     expect(resolveShellFile).not.toHaveBeenCalled();
     expect(recordSiteAccess).not.toHaveBeenCalled();
   });
@@ -117,7 +117,7 @@ describe("/s/[slug]/[[...path]] 셸", () => {
 
   it("권한 없음 → 안내 화면(파일 존재 여부를 보지 않는다)", async () => {
     m(siteAccessBySlug).mockResolvedValue({ result: "forbidden", site, inviteId: null, member: false });
-    const el = await run("banjang-handover", ["pages", "x"]);
+    const el = await run("banjang-handover", ["x"]);
     expect(el).toBeTruthy();
     expect(resolveShellFile).not.toHaveBeenCalled();
     expect(recordSiteAccess).not.toHaveBeenCalled();

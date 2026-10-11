@@ -219,9 +219,12 @@ export function renderLessons(i: RenderInput): string[] {
   return renderLessonsReport(i).lines;
 }
 
-/** renderLessons 와 같은 출력 + 레슨별 상태·섹션 예산 사용(레슨 주입 점검 화면용). 출력 줄은 renderLessons 와 바이트 단위로 같다.
-    예산 순서: **필수 먼저**(범위 무관, 제목+요약) → 남은 예산을 좁은 범위부터(개인 → 프로젝트 → 스택 → 전역). */
-export function renderLessonsReport(i: RenderInput): { lines: string[]; report: LessonRenderReport } {
+type Sec = { title: string; list: LessonLite[]; kind: LessonScope | "required"; tag: string | null };
+
+const FOOTER = "_전문은 관련 작업을 시작할 때 읽는다: MCP `lesson_get {id}` (TeamSpace 레포에서는 `pnpm ws lesson show <id>`)._";
+
+/** 레슨을 섹션으로 나눈다(렌더·최소 예산 계산이 같은 판정을 쓰게). */
+function planSections(i: RenderInput) {
   const stackSet = new Set(i.projectId ? (i.projectStack ?? []) : []);
   const scopeCtx = { projectId: i.projectId, projectStack: [...stackSet], personId: i.personId ?? null };
   const reasonById = new Map(i.lessons.map((l) => [l.id, lessonApplicability(l, scopeCtx)]));
@@ -237,7 +240,6 @@ export function renderLessonsReport(i: RenderInput): { lines: string[]; report: 
   const ondemandN = i.lessons.filter((l) => reasonById.get(l.id) === "ondemand").length;
   const stackCount = byStack.reduce((n, x) => n + x.list.length, 0);
 
-  const out: string[] = [];
   const head = [
     required.length ? `필수 ${required.length}` : null,
     personal.length ? `개인 ${personal.length}` : null,
@@ -245,9 +247,8 @@ export function renderLessonsReport(i: RenderInput): { lines: string[]; report: 
     stackCount ? `스택 ${stackCount}` : null,
     `전역 ${global.length}`,
   ].filter(Boolean).join(" · ");
-  out.push(`## 팀 작업규칙·레슨 — 반드시 따른다 (${head})`);
+  const headLine = `## 팀 작업규칙·레슨 — 반드시 따른다 (${head})`;
 
-  type Sec = { title: string; list: LessonLite[]; kind: LessonScope | "required"; tag: string | null };
   const reqSec: Sec | null = required.length ? { title: `### 필수 (${required.length})`, list: required, kind: "required", tag: null } : null;
   const sections: Sec[] = [];
   if (personal.length) sections.push({ title: `### 개인 (${personal.length})`, list: personal, kind: "personal", tag: null });
@@ -255,6 +256,27 @@ export function renderLessonsReport(i: RenderInput): { lines: string[]; report: 
   for (const x of byStack) sections.push({ title: `### 스택: ${x.tag} (${x.list.length})`, list: x.list, kind: "stack", tag: x.tag });
   sections.push({ title: `### 전역 (${global.length})`, list: global, kind: "global", tag: null });
   const all = reqSec ? [reqSec, ...sections] : sections;
+
+  const notes: string[] = [];
+  if (skippedStack) notes.push(`_스택 레슨 ${skippedStack}개는 이 세션의 프로젝트 스택과 맞지 않거나 프로젝트가 매핑되지 않아 제외했다._`);
+  if (ondemandN) notes.push(`_'필요할 때만' 레슨 ${ondemandN}개는 넣지 않았다 — 관련 작업이면 MCP \`lesson_list\`(q=제목 검색)로 찾는다._`);
+  return { reasonById, reqSec, sections, all, headLine, notes };
+}
+
+/** compact 출력에서 레슨 줄이 아닌 고정 줄(머리·섹션 제목·'(없음)'·꼬리·안내·끝 빈 줄)이 쓰는 문자(줄바꿈 포함). */
+function compactOverhead(p: ReturnType<typeof planSections>): number {
+  const fixed = [p.headLine, ...p.all.map((s) => s.title), ...p.all.filter((s) => !s.list.length).map(() => "- (없음)"), FOOTER, ...p.notes, ""];
+  return size(fixed);
+}
+
+/** renderLessons 와 같은 출력 + 레슨별 상태·섹션 예산 사용(레슨 주입 점검 화면용). 출력 줄은 renderLessons 와 바이트 단위로 같다.
+    예산 순서: **필수 먼저**(범위 무관, 제목+요약) → 남은 예산을 좁은 범위부터(개인 → 프로젝트 → 스택 → 전역).
+    compact 의 budget 은 **레슨 섹션 전체 글자 수**(머리·섹션 제목·꼬리 포함) 상한이다 — 2026-10-11 전에는 레슨 줄에만 걸려
+    고정 줄 몫(~300자)만큼 넘쳤다. 예산이 필수 레슨의 최소 몫보다 작은 극단에서만 몇십 자 넘칠 수 있다('외 N개' 는 항상 낸다). */
+export function renderLessonsReport(i: RenderInput): { lines: string[]; report: LessonRenderReport } {
+  const p = planSections(i);
+  const { reasonById, reqSec, sections, all } = p;
+  const out: string[] = [p.headLine];
 
   const statusById = new Map<string, LessonStatus>();
   const secReports: LessonSectionReport[] = [];
@@ -274,11 +296,12 @@ export function renderLessonsReport(i: RenderInput): { lines: string[]; report: 
   } else {
     const budget = i.budget ?? LESSON_BUDGET;
     budgetOut = budget;
-    let left = budget;
+    let left = Math.max(0, budget - compactOverhead(p));
     const fills: { sec: Sec; r: { lines: string[]; used: number; gist: number; shown: number } }[] = [];
     if (reqSec) {
-      // 필수가 예산을 먼저 가져간다. 넘치면 필수도 제목만 → '외 N개'(fillSection 의 커버리지 우선 규칙).
-      const r = fillSection(reqSec.list, budget);
+      // 필수가 예산을 먼저 가져간다. 뒤 섹션의 '외 N개' 몫만 남기고, 넘치면 필수도 제목만 → '외 N개'(fillSection 의 커버리지 우선 규칙).
+      const reserve = sections.reduce((n, s) => n + moreCost(s.list.length), 0);
+      const r = fillSection(reqSec.list, Math.max(0, left - reserve));
       fills.push({ sec: reqSec, r });
       left -= r.used;
     }
@@ -295,14 +318,9 @@ export function renderLessonsReport(i: RenderInput): { lines: string[]; report: 
       sec.list.forEach((l, k) => statusById.set(l.id, k < r.gist ? "gist" : k < r.shown ? "title" : "omitted"));
       report(sec, r.used, r.used, r.gist, r.shown);
     }
-    out.push("_전문은 관련 작업을 시작할 때 읽는다: MCP `lesson_get {id}` (TeamSpace 레포에서는 `pnpm ws lesson show <id>`)._");
+    out.push(FOOTER);
   }
-  if (skippedStack) {
-    out.push(`_스택 레슨 ${skippedStack}개는 이 세션의 프로젝트 스택과 맞지 않거나 프로젝트가 매핑되지 않아 제외했다._`);
-  }
-  if (ondemandN) {
-    out.push(`_'필요할 때만' 레슨 ${ondemandN}개는 넣지 않았다 — 관련 작업이면 MCP \`lesson_list\`(q=제목 검색)로 찾는다._`);
-  }
+  out.push(...p.notes);
   out.push("");
 
   const statuses: LessonStatusEntry[] = i.lessons.map((l) => {
@@ -314,14 +332,25 @@ export function renderLessonsReport(i: RenderInput): { lines: string[]; report: 
   return { lines: out, report: { mode: i.mode, budget: budgetOut, chars: out.join("\n").length, sections: secReports, statuses } };
 }
 
+/** 레슨 섹션의 최소 몫(compact): 필수 레슨 전부 요약 + 다른 섹션은 '외 N개' 한 줄씩 + 고정 줄 — 최소 LESSON_BUDGET.
+    /api/context 는 이 몫을 먼저 떼고, 나머지 섹션(태스크·문서·결정…)이 넘치면 그쪽 상한을 줄인다(필수 우선). */
+export function lessonMinBudget(i: Omit<RenderInput, "mode" | "budget">): number {
+  const p = planSections({ ...i, mode: "compact" });
+  const req = p.reqSec ? size(p.reqSec.list.map(compactLine)) : 0;
+  const others = p.sections.reduce((n, s) => n + moreCost(s.list.length), 0);
+  return Math.max(LESSON_BUDGET, compactOverhead(p) + req + others);
+}
+
 /** 세션 컨텍스트에서 레슨 섹션이 받는 예산: 전체 예산(CONTEXT_BUDGET)에서 다른 섹션이 쓰고 남은 만큼(최소 LESSON_BUDGET).
-    태스크가 없는 레포(로요)는 레슨이 더 들어가고, 태스크가 많은 레포는 레슨이 최소 몫을 지킨다. */
-export function lessonBudgetFor(restChars: number): number {
-  return Math.max(LESSON_BUDGET, CONTEXT_BUDGET - restChars - 400);
+    restChars 는 레슨을 뺀 나머지 컨텍스트 글자 수 — 레슨을 끼우면 줄바꿈 1자가 더 붙는다.
+    태스크가 없는 레포(로요)는 레슨이 더 들어가고, 태스크가 많은 레포는 /api/context 가 나머지를 줄여 레슨 최소 몫을 지킨다. */
+export function lessonBudgetFor(restChars: number, min = LESSON_BUDGET): number {
+  return Math.max(min, CONTEXT_BUDGET - restChars - 1);
 }
 
 /** /api/context 의 레슨 섹션 조립 — 라우트와 레슨 주입 점검(시뮬레이터)이 **같은 함수**를 쓴다(드리프트 방지).
-    restChars = 레슨을 뺀 나머지 컨텍스트 글자 수(레슨은 나머지를 다 그린 뒤 끼운다). */
+    restChars = 레슨을 뺀 나머지 컨텍스트 글자 수(레슨은 나머지를 다 그린 뒤 끼운다).
+    예산 = max(최소 몫(lessonMinBudget), 남는 만큼) — 라우트가 나머지를 줄여 두므로 보통은 전체가 CONTEXT_BUDGET 안이다. */
 export function buildLessonSection(i: {
   lessons: LessonLite[];
   projectId: string | null;
@@ -331,14 +360,11 @@ export function buildLessonSection(i: {
   compact: boolean;
   restChars: number;
 }): { lines: string[]; report: LessonRenderReport & { restChars: number } } {
+  const scope = { lessons: i.lessons, projectId: i.projectId, projectName: i.projectName, projectStack: i.projectStack, personId: i.personId ?? null };
   const r = renderLessonsReport({
-    lessons: i.lessons,
-    projectId: i.projectId,
-    projectName: i.projectName,
-    projectStack: i.projectStack,
-    personId: i.personId ?? null,
+    ...scope,
     mode: i.compact ? "compact" : "full",
-    budget: lessonBudgetFor(i.restChars),
+    budget: i.compact ? lessonBudgetFor(i.restChars, lessonMinBudget(scope)) : undefined,
   });
   return { lines: r.lines, report: { ...r.report, restChars: i.restChars } };
 }

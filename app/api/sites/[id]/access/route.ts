@@ -6,7 +6,7 @@ import { summarizeAccess } from "@/lib/sites/accessLog";
 export const runtime = "nodejs";
 
 /* GET /api/sites/[id]/access → { accounts: AccountAccess[], total } — 계정별 접근 이력.
-   셸(/s/<slug>) 열람만 기록된다(같은 계정 10분 내 재열람 생략). 최근 180일·5000건까지만 읽는다. */
+   셸(/pages/<slug>) 열람만 기록된다(같은 계정 10분 내 재열람 생략). 최근 180일·5000건까지만 읽는다. */
 
 const WINDOW_DAYS = 180;
 const MAX_ROWS = 5000;

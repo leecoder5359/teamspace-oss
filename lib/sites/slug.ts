@@ -12,7 +12,7 @@ export const SLUG_MIN = 3;
 export const SLUG_MAX = 60;
 
 export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
-  "api", "pub", "s", "new", "admin", "login", "logout", "signin", "signout", "auth",
+  "api", "pub", "s", "pages", "new", "admin", "login", "logout", "signin", "signout", "auth",
   "sites", "site", "settings", "setup", "dashboard", "static", "assets", "public",
   "www", "app", "index", "help", "edit", "delete", "null", "undefined",
 ]);

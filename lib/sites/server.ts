@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { canViewSite, normalizeEmail, type SiteVerdict } from "./access";
 import { shouldRecordAccess } from "./accessLog";
 
-/* 셸(/s/<slug>)과 /pub 가 공유하는 판정. requireCtx 를 쓰지 않는다 — 게스트는 멤버가 아니고,
+/* 셸(/pages/<slug>)과 /pub 가 공유하는 판정. requireCtx 를 쓰지 않는다 — 게스트는 멤버가 아니고,
    requireCtx 경로는 멤버십 해석(초대 수락·자동 가입)이라는 부수효과를 가진다. */
 
 const SELECT = {

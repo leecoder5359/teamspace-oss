@@ -9,7 +9,7 @@ import { resolveRouteByCwd } from "@/lib/ingest";
 
 import { loadGraph } from "@/lib/graphLoad";
 import { subgraph, renderKnowledgeMap } from "@/lib/graphInsights";
-import { buildLessonSection, capLines, gistOf } from "@/lib/lessonInject";
+import { buildLessonSection, capLines, CONTEXT_BUDGET, gistOf, lessonMinBudget } from "@/lib/lessonInject";
 import { recordLessonInjection, injectionIds, briefInjectionIds } from "@/lib/lessonInspect/log";
 import { renderBrief } from "@/lib/contextBrief";
 import { viewerPersonId } from "@/lib/viewerPerson";
@@ -227,42 +227,11 @@ export async function GET(request: Request) {
 
   const headerLen = L.length; // 레슨은 나머지 섹션을 다 그린 뒤 이 자리에 끼운다(남는 예산을 레슨에 주기 위해)
 
-  // compact: 섹션마다 상한을 두고 넘친 개수를 적는다. full(AI 연결 화면·내보내기)은 전부.
-  const section = (title: string, lines: string[], empty: string, cap: number, moreHint: string) => {
-    L.push(title);
-    if (lines.length === 0) L.push(empty);
-    const r = compact ? capLines(lines, cap) : { lines, omitted: 0 };
-    L.push(...r.lines);
-    if (r.omitted) L.push(`- … 외 ${r.omitted}건 (${moreHint})`);
-    L.push("");
-  };
-
-  section(
-    `## 태스크 보드 — 열린 ${tasks.length}건`,
-    tasks.map((t) => {
-      const meta = [t.status, t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
-      return `- ${t.title}${meta ? ` — ${meta}` : ""}`;
-    }),
-    "- (열린 태스크 없음)",
-    1400,
-    "MCP `task_list`",
-  );
-
-  section(`## 문서 (${counts.docs})`, visibleDocs.map((d) => `- ${d.title}`), "- (없음)", 700, "MCP `doc_list`");
-
-  section(
-    `## 결정 — 승인됨 (${counts.decisions})`,
-    decisions.map((d) => (compact ? `- ${d.title}${d.decision ? `: ${gistOf(d.decision, 80)}` : ""}` : `- ${d.title}${d.decision ? `: ${d.decision}` : ""}`)),
-    "- (없음)",
-    1000,
-    "MCP `search`",
-  );
-
-  section(`## 리스크 — 열림 (${counts.risks})`, risks.map((r) => `- [${r.severity}] ${r.title}`), "- (없음)", 400, "MCP `search`");
-
   // 지식 지도(Graphify 차용) — 허브·군집으로 '무엇부터 읽을지'를 준다. 설계: 지식 그래프 확장(Graphify 차용).
   // cwd→프로젝트면 그 프로젝트 문서만. 그래프 실패가 세션 컨텍스트 전체를 막으면 안 된다 → 섹션만 생략.
   // SessionStart 훅은 3초에 끊긴다 → 그래프 로드는 800ms 안에 못 끝나면 섹션만 버린다.
+  // 지도는 한 번만 그리고, compact 예산을 맞추느라 나머지 섹션을 다시 그릴 때는 자르기만 다시 한다.
+  let mapLines: string[] | null = null;
   let graphTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
@@ -274,35 +243,91 @@ export async function GET(request: Request) {
       g = subgraph(g, (n) => !hidden.has(n.id) && !(n.projectId && hidden.has(n.projectId)));
     }
     if (projectId) g = subgraph(g, (n) => n.type === "doc" && n.projectId === projectId);
-    const map = renderKnowledgeMap(g, compact ? { hubN: 8, commN: 5 } : { hubN: 20, commN: 10 });
-    if (compact) {
-      // 레슨 예산을 잠식하지 않게 ~1200자로 자른다(제목 줄은 유지)
-      const body = capLines(map.slice(1), 1200);
-      L.push(map[0], ...body.lines);
-      if (body.omitted) L.push("");
-    } else {
-      L.push(...map);
-    }
+    mapLines = renderKnowledgeMap(g, compact ? { hubN: 8, commN: 5 } : { hubN: 20, commN: 10 });
   } catch (e) {
     withReq(request).warn("context.knowledge_map_skipped", { msg: "지식 지도 생략", err: e });
   } finally {
     clearTimeout(graphTimer);
   }
 
-  if (compact) {
-    L.push(`## 용어집 (${counts.glossary})`);
-    const terms = capLines(glossary.map((g) => g.term), 500);
-    L.push(terms.lines.length ? `${terms.lines.join(", ")}${terms.omitted ? ` 외 ${terms.omitted}개` : ""} — 정의는 MCP \`search\`` : "- (없음)");
-    L.push("");
-  } else {
-    section(`## 용어집 (${counts.glossary})`, glossary.map((g) => `- **${g.term}**: ${g.definition ?? ""}`), "- (없음)", 0, "");
-  }
+  /** 레슨을 뺀 나머지 섹션. compact 는 섹션마다 상한(cap × scale)을 두고 넘친 개수를 적는다. full(AI 연결 화면·내보내기)은 전부.
+      scale < 1 = 레슨 최소 몫(필수 우선)을 먼저 떼고 나머지를 줄여야 할 때. */
+  const renderRest = (scale: number): string[] => {
+    const R: string[] = [];
+    const cap = (n: number) => Math.floor(n * scale);
+    const section = (title: string, lines: string[], empty: string, max: number, moreHint: string) => {
+      R.push(title);
+      if (lines.length === 0) R.push(empty);
+      const r = compact ? capLines(lines, cap(max)) : { lines, omitted: 0 };
+      R.push(...r.lines);
+      if (r.omitted) R.push(`- … 외 ${r.omitted}건 (${moreHint})`);
+      R.push("");
+    };
 
-  // compact: 전체 예산(CONTEXT_BUDGET)에서 다른 섹션이 쓰고 남은 만큼을 레슨에 준다(최소 LESSON_BUDGET) — lib/lessonInject.buildLessonSection.
+    section(
+      `## 태스크 보드 — 열린 ${tasks.length}건`,
+      tasks.map((t) => {
+        const meta = [t.status, t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
+        return `- ${t.title}${meta ? ` — ${meta}` : ""}`;
+      }),
+      "- (열린 태스크 없음)",
+      1400,
+      "MCP `task_list`",
+    );
+
+    section(`## 문서 (${counts.docs})`, visibleDocs.map((d) => `- ${d.title}`), "- (없음)", 700, "MCP `doc_list`");
+
+    section(
+      `## 결정 — 승인됨 (${counts.decisions})`,
+      decisions.map((d) => (compact ? `- ${d.title}${d.decision ? `: ${gistOf(d.decision, 80)}` : ""}` : `- ${d.title}${d.decision ? `: ${d.decision}` : ""}`)),
+      "- (없음)",
+      1000,
+      "MCP `search`",
+    );
+
+    section(`## 리스크 — 열림 (${counts.risks})`, risks.map((r) => `- [${r.severity}] ${r.title}`), "- (없음)", 400, "MCP `search`");
+
+    if (mapLines) {
+      if (compact) {
+        // 레슨 예산을 잠식하지 않게 ~1200자로 자른다(제목 줄은 유지)
+        const body = capLines(mapLines.slice(1), cap(1200));
+        R.push(mapLines[0], ...body.lines);
+        if (body.omitted) R.push("");
+      } else {
+        R.push(...mapLines);
+      }
+    }
+
+    if (compact) {
+      R.push(`## 용어집 (${counts.glossary})`);
+      const terms = capLines(glossary.map((g) => g.term), cap(500));
+      R.push(terms.lines.length ? `${terms.lines.join(", ")}${terms.omitted ? ` 외 ${terms.omitted}개` : ""} — 정의는 MCP \`search\`` : "- (없음)");
+      R.push("");
+    } else {
+      section(`## 용어집 (${counts.glossary})`, glossary.map((g) => `- **${g.term}**: ${g.definition ?? ""}`), "- (없음)", 0, "");
+    }
+    return R;
+  };
+
+  // compact: 전체(CONTEXT_BUDGET) 안에 맞춘다 — 레슨 섹션이 최소 몫(필수 레슨 요약 + 다른 섹션 '외 N개', 최소 LESSON_BUDGET)을
+  // 먼저 갖고, 나머지 섹션이 넘치면 상한을 줄여 다시 그린다(필수 우선). 레슨은 남는 만큼 더 받는다 — lib/lessonInject.buildLessonSection.
   // 점검 화면(GET /api/lessons/inspect)이 같은 함수를 이 라우트를 통해 부른다(드리프트 방지).
-  const lessonSec = buildLessonSection({ lessons, projectId, projectName, projectStack, personId, compact, restChars: L.join("\n").length });
+  const lessonIn = { lessons, projectId, projectName, projectStack, personId, compact };
+  const head = L.join("\n").length;
+  let rest = renderRest(1);
+  if (compact) {
+    const restMax = CONTEXT_BUDGET - 1 - lessonMinBudget(lessonIn);
+    const restLen = () => head + 1 + rest.join("\n").length;
+    // 상한은 섹션별이라 비율대로 줄여도 제목·'외 N건' 줄은 남는다 — 몇 번 좁혀 보고, 끝까지 넘치면 상한 0(제목·개수만).
+    let scale = 1;
+    for (let k = 0; k < 5 && restLen() > restMax; k++) {
+      scale = k === 4 ? 0 : scale * Math.max(0, restMax - head) / Math.max(1, restLen() - head) * 0.95;
+      rest = renderRest(scale);
+    }
+  }
+  L.push(...rest);
+  const lessonSec = buildLessonSection({ ...lessonIn, restChars: L.join("\n").length });
   L.splice(headerLen, 0, ...lessonSec.lines);
-
   const markdown = L.join("\n");
   if (compact) logInjection("compact", injectionIds(lessonSec.report), markdown.length);
   return respond(markdown, inspect ? { lessonReport: { ...lessonSec.report, lessonMarkdown: lessonSec.lines.join("\n"), totalChars: markdown.length, projectId, projectName, projectStack } } : undefined);

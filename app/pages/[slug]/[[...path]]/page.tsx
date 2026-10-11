@@ -10,7 +10,7 @@ import SiteFrame from "../SiteFrame";
 import SiteAddressSync from "../SiteAddressSync";
 
 /* =====================================================================
-   /s/<slug>[/<하위 경로>] — 초대받은 게스트가 보는 셸.
+   /pages/<slug>[/<하위 경로>] — 초대받은 게스트가 보는 셸.
    (ws) 레이아웃 밖이다: 게스트는 멤버가 아니므로 requireCtx/getPageContext 를 부르지 않는다.
    판정은 세션 이메일 × SiteInvite·멤버십(lib/sites/server). 통과하면 서명 토큰으로
    /pub 샌드박스 iframe 을 띄운다. 링크가 검색엔진·리퍼러로 새지 않게 noindex·no-referrer.

@@ -15,7 +15,7 @@ describe("next.config headers()", () => {
     // Next 가 headers() source 를 매칭할 때 쓰는 것과 같은 매처·옵션(server/lib/router-utils/filesystem.js).
     const match = getPathMatch(rule.source, { strict: true, removeUnnamedParams: true });
     expect(match("/pub/tok/index.html")).toBe(false);
-    for (const p of ["/", "/s/abc", "/api/tasks", "/pubx", "/p/x", "/login"]) {
+    for (const p of ["/", "/s/abc", "/pages/abc", "/api/tasks", "/pubx", "/p/x", "/login"]) {
       expect(match(p), p).not.toBe(false);
     }
   });

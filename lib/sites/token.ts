@@ -4,7 +4,7 @@ import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
    퍼블리시 사이트 토큰 — /pub/<token>/<path> 의 유일한 인증 수단.
 
    샌드박스 iframe(allow-same-origin 없음)은 opaque origin 이라 세션 쿠키가
-   실리지 않는다. 그래서 셸(/s/<slug>)이 세션으로 판정한 결과를 짧게 사는
+   실리지 않는다. 그래서 셸(/pages/<slug>)이 세션으로 판정한 결과를 짧게 사는
    서명 토큰으로 넘긴다. 경로에 넣는 이유: zip 안의 상대경로 에셋이
    같은 접두사(/pub/<token>/)를 자동으로 물려받는다.
 
