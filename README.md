@@ -1,6 +1,6 @@
 # TeamSpace
 
-**사람 + Claude 에이전트 혼성 팀을 위한 셀프호스팅 워크스페이스.** 프로젝트 · 칸반 태스크 보드 · 문서 · 결정/리스크/용어 · 승인 · 레슨 · 알림 인박스 · 활동 피드를 하나의 앱에서 다루고, 모든 조작이 HTTP API로 열려 있어 **에이전트가 일급 팀원으로 참여**한다.
+**사람 + Claude 에이전트 혼성 팀을 위한 셀프호스팅 워크스페이스.** 프로젝트 · 칸반 태스크 보드 · 문서 · 결정/리스크/용어 · 지식 그래프 · 승인 · 레슨 · 알림 인박스 · 활동 피드 · HTML 퍼블리시를 하나의 앱에서 다루고, 모든 조작이 HTTP API로 열려 있어 **에이전트가 일급 팀원으로 참여**한다.
 
 문서는 file-first다 — 본문이 DB가 아니라 데이터 디렉토리(`TEAMSPACE_DATA_DIR`) 아래 파일 + git 저장소로 남아 레포와 분리 백업·이관이 쉽다. Slack 연동을 켜면 "진행 방향을 가르는 결정"을 채널로 보내 버튼/답글로 승인받는 컨펌 루프가 동작하고, 동봉된 MCP 서버·`pnpm ws` CLI·Claude Code 훅/스킬로 에이전트 세션마다 팀 컨텍스트(레슨·태스크·결정)가 자동 주입된다.
 
@@ -30,6 +30,67 @@ Slack·LLM·Google OAuth 는 전부 선택이다. 없어도 코어(보드·문�
 **승인 인박스** — 에이전트·팀원이 올린 결정을 버튼으로 승인/거부/추가요청. Slack 연동 시 채널 카드로도 처리 가능.
 
 ![승인](docs/images/approvals.png)
+
+## 기능
+
+대부분의 기능은 화면 · `pnpm ws` CLI · HTTP API(`/api/*`) 세 경로로 같은 동작을 한다. 전체 명령은 `pnpm ws help`.
+
+### 작업 관리
+
+- **프로젝트** — 태스크·문서·결정을 묶는 단위. 보관과 프로젝트 단위 공유 범위 제한을 지원한다. `pnpm ws project add`
+- **태스크 보드** — 표·칸반·갤러리·리스트·캘린더·타임라인 뷰에 정렬·필터를 저장한다. `pnpm ws view add`
+- **태스크** — 체크리스트·코멘트·선행 태스크·문서 연결. 클레임은 원자적이라 경쟁하면 409 를 낸다. `pnpm ws task claim`
+- **캘린더** — 태스크 마감·문서 수정일·리마인더를 월/주/일로 본다. 사이드바 › 캘린더
+- **대시보드 · 활동 피드** — 마감·상태 분포·작업량과 최근 변경을 모은다. `pnpm ws activity ls`
+
+### 문서와 지식
+
+- **문서** — 버전 이력·복원, 템플릿, 인라인 코멘트·멘션, 페이지 단위 공유를 지원한다. `pnpm ws doc history` · `pnpm ws page share`
+- **위키링크 · 백링크** — 본문의 `[[제목]]` 이 양방향 링크가 된다. `pnpm ws doc backlinks`
+- **위키 점검** — 깨진 위키링크와 고아 문서를 찾는다. 문서 허브 › 위키 점검 · `pnpm ws lint`
+- **지식 그래프** — 문서·프로젝트 등을 노드로, 링크·참조를 근거 태그가 붙은 간선으로 그린다. 문서 허브 › 그래프 뷰 · `pnpm ws graph` · `pnpm ws graph neighbors`
+- **문서 허브** — 결정·QA·리스크·용어집·변경 이력·데이터 모델·완료 기준(DoD)·온보딩을 항목 단위로 관리한다. `pnpm ws decision add` · `pnpm ws glossary extract`(문서에서 추출, LLM)
+- **검색 · Q&A** — 전역 검색(`⌘K`, `/search`)과 문서·결정 근거로 답하는 Q&A. `pnpm ws search` · `pnpm ws ask` · `pnpm ws similar`
+- **웹 클리퍼** — 웹 본문을 요약·분류해 문서로 저장한다(LLM). `/clip` · `pnpm ws clip`
+- **가져오기 · 내보내기** — 워크스페이스 전체를 zip 으로 내보내고, 노션 export·마크다운 폴더 zip 을 가져온다. `pnpm ws export` · `pnpm ws import`
+- **휴지통 · 즐겨찾기 · 최근 열람** — 삭제는 휴지통을 거친다. `pnpm ws trash ls` · `pnpm ws fav add` · `pnpm ws visit ls`
+
+### 에이전트 협업
+
+- **팀 컨텍스트** — 워크스페이스 상태를 에이전트가 읽는 Markdown 스냅샷으로 낸다. `GET /api/context` · `pnpm ws context`
+- **레슨** — 팀 작업 규칙. 범위는 워크스페이스·프로젝트·스택·개인, 주입 방식은 필수·기본·필요할 때만. 세션 시작과 사용자 메시지(키워드·프로젝트 별칭)에 맞춰 주입한다. `pnpm ws lesson add` · `pnpm ws lesson inspect`
+- **레슨 주간 정리** — 워커가 정리 제안을 만들어 승인 카드로 보내고, 승인하면 적용·백업한다. 되돌릴 수 있다. `pnpm ws lesson hygiene` (끄려면 `LESSON_HYGIENE=off`)
+- **제안** — 에이전트가 레슨·결정 승격을 제안하고 관리자가 승인하면 등록된다. `pnpm ws proposal add`
+- **라이브 세션 · 프레즌스** — 진행 중인 에이전트 세션(레포·브랜치·태스크)과 같은 페이지를 보는 사람을 보여 준다. 설정 › 라이브 세션·잠금 · `pnpm ws sessions live`
+- **이름 있는 잠금** — 공유 브랜치·배포를 TTL 로 예약한다. pre-push 훅은 경고만 하고 푸시를 막지 않는다. `pnpm ws lock take` · `pnpm ws lock install-hook`
+- **라우트 규칙** — 작업 디렉토리(cwd)를 프로젝트에 매핑해 컨텍스트 주입 대상을 정한다. `pnpm ws route-rule add`
+- **세션 탐색기** — 인입된 Claude 세션과 타임라인을 본다. 사이드바 › AI 연결 · `pnpm ws session ls`
+- **스킬 레지스트리 · AI 실행 경로** — 흩어진 SKILL.md 사본의 낡음과 AI 호출 사용처·사용량을 본다. `pnpm ws skills` · `pnpm ws ai-routes`
+
+### 승인과 알림
+
+- **승인** — 결정을 올리면 승인/거부/추가요청으로 처리한다. Slack 연동 시 버튼 카드로도 처리한다(`/api/slack/interactions`). `pnpm ws approval add`
+- **알림 인박스** — 승인·배정·멘션·마감·제안·공유 알림을 종류별로 묶어 본다. `pnpm ws inbox ls --group`
+- **알림 라우팅 규칙** — 이벤트 × 프로젝트 단위로 Slack 채널을 정한다. 사이드바 › 슬랙 · `pnpm ws notif-rule add`
+- **리마인더** — 1회 또는 반복(매일·매주) 예약 알림. 워커가 발송한다. `pnpm ws remind add`
+- **주간 다이제스트** — 프로젝트별 주간 요약을 월요일 오전에 보낸다. `pnpm ws digest weekly`
+
+### 퍼블리시
+
+HTML 파일·폴더·zip 을 올려 링크로 공유한다. 페이지는 샌드박스 iframe 안에서 돌고 버전·롤백을 지원한다.
+
+- **열람 대상** — 초대한 이메일로 Google 로그인한 사람과 워크스페이스 멤버만 본다. 게스트는 멤버가 되지 않고, 초대를 회수하면 즉시 막힌다.
+- **올리기** — `pnpm ws site publish <file.html|dir|file.zip> --title T --slug <영문-kebab> --invite a@example.com`. 같은 링크에 새 버전은 `--site <id>`.
+- **주소** — `<PUBLIC_BASE_URL>/pages/<slug>`, 하위 페이지는 `/pages/<slug>/<페이지>`. 슬러그를 바꿔도 옛 주소(`/s/<slug>` 포함)는 308 로 넘어간다.
+- **관리** — 사이드바 › 퍼블리시 · `pnpm ws site invite` · `pnpm ws site rollback` · `pnpm ws site access`(열람 이력)
+
+### 운영
+
+- **운영 상태 · 지표** — DB·워커·마지막 백업·디스크·AI 비용과 주간 지표. 설정 › 운영 상태 · `pnpm ws ops status` · `pnpm ws metrics`
+- **백업 · 복원 리허설 · health** — `pnpm backup` · `pnpm restore:rehearsal` · `GET /api/health` (아래 「데이터 디렉토리」)
+- **env 금고** — 프로젝트·환경별 env 값을 암호화 보관하고 드리프트를 본다. `pnpm ws env ls` · `pnpm ws env drift`
+- **멤버 · 팀 · 워크스페이스** — 역할(viewer·editor·admin), 팀, 여러 워크스페이스 전환. `pnpm ws member add` · `pnpm ws workspace switch`
+- **에이전트 토큰 · 페어링** — 토큰 발급·회수와 새 머신 한 줄 설치(브라우저 승인 페어링). `pnpm ws token add` (아래 「에이전트 연동」)
 
 ## 빠른 시작
 
@@ -170,14 +231,14 @@ sudo systemctl daemon-reload && sudo systemctl enable --now teamspace
 
 ## 에이전트 연동
 
-- **MCP 서버** — `.mcp.json` 에 등록돼 있어 이 레포에서 Claude Code 를 열면 바로 붙는다(`scripts/mcp-server.ts`). 인증은 `WS_BASE`/`WS_TOKEN` env 또는 `~/.claude/teamspace.json` 의 `{ "base": …, "token": "wst_…" }`.
+- **MCP 서버** — `.mcp.json` 에 등록돼 있어 이 레포에서 Claude Code 를 열면 바로 붙는다(`scripts/mcp-server.ts`, 도구 23개: 컨텍스트·태스크·문서·레슨·결정·제안·인박스·활동·검색·그래프·퍼블리시). 인증은 `WS_BASE`/`WS_TOKEN` env 또는 `~/.claude/teamspace.json` 의 `{ "base": …, "token": "wst_…" }`.
 - **`pnpm ws` CLI** — 프로젝트·태스크·문서·결정·레슨을 API 로 조작하는 래퍼. `pnpm ws help` 참조.
 - **에이전트 토큰** — 관리자가 설정 화면 › 에이전트 토큰 또는 `pnpm ws token add <이름>` 으로 발급(`wst_…` 1회 노출). API 호출은 `x-ws-token` 헤더.
-- **Claude Code 훅** — `scripts/hooks/teamspace-context.mjs`(SessionStart: 세션마다 팀 컨텍스트 자동 주입) · `teamspace-session-end.mjs`(세션 기록) · `deny-repo-docs.mjs`(PreToolUse: 문서를 레포에 쓰는 것을 차단해 TeamSpace doc 으로 유도).
-- **스킬** — `.claude/skills/`(teamspace API 사용법, brainstorming, writing-plans).
+- **Claude Code 훅** — `scripts/hooks/teamspace-context.mjs`(SessionStart: 세션마다 팀 컨텍스트 자동 주입) · `teamspace-prompt-lessons.mjs`(UserPromptSubmit: 메시지에 맞는 레슨 주입) · `teamspace-project-context.mjs`(PostToolUse: 다른 프로젝트 경로를 건드리면 그 프로젝트 컨텍스트 주입, 라이브 세션 하트비트) · `teamspace-session-end.mjs`(SessionEnd: 세션 기록) · `deny-repo-docs.mjs`(PreToolUse: 문서를 레포에 쓰는 것을 차단해 TeamSpace doc 으로 유도). 별도로 git pre-push 훅 `git-pre-push.mjs`(잠금 경고)는 `pnpm ws lock install-hook` 으로 설치한다.
+- **스킬** — `.claude/skills/`(teamspace API 사용법, teamspace-publish, brainstorming, writing-plans).
 - **새 머신 부트스트랩** — 중앙 서버가 있으면 한 줄로 페어링·토큰·훅·플러그인까지:
   ```bash
-  curl -fsSL https://<서버주소>/setup/script | sh -s -- https://<서버주소>
+  curl -fsSL https://<서버주소>/setup.sh | sh -s -- https://<서버주소>
   ```
   Claude Code 플러그인 스택([claude-level-up](https://github.com/leecoder5359/claude-level-up) 마켓플레이스: superpowers · understand-anything · agentmemory · watch)도 기본 설치된다. 건너뛰려면 `--no-plugins`, 다른 마켓플레이스는 `--with-plugins <owner/repo>[@scope]`.
 
