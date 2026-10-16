@@ -3,14 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, pageAccess } from "@/lib/pageGuard";
 import { findAssigneeProp } from "@/lib/taskProps";
-import { applyTaskListFilter } from "@/lib/taskFilter";
+import { applyTaskListFilter, isTaskSort } from "@/lib/taskFilter";
 
 export const runtime = "nodejs";
 
 type Opt = { id: string; name: string; color?: string };
 
-// GET /api/tasks[?board=<id>&assignee=<이름|me>&status=open|all&limit=<1..200|all>] → {total,shown,tasks,databaseId}.
-// 기본은 열린 태스크 50건(한 호출이 토큰을 쏟지 않게). 행: {id,title,status,statusColor,assignee,due,board}.
+// GET /api/tasks[?board=<id>&assignee=<이름|me>&status=open|all&limit=<1..200|all>&q=<제목>&sort=position|created|updated]
+//   → {total,shown,tasks,databaseId}.
+// 기본은 열린 태스크 50건(한 호출이 토큰을 쏟지 않게). 행: {id,title,status,statusColor,assignee,due,board,createdAt,updatedAt}.
+// q·sort 는 limit 앞에 적용 — 큰 보드에서 최근 태스크가 200건 밖으로 밀리지 않게.
 // board 미지정 시 첫 보드(캘린더/일정 뷰 호환). assignee=me 는 현재 액터 이름 (W5 task-6/10).
 export async function GET(request: Request) {
   const guard = await requireCtx();
@@ -23,6 +25,10 @@ export async function GET(request: Request) {
   const rawLimit = url.searchParams.get("limit");
   const limitParam = rawLimit === "all" ? "all" : Number(rawLimit ?? "");
   const assigneeFilter = assigneeParam === "me" ? guard.actor.name : assigneeParam;
+  const qParam = url.searchParams.get("q") ?? undefined;
+  const sortParam = url.searchParams.get("sort") ?? "position";
+  if (!isTaskSort(sortParam))
+    return NextResponse.json({ error: "sort 는 position|created|updated 중 하나여야 합니다." }, { status: 400 });
 
   // D3: 지정 보드는 게이트를 통과해야 하고, 미지정일 때 고르는 '첫 보드' 도
   // **내가 볼 수 있는 것 중** 첫 번째여야 한다(안 그러면 남의 보드가 기본값이 된다).
@@ -68,10 +74,12 @@ export async function GET(request: Request) {
       statusColor: s?.color ?? null,
       board: db.id,
       assignee: assigneeProp ? (((p[assigneeProp.id] as string) ?? "").trim() || null) : null,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
     };
   });
   if (assigneeFilter) tasks = tasks.filter((t) => t.assignee === assigneeFilter);
 
-  const res = applyTaskListFilter(tasks, { status: statusParam, limit: limitParam });
+  const res = applyTaskListFilter(tasks, { status: statusParam, limit: limitParam, q: qParam, sort: sortParam });
   return NextResponse.json({ ...res, databaseId: db.id });
 }

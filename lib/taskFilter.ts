@@ -22,12 +22,26 @@ export function clampLimit(n: number | undefined | null): number {
   return Math.min(Math.floor(n), MAX_TASK_LIMIT);
 }
 
-/** total = 필터(status) 적용 후 전체 건수, shown = limit 로 자른 건수. */
-export function applyTaskListFilter<T extends { status: string | null }>(
+export const TASK_SORTS = ["position", "created", "updated"] as const;
+export type TaskSort = (typeof TASK_SORTS)[number];
+
+export function isTaskSort(s: string): s is TaskSort {
+  return (TASK_SORTS as readonly string[]).includes(s);
+}
+
+type ListRow = { status: string | null; title?: string; createdAt?: string; updatedAt?: string };
+
+/** total = 필터(status·q) 적용 후 전체 건수, shown = limit 로 자른 건수.
+ *  q = 제목 대소문자 무시 부분일치, sort = position(입력 순서 유지)|created|updated(최신 먼저, ISO 문자열 비교). */
+export function applyTaskListFilter<T extends ListRow>(
   rows: T[],
-  opts: { status: "open" | "all"; limit?: number | "all" },
+  opts: { status: "open" | "all"; limit?: number | "all"; q?: string; sort?: TaskSort },
 ): { total: number; shown: number; tasks: T[] } {
-  const filtered = opts.status === "all" ? rows : rows.filter((r) => isOpenStatus(r.status));
+  let filtered = opts.status === "all" ? rows : rows.filter((r) => isOpenStatus(r.status));
+  const q = opts.q?.trim().toLowerCase();
+  if (q) filtered = filtered.filter((r) => (r.title ?? "").toLowerCase().includes(q));
+  const key = opts.sort === "created" ? "createdAt" : opts.sort === "updated" ? "updatedAt" : null;
+  if (key) filtered = [...filtered].sort((a, b) => (b[key] ?? "").localeCompare(a[key] ?? ""));
   // limit="all" 은 자사 UI(캘린더·관계 옵션) 전용 명시적 옵트인 — 에이전트 경로는 200 상한.
   const tasks = opts.limit === "all" ? filtered : filtered.slice(0, clampLimit(opts.limit));
   return { total: filtered.length, shown: tasks.length, tasks };

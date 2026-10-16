@@ -83,20 +83,24 @@ server.registerTool(
 server.registerTool(
   "task_list",
   {
-    description: "태스크 목록. 기본은 열린 태스크 50건. 전체는 status='all', 더 보려면 limit(최대 200). assignee='me' 면 내 담당만, board 로 특정 보드 지정. 응답 {total,shown,tasks} — total 은 status·assignee 필터 뒤·limit 앞의 건수(status=open 이면 완료·취소 제외), shown 은 실제로 담긴 수.",
+    description: "태스크 목록. 기본은 열린 태스크 50건. 전체는 status='all', 더 보려면 limit(최대 200). assignee='me' 면 내 담당만, board 로 특정 보드 지정. q=제목 부분일치(대소문자 무시), sort=position(기본, 보드 순서)|created|updated(최신 먼저) — 둘 다 limit 앞에 적용되니 큰 보드의 최근 태스크는 sort='created' 로 찾는다. 응답 {total,shown,tasks} — total 은 status·assignee 필터 뒤·limit 앞의 건수(status=open 이면 완료·취소 제외), shown 은 실제로 담긴 수.",
     inputSchema: {
       board: z.string().optional(),
       assignee: z.string().optional(),
       status: z.enum(["open", "all"]).optional(),
       limit: z.number().int().min(1).max(200).optional(),
+      q: z.string().optional(),
+      sort: z.enum(["position", "created", "updated"]).optional(),
     },
   },
-  async ({ board, assignee, status, limit }) => {
+  async ({ board, assignee, status, limit, q: title, sort }) => {
     const q = new URLSearchParams();
     if (status) q.set("status", status);
     if (limit) q.set("limit", String(limit));
     if (board) q.set("board", board);
     if (assignee) q.set("assignee", assignee);
+    if (title) q.set("q", title);
+    if (sort) q.set("sort", sort);
     return jsonResult(await api("GET", `/api/tasks${q.size ? `?${q}` : ""}`));
   },
 );

@@ -325,7 +325,8 @@ add({
 });
 add({
   name: "task ls",
-  usage: "task ls [--board <id>] [--assignee <이름|me>] [--all] [--limit <n>]   (기본 열린 것 50건)",
+  usage:
+    "task ls [--board <id>] [--assignee <이름|me>] [--all] [--limit <n>] [--q <제목>] [--sort position|created|updated]   (기본 열린 것 50건, --sort created=최신 생성 먼저)",
   ep: ["tasks/route.ts"],
   run: async (a) => {
     const q = new URLSearchParams();
@@ -336,6 +337,8 @@ add({
     if (bool(a, "all")) q.set("status", "all");
     const lim = flag(a, "limit");
     if (lim) q.set("limit", String(clampLimitArg(lim)));
+    if (flag(a, "q")) q.set("q", flag(a, "q")!);
+    if (flag(a, "sort")) q.set("sort", flag(a, "sort")!);
     const qs = q.toString();
     const r = (await api("GET", `/api/tasks${qs ? `?${qs}` : ""}`)) as {
       total: number;
@@ -461,7 +464,8 @@ add({
 });
 add({
   name: "task mine",
-  usage: "task mine [--board <id>] [--limit <n>] [--all]   (내 담당 태스크 — assignee=me, 기본 열린 것 50건. --all=한도 없이 전부(열린 것만), --limit 1..200)",
+  usage:
+    "task mine [--board <id>] [--limit <n>] [--all] [--q <제목>] [--sort position|created|updated]   (내 담당 태스크 — assignee=me, 기본 열린 것 50건. --all=한도 없이 전부(열린 것만), --limit 1..200)",
   ep: ["tasks/route.ts"],
   run: async (a) => {
     const q = new URLSearchParams({ assignee: "me" });
@@ -470,6 +474,8 @@ add({
     // --all = 페이징 없이 전부(라우트의 limit=all 옵트인). --limit 는 1..200 으로 자른다.
     if (bool(a, "all")) q.set("limit", "all");
     else if (flag(a, "limit")) q.set("limit", String(clampLimitArg(flag(a, "limit"))));
+    if (flag(a, "q")) q.set("q", flag(a, "q")!);
+    if (flag(a, "sort")) q.set("sort", flag(a, "sort")!);
     const r = (await api("GET", `/api/tasks?${q}`)) as {
       total: number;
       shown: number;
