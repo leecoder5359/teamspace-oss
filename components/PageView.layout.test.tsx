@@ -3,6 +3,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 
 vi.mock("next/dynamic", () => ({ default: () => () => <div data-testid="editor" /> }));
+// PageView 는 모듈 평가 때 편집기 청크를 미리 import 한다 — 실제 BlockNote 를 끌어오지 않게 막는다
+vi.mock("./PageEditor", () => ({ default: () => null }));
+vi.mock("./RawDocEditor", () => ({ default: () => null }));
 vi.mock("./DocToc", () => ({ default: () => <div /> }));
 vi.mock("./Breadcrumb", () => ({ default: () => <div /> }));
 vi.mock("./ws/PresenceBar", () => ({ default: () => <div /> }));

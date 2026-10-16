@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DocType } from "@/lib/docOrganize";
 import { getPages, seedPages } from "@/lib/pagesClient";
+import { getProjects, seedProjects } from "@/lib/projectsClient";
+import { getRecentVisits } from "@/lib/visitsClient";
 import { groupByProject, resolveCollapsed, taskNoteFolderIds, type FlatPage, type Group } from "./treeModel";
 
 export type QuickItem = { pageId: string; title: string; kind: "doc" | "database"; docType: DocType | null; projectId: string | null };
@@ -34,7 +36,7 @@ export function useSidebarData(activePageId: string | null, initial?: SidebarIni
   const [recents, setRecents] = useState<QuickItem[]>([]);
   const [loaded, setLoaded] = useState(() => Boolean(initial));
   // 마운트 때 한 번만 공유 캐시에 심는다 — 이후 레이아웃이 다시 렌더돼 prop 이 바뀌어도 상태는 훅이 관리한다.
-  const seedRef = useRef(initial ? { pages: initial.pages, at: initial.serverTime } : null);
+  const seedRef = useRef(initial ? { pages: initial.pages, projects: initial.projects, at: initial.serverTime } : null);
   // 접힘 상태. null = 아직 결정 전(그룹 머리만 그린다).
   // 서버 주입(initial)이 있으면 서버가 알 수 있는 기본값(저장값 없음 = 현재 프로젝트만 펼침)으로 시작한다 —
   // 서버·클라 첫 렌더가 같은 트리를 그리고, 저장값이 없는 사용자는 마운트 뒤에도 뒤집히지 않는다.
@@ -53,20 +55,23 @@ export function useSidebarData(activePageId: string | null, initial?: SidebarIni
 
   // 기본은 fresh — 쓰기 직후(토글·docType·refresh)에 낡은 캐시를 읽지 않게. 첫 마운트만 공유 캐시를 쓴다.
   const reload = useCallback(async (opts: { fresh?: boolean } = {}) => {
-    const [p, pj, f, v] = await Promise.all([
-      getPages({ fresh: opts.fresh ?? true }), fetch("/api/projects?archived=all", { cache: "no-store" }), // 보관 프로젝트도 받아 (보관) 그룹으로 남긴다(F10)
-      fetch("/api/favorites", { cache: "no-store" }), fetch("/api/visits?limit=9", { cache: "no-store" }),
+    // '최근' 은 그룹에 영향이 없어 따로 반영한다 — 문서를 열면 방문 기록이 끝난 뒤에 받으므로(lib/visitsClient) 나머지를 붙잡지 않는다.
+    const recentsDone = getRecentVisits().then((vis) => {
+      if (vis) setRecents(vis as QuickItem[]);
+    });
+    const fresh = opts.fresh ?? true;
+    const [p, pjs, f] = await Promise.all([
+      getPages({ fresh }), getProjects({ fresh }), // 보관 프로젝트도 받아 (보관) 그룹으로 남긴다(F10)
+      fetch("/api/favorites", { cache: "no-store" }),
     ]);
     // 본문을 모두 읽은 뒤 한꺼번에 반영한다 — 사이에 렌더가 끼면 프로젝트 없이 그룹이 잡혀 기본 접힘이 틀어진다.
     const pages = p.ok ? (p.data as { pages: FlatPage[] }).pages : null;
-    const pjs = pj.ok ? ((await pj.json()) as { projects: { id: string; name: string; archivedAt?: string | null }[] }).projects.map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt != null })) : null;
     const favs = f.ok ? ((await f.json()) as { favorites: QuickItem[] }).favorites : null;
-    const vis = v.ok ? ((await v.json()) as { visits: QuickItem[] }).visits : null;
     if (pages) setFlat(pages);
     if (pjs) setProjects(pjs);
     if (favs) setFavorites(favs);
-    if (vis) setRecents(vis);
     if (pages) setLoaded(true);
+    await recentsDone;
   }, []);
 
   // pages:changed 로 시작된 reload — Sidebar.refresh 가 같은 요청을 기다리게 해 fresh 를 두 번 부르지 않는다.
@@ -80,6 +85,7 @@ export function useSidebarData(activePageId: string | null, initial?: SidebarIni
     // 서버가 준 목록을 캐시에 먼저 심어 첫 reload 가 /api/pages 를 다시 받지 않게 한다(U7).
     if (seedRef.current) {
       seedPages({ pages: seedRef.current.pages }, { at: seedRef.current.at });
+      seedProjects(seedRef.current.projects, { at: seedRef.current.at });
       seedRef.current = null;
     }
     first();
@@ -90,8 +96,8 @@ export function useSidebarData(activePageId: string | null, initial?: SidebarIni
   // 문서를 열면 Breadcrumb 이 방문을 기록하고 visits:changed 를 쏜다 — 최근만 다시 읽는다.
   useEffect(() => {
     const on = async () => {
-      const v = await fetch("/api/visits?limit=9", { cache: "no-store" }).catch(() => null);
-      if (v?.ok) setRecents(((await v.json()) as { visits: QuickItem[] }).visits);
+      const vis = await getRecentVisits();
+      if (vis) setRecents(vis as QuickItem[]);
     };
     const handler = () => void on();
     window.addEventListener("visits:changed", handler);

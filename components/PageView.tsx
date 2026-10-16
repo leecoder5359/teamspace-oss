@@ -3,13 +3,21 @@
 import dynamic from "next/dynamic";
 import { useCallback, useRef, useSyncExternalStore } from "react";
 
-// BlockNote·에디터 모두 window 를 쓰므로 클라이언트 전용 로드 (SSR 비활성)
-const PageEditor = dynamic(() => import("./PageEditor"), { ssr: false });
-const RawDocEditor = dynamic(() => import("./RawDocEditor"), { ssr: false });
+// BlockNote·에디터 모두 window 를 쓰므로 클라이언트 전용 로드 (SSR 비활성).
+// 로더를 밖으로 빼 아래 '미리 받기' 와 같은 import() 를 쓴다 — dynamic() 안에 import() 를 직접 쓰면 번들러가
+// 그 호출을 별도 모듈 그래프로 묶어, 밖의 import() 와 다른 청크(편집기 코드 중복 다운로드·두 번 평가)가 된다.
+// 서버 번들에서는 import() 자체를 지운다(typeof window 는 빌드 때 상수로 접힌다) — ssr:false 라 서버는 로더를
+// 부르지 않는데, 남겨 두면 BlockNote 가 서버 청크로 통째로 컴파일된다(dynamic() 안의 import() 는 Next 가 대신 지워 줬다).
+const noEditor = () => Promise.resolve({ default: () => null });
+const loadPageEditor = typeof window === "undefined" ? noEditor : () => import("./PageEditor");
+const loadRawDocEditor = typeof window === "undefined" ? noEditor : () => import("./RawDocEditor");
+const PageEditor = dynamic(() => loadPageEditor(), { ssr: false });
+const RawDocEditor = dynamic(() => loadRawDocEditor(), { ssr: false });
 import SharePanel from "./ws/SharePanel";
 import PresenceBar from "./ws/PresenceBar";
 import Breadcrumb from "./Breadcrumb";
 import DocToc from "./DocToc";
+import type { PagePrefetch } from "@/lib/pagePrefetch";
 
 /* =====================================================================
    문서 편집 진입점.
@@ -48,7 +56,28 @@ function getSnapshot(): Mode {
 // 서버에서는 항상 rich — 클라이언트가 source 면 하이드레이션 직후 교체된다
 const getServerSnapshot = (): Mode => "rich";
 
-export default function PageView({ pageId, fileBacked }: { pageId: string; fileBacked?: boolean }) {
+/* 편집기 청크를 하이드레이션 전에 받기 시작한다.
+   ssr:false 인 dynamic 은 서버가 청크 preload 를 싣지 않고(PreloadChunks 는 ssr:true 경로만), 클라에서도
+   서버가 비워 둔 경계를 하이드레이션이 끝난 뒤에야 다시 그리면서 import() 를 부른다 — 그동안 페이지 전체
+   하이드레이션 시간만큼 편집기(BlockNote) 다운로드가 늦게 시작됐다. 이 모듈은 /p/<id> 의 RSC 페이로드를
+   풀 때 평가되므로 여기서 같은 로더를 먼저 불러 둔다(나중의 dynamic 로더는 이미 받은 모듈을 그대로 쓴다).
+   지금 모드의 편집기만 — 원문 모드 사용자는 BlockNote 를 받지 않는다. */
+if (typeof window !== "undefined") {
+  void (getSnapshot() === "source" ? loadRawDocEditor() : loadPageEditor()).catch(() => {
+    /* 실패해도 dynamic 로더가 렌더 때 다시 시도한다 */
+  });
+}
+
+export default function PageView({
+  pageId,
+  fileBacked,
+  initial = null,
+}: {
+  pageId: string;
+  fileBacked?: boolean;
+  /** 서버가 미리 읽은 본문 — 편집기가 첫 마운트에 한 번만 쓴다(모드 전환 뒤엔 API 로 다시 받는다). */
+  initial?: PagePrefetch | null;
+}) {
   const mode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   // 목차(U5)가 헤딩을 모을 본문 영역 — 편집기·원문 어느 모드든 이 안에 그려진다
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -69,7 +98,7 @@ export default function PageView({ pageId, fileBacked }: { pageId: string; fileB
         <Breadcrumb pageId={pageId} />
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
           <div ref={bodyRef} style={{ flex: 1, minWidth: 0 }}>
-            <PageEditor key={pageId} pageId={pageId} />
+            <PageEditor key={pageId} pageId={pageId} initial={initial} />
             <div className="ws-share-panel">
               <SharePanel pageId={pageId} />
             </div>
@@ -105,7 +134,7 @@ export default function PageView({ pageId, fileBacked }: { pageId: string; fileB
       </div>
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <div ref={bodyRef} style={{ flex: 1, minWidth: 0 }}>
-          {mode === "rich" ? <PageEditor key={pageId} pageId={pageId} /> : <RawDocEditor key={pageId} pageId={pageId} />}
+          {mode === "rich" ? <PageEditor key={pageId} pageId={pageId} initial={initial} /> : <RawDocEditor key={pageId} pageId={pageId} initial={initial} />}
           {/* 공유 범위(격차 D3) — 편집기·원문 어느 모드에서도 보여야 한다 */}
           <div className="ws-share-panel">
             <SharePanel pageId={pageId} />

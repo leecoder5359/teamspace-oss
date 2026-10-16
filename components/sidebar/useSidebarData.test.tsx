@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { useEffect } from "react";
 import { render, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { _resetPagesClientForTests, getPagesSync } from "@/lib/pagesClient";
+import { _resetProjectsClientForTests } from "@/lib/projectsClient";
+import { _resetVisitsClientForTests, recordVisit } from "@/lib/visitsClient";
 import { useSidebarData, type SidebarInitial } from "./useSidebarData";
 import { SidebarTree } from "./SidebarTree";
 import type { FlatPage } from "./treeModel";
@@ -36,6 +39,8 @@ function Probe({ init, log }: { init?: SidebarInitial; log: Snap[] }) {
 
 beforeEach(() => {
   _resetPagesClientForTests();
+  _resetProjectsClientForTests();
+  _resetVisitsClientForTests();
   fetchMock.mockClear();
   vi.stubGlobal("fetch", fetchMock);
   localStorage.clear();
@@ -57,14 +62,27 @@ describe("useSidebarData — 서버 주입(U7)", () => {
     expect(html).toContain(JSON.stringify(serverLog[0]).replace(/"/g, "&quot;"));
   });
 
-  it("initial 이 있으면 마운트 때 /api/pages 를 부르지 않는다(나머지는 그대로)", async () => {
+  it("initial 이 있으면 마운트 때 /api/pages·/api/projects 를 부르지 않는다(서버 시드, 나머지는 그대로)", async () => {
     const log: Snap[] = [];
     render(<Probe init={initial} log={log} />);
     await waitFor(() => expect(calledWith("/api/visits")).toBe(1));
     await waitFor(() => expect(log.at(-1)).toMatchObject({ flat: 3 }));
     expect(calledWith("/api/pages")).toBe(0);
-    expect(calledWith("/api/projects")).toBe(1);
+    expect(calledWith("/api/projects")).toBe(0);
     expect(calledWith("/api/favorites")).toBe(1);
+  });
+
+  it("같은 커밋에서 방문을 기록하면 최근 목록은 기록 뒤 한 번만 받는다(GET·POST·GET → POST·GET)", async () => {
+    function WithVisit() {
+      useSidebarData(null, initial);
+      useEffect(() => void recordVisit("a"), []);
+      return null;
+    }
+    render(<WithVisit />);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([u]) => u === "/api/visits?limit=9").length).toBe(1));
+    await new Promise((r) => setTimeout(r, 20));
+    const visitCalls = fetchMock.mock.calls.filter(([u]) => String(u).startsWith("/api/visits"));
+    expect(visitCalls.map((c) => `${((c as unknown[])[1] as RequestInit | undefined)?.method ?? "GET"} ${c[0]}`)).toEqual(["POST /api/visits", "GET /api/visits?limit=9"]);
   });
 
   it("initial 이 없으면 기존대로 — 빈 첫 렌더, /api/pages 1회", async () => {
@@ -91,7 +109,7 @@ describe("useSidebarData — refresh", () => {
       return <button onClick={() => void d.refresh()}>go</button>;
     }
     const { getByText } = render(<R />);
-    await waitFor(() => expect(calledWith("/api/projects")).toBe(1));
+    await waitFor(() => expect(calledWith("/api/visits")).toBe(1));
     fetchMock.mockClear();
     await act(async () => {
       fireEvent.click(getByText("go"));

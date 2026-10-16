@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import MarkdownPreview from "./MarkdownPreview";
 import { merge3, hasConflictMarkers } from "@/lib/merge3";
 import { Icon } from "./ws/icons";
+import { takePrefetch, type PagePrefetch } from "@/lib/pagePrefetch";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error" | "conflict";
 type EditorMode = "edit" | "preview";
@@ -13,7 +14,7 @@ type Claim = { claim: string; tag: ProvTag; note: string };
 const TAG_COLOR: Record<ProvTag, string> = { 추출: "var(--color-primary)", 추론: "#E0900F", 모호: "var(--text-disabled)" };
 const TAG_HINT: Record<ProvTag, string> = { 추출: "문서에 명시됨", 추론: "유추됨", 모호: "근거 약함" };
 
-export default function RawDocEditor({ pageId }: { pageId: string }) {
+export default function RawDocEditor({ pageId, initial }: { pageId: string; initial?: PagePrefetch | null }) {
   const [markdown, setMarkdown] = useState("");
   const [title, setTitle] = useState("");
   const [state, setState] = useState<SaveState>("loading");
@@ -63,10 +64,14 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch(`/api/pages/${pageId}`, { cache: "no-store" });
-      if (!res.ok || cancelled) return;
-      const data = (await res.json()) as { page: { title: string; rev?: number }; markdown: string };
-      if (cancelled) return;
+      // 서버가 미리 읽어 준 본문이 있으면 첫 마운트 한 번은 그걸 쓴다(왕복 1회 절약 — lib/pagePrefetch).
+      let data: { page: { title: string; rev?: number }; markdown: string } | null = takePrefetch(initial);
+      if (!data) {
+        const res = await fetch(`/api/pages/${pageId}`, { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        data = (await res.json()) as { page: { title: string; rev?: number }; markdown: string };
+        if (cancelled) return;
+      }
       revRef.current = data.page.rev ?? 0;
       const md = data.markdown ?? "";
       setMarkdown(md);
@@ -82,7 +87,9 @@ export default function RawDocEditor({ pageId }: { pageId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [pageId]); // pageId가 바뀔 때만 재로드
+    // initial 은 첫 마운트에만 의미가 있다(한 번 쓰면 takePrefetch 가 null) — pageId 가 바뀔 때만 재로드
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId]);
 
   const save = async () => {
     if (!loadedRef.current) return;

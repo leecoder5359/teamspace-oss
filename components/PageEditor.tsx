@@ -16,6 +16,7 @@ import type { BNBlock } from "@/lib/md/blocknote";
 import type { Frontmatter } from "@/lib/md/ast";
 import { getPages } from "@/lib/pagesClient";
 import { DUPLICATE_RENAME_NOTICE, renameCollides } from "@/lib/renameDuplicate";
+import { takePrefetch, type PagePrefetch } from "@/lib/pagePrefetch";
 
 /* =====================================================================
    문서 편집기(BlockNote).
@@ -35,7 +36,7 @@ import { DUPLICATE_RENAME_NOTICE, renameCollides } from "@/lib/renameDuplicate";
 type SaveState = "idle" | "loading" | "loadError" | "saving" | "saved" | "error" | "conflict";
 type PageLite = { id: string; title: string };
 
-export default function PageEditor({ pageId }: { pageId: string }) {
+export default function PageEditor({ pageId, initial }: { pageId: string; initial?: PagePrefetch | null }) {
   // 헤딩 앵커: PM 데코레이션으로 헤딩 래퍼에 id — 편집기에서도 `#slug` 링크가 꽂힌다(결정 29e188d: DOM 직접 쓰기 금지)
   const editor = useCreateBlockNote({ schema: wsSchema, extensions: [HeadingAnchors()] });
   const [title, setTitle] = useState("");
@@ -74,11 +75,15 @@ export default function PageEditor({ pageId }: { pageId: string }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/pages/${pageId}`, { cache: "no-store" });
-        if (cancelled) return;
-        if (!res.ok) throw new Error(`load ${res.status}`);
-        const data = (await res.json()) as { page: { title: string; rev?: number }; markdown: string };
-        if (cancelled) return;
+        // 서버가 미리 읽어 준 본문이 있으면 첫 마운트 한 번은 그걸 쓴다(왕복 1회 절약 — lib/pagePrefetch).
+        let data: { page: { title: string; rev?: number }; markdown: string } | null = takePrefetch(initial);
+        if (!data) {
+          const res = await fetch(`/api/pages/${pageId}`, { cache: "no-store" });
+          if (cancelled) return;
+          if (!res.ok) throw new Error(`load ${res.status}`);
+          data = (await res.json()) as { page: { title: string; rev?: number }; markdown: string };
+          if (cancelled) return;
+        }
 
         revRef.current = data.page.rev ?? 0;
         const doc = parseMarkdown(data.markdown ?? "");

@@ -8,6 +8,7 @@ vi.mock("./Sidebar", () => ({ default: () => null }));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 
 import AppShell, { type InitialSidebar } from "./AppShell";
+import { packRows } from "@/lib/rowPack";
 
 const initial: InitialSidebar = {
   pages: [{ id: "a", title: "a", icon: null, parentId: null, position: 0, kind: "doc", projectId: null }] as NonNullable<InitialSidebar>["pages"],
@@ -27,6 +28,33 @@ describe("AppShell — 서버 목록 시드", () => {
     }
     render(<AppShell initialSidebar={initial}><Child /></AppShell>);
     expect(seen[0]).toEqual({ pages: initial!.pages });
+  });
+
+  it("스트리밍 프라미스 — 도착해 있으면(status=fulfilled) 자식 첫 렌더 전에, 아니면 도착하는 대로 심는다", async () => {
+    const ready = Object.assign(Promise.resolve(initial), { status: "fulfilled", value: initial });
+    const seen: unknown[] = [];
+    function Child() {
+      seen.push(getPagesSync()?.data ?? null);
+      return null;
+    }
+    render(<AppShell initialSidebar={ready}><Child /></AppShell>);
+    expect(seen[0]).toEqual({ pages: initial!.pages });
+
+    cleanup();
+    _resetPagesClientForTests();
+    let resolve!: (v: InitialSidebar) => void;
+    const later = new Promise<InitialSidebar>((r) => (resolve = r));
+    render(<AppShell initialSidebar={later}><div /></AppShell>);
+    expect(getPagesSync()).toBeNull();
+    resolve(initial);
+    await later;
+    await Promise.resolve();
+    expect(getPagesSync()?.data).toEqual({ pages: initial!.pages });
+  });
+
+  it("열 행렬(packRows)로 온 목록은 원래 배열로 되돌려 심는다", () => {
+    render(<AppShell initialSidebar={{ ...initial!, pages: packRows(initial!.pages) }}><div /></AppShell>);
+    expect(getPagesSync()?.data).toEqual({ pages: initial!.pages });
   });
 
   it("initialSidebar 가 없으면 심지 않는다", () => {

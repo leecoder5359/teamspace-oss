@@ -18,7 +18,19 @@
 #   - 컨테이너는 떠 있는데 pg_isready 실패(복구 중) → 대기
 #   - 쿨다운: DB 재시작/기동은 15분에 1번까지(상태 파일 db-restart-at)
 #   - DB 조치를 한 사이클엔 web kickstart 를 하지 않는다
-# 알림: 셸에서 쓸 수 있는 기존 알림 경로가 없어(슬랙 토큰은 앱 env 에만) 로그만 남긴다.
+#
+# 공개 주소 외부 감시(2026-10-16): 공개 주소는 엣지 VM(Caddy) → Tailscale → 이 머신으로 중계된다. 그 구간이
+# 끊기면 로컬 /api/health 는 멀쩡해서 아무도 몰랐다. 그래서:
+#   - 로컬이 200 일 때만 $PUBLIC_BASE_URL/login 을 GET(제한 TEAMSPACE_PUBLIC_TIMEOUT_SEC, 기본 15초)
+#   - 비200 이 연속 2회(상태 파일 public-fails)면 "로컬 정상·공개 실패 → 엣지/중계 문제" 슬랙 알림
+#   - 로컬이 확정 비정상이라 web 을 kickstart 할 때는 "로컬 다운" 알림(공개 실패는 로컬 탓이므로 엣지 알림 안 함)
+#   - 같은 종류 알림은 TEAMSPACE_ALERT_COOLDOWN_SEC(기본 1시간)에 1번, 복구되면 복구 알림 1번
+#   - 인증서 만료는 따로 보지 않는다: 만료·검증 실패면 curl 이 실패(000)해 위 공개 실패 알림으로 잡힌다
+# 공개 주소·슬랙 값은 환경변수 → 레포의 Next env 파일(.env.production.local → .env.local → .env.production → .env)
+# 순으로 찾는다(launchd 는 앱 env 를 넘겨주지 않는다). 호스트·채널을 스크립트에 박지 않는다.
+#   PUBLIC_BASE_URL                  없으면 공개 감시를 건너뛴다
+#   AUTH_SLACK_BOT_TOKEN             앱과 같은 봇 토큰
+#   TEAMSPACE_HEALTH_SLACK_CHANNEL   알림 채널(없으면 AUTH_SLACK_DEFAULT_CHANNEL). 둘 다 없으면 로그만 남긴다
 # launchd PATH 에 docker 가 없을 수 있어 command -v → 알려진 설치 위치 순으로 찾는다.
 set -uo pipefail
 
@@ -32,11 +44,97 @@ DB_RESTART_FILE="$STATE_DIR/db-restart-at"
 DB_COOLDOWN_SEC="${TEAMSPACE_DB_COOLDOWN_SEC:-900}"
 PG_CONTAINER="${TEAMSPACE_PG_CONTAINER:-teamspace-postgres}"
 HEALTH_URL="${TEAMSPACE_HEALTH_URL:-http://localhost:3002/api/health}"
+PUBLIC_FAILS_FILE="$STATE_DIR/public-fails"
+ALERT_COOLDOWN_SEC="${TEAMSPACE_ALERT_COOLDOWN_SEC:-3600}"
+PUBLIC_TIMEOUT_SEC="${TEAMSPACE_PUBLIC_TIMEOUT_SEC:-15}"
+REPO_DIR="${TEAMSPACE_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 mkdir -p "$STATE_DIR"
+
+# 환경변수 우선, 없으면 Next 가 읽는 env 파일에서 KEY= 줄을 읽는다(source 하지 않음 — 파일 내용을 실행하지 않는다).
+env_get() {
+  local key="$1" v f line
+  v="${!key:-}"
+  if [ -n "$v" ]; then printf '%s' "$v"; return; fi
+  for f in .env.production.local .env.local .env.production .env; do
+    [ -f "$REPO_DIR/$f" ] || continue
+    line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$REPO_DIR/$f" 2>/dev/null | tail -n1)"
+    [ -n "$line" ] || continue
+    v="${line#*=}"
+    case "$v" in
+      \"*\") v="${v#\"}"; v="${v%\"}" ;;
+      \'*\') v="${v#\'}"; v="${v%\'}" ;;
+      *) v="${v%%[[:space:]]#*}"; v="$(printf '%s' "$v" | sed -E 's/[[:space:]]+$//')" ;;
+    esac
+    if [ -n "$v" ]; then printf '%s' "$v"; return; fi
+  done
+}
+
+# 슬랙 발송. 토큰/채널이 없으면 로그만. 토큰은 argv(ps 에 보임) 대신 stdin 헤더로 넘긴다.
+slack_notify() {
+  local text="$1" token channel esc
+  token="$(env_get AUTH_SLACK_BOT_TOKEN)"
+  channel="$(env_get TEAMSPACE_HEALTH_SLACK_CHANNEL)"
+  [ -n "$channel" ] || channel="$(env_get AUTH_SLACK_DEFAULT_CHANNEL)"
+  if [ -z "$token" ] || [ -z "$channel" ]; then
+    echo "$LOG_PREFIX (슬랙 미설정 — 알림 생략) $text"
+    return 0
+  fi
+  esc="$(printf '%s' "$text" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+  printf 'Authorization: Bearer %s\n' "$token" | curl -s -m 10 -o /dev/null -X POST \
+    -H @- -H 'Content-Type: application/json; charset=utf-8' \
+    --data "{\"channel\":\"$channel\",\"text\":\"$esc\"}" \
+    https://slack.com/api/chat.postMessage || echo "$LOG_PREFIX 슬랙 발송 실패"
+  echo "$LOG_PREFIX 알림 발송: $text"
+}
+
+# 종류별(edge|local) 알림 — 쿨다운 안이면 생략. 마지막 알림 시각은 상태 파일 alert-<kind>-at.
+alert() {
+  local kind="$1" text="$2" now last f="$STATE_DIR/alert-$1-at"
+  now="$(date +%s)"
+  last="$(cat "$f" 2>/dev/null || echo 0)"
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  if [ $(( now - last )) -lt "$ALERT_COOLDOWN_SEC" ]; then
+    echo "$LOG_PREFIX 알림 쿨다운 중($kind, $(( now - last ))s < ${ALERT_COOLDOWN_SEC}s)"
+    return 0
+  fi
+  echo "$now" > "$f"
+  slack_notify "$text"
+}
+
+# 알림을 보냈던 종류가 정상으로 돌아오면 복구 알림 1번.
+resolve_alert() {
+  local f="$STATE_DIR/alert-$1-at"
+  [ -f "$f" ] || return 0
+  rm -f "$f"
+  slack_notify "$2"
+}
 
 body="$(curl -s -m 20 "$HEALTH_URL" || true)"
 code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$HEALTH_URL" || true)"
 code="${code:-000}"
+
+# ── 공개 주소(엣지/중계) 감시 — 로컬이 정상일 때만 의미가 있다 ─────────────────
+if [ "$code" = "200" ]; then
+  resolve_alert local "✅ TeamSpace 로컬 서버 복구 (/api/health → 200)"
+  public_base="$(env_get PUBLIC_BASE_URL)"
+  public_base="${public_base%/}"
+  if [ -n "$public_base" ]; then
+    public_url="$public_base/login"
+    pcode="$(curl -s -o /dev/null -w '%{http_code}' -m "$PUBLIC_TIMEOUT_SEC" "$public_url" || true)"
+    pcode="${pcode:-000}"
+    if [ "$pcode" = "200" ]; then
+      echo 0 > "$PUBLIC_FAILS_FILE"
+      resolve_alert edge "✅ TeamSpace 공개 주소 복구: $public_url → 200"
+    else
+      pfails=$(( $(cat "$PUBLIC_FAILS_FILE" 2>/dev/null || echo 0) + 1 ))
+      echo "$pfails" > "$PUBLIC_FAILS_FILE"
+      echo "$LOG_PREFIX public down (local=200, public=$pcode, public_fails=$pfails, url=$public_url)"
+      if [ "$pfails" -ge 2 ]; then
+        alert edge "🚨 TeamSpace 공개 주소 실패 — 로컬은 정상(200)인데 $public_url → $pcode (연속 ${pfails}회). 엣지/중계 구간 문제: 엣지 VM·Caddy·Tailscale(tailscale serve) 확인"
+      fi
+    fi
+  fi
+fi
 
 resolve_docker() {
   if [ -n "${TEAMSPACE_DOCKER_BIN:-}" ]; then echo "$TEAMSPACE_DOCKER_BIN"; return; fi
@@ -115,6 +213,7 @@ if [ "$code" != "200" ]; then
     exit 0
   fi
   echo "$LOG_PREFIX web unhealthy (code=$code, fails=$fails, age=${age}s, listening=$listening, load=$load) → kickstart web"
+  alert local "🚨 TeamSpace 로컬 서버 다운 — /api/health → $code (연속 ${fails}회, load=$load). web 을 kickstart 합니다. 공개 주소도 이 때문에 실패합니다(엣지 문제 아님)"
   echo 0 > "$FAILS_FILE"
   launchctl kickstart -k "gui/$UID_NUM/com.teamspace.web" || true
   # web 이 죽었으면 worker 상태 판정 불가 — 다음 사이클에 재확인

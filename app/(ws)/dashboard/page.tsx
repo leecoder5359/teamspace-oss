@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getPageContext } from "@/lib/workspace";
+import { getRenderContext } from "@/lib/renderContext";
 import Dashboard from "@/components/ws/Dashboard";
 
 // 인사말의 사용자 이름만 서버(lib/workspace 컨텍스트)에서 해석하고,
@@ -7,7 +7,7 @@ import Dashboard from "@/components/ws/Dashboard";
 export default async function DashboardPage() {
   let userName = "회원";
   try {
-    const { userId } = await getPageContext();
+    const { userId } = await getRenderContext();
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
     if (user?.name) userName = user.name;
   } catch {

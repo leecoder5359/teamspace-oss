@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { getPageContext } from "@/lib/workspace";
+import { getRenderContext } from "@/lib/renderContext";
 import { getProjectsWithStats } from "@/lib/projects";
 import Projects from "@/components/ws/Projects";
 
 // 서버 컴포넌트: 프로젝트 카드 지표 + 리드 선택용 멤버 목록을 페치해 클라이언트에 전달.
 export default async function ProjectsPage() {
-  const { workspaceId } = await getPageContext();
+  const { workspaceId } = await getRenderContext();
 
   const [initialProjects, memberRows] = await Promise.all([
     getProjectsWithStats(workspaceId),

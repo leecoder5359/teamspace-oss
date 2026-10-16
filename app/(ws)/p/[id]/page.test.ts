@@ -10,12 +10,14 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/prisma", () => ({ prisma: { page: { findUnique: vi.fn() } } }));
 vi.mock("@/lib/workspace", () => ({ getPageContext: vi.fn() }));
 vi.mock("@/lib/pageGuard", () => ({ loadAccess: vi.fn(), pageAccess: vi.fn() }));
+vi.mock("@/lib/pageService", () => ({ getPageContent: vi.fn() }));
 vi.mock("@/components/PageView", () => ({ default: function PageView() { return null; } }));
 vi.mock("@/components/DatabaseView", () => ({ default: function DatabaseView() { return null; } }));
 
 import { prisma } from "@/lib/prisma";
 import { getPageContext } from "@/lib/workspace";
 import { loadAccess, pageAccess } from "@/lib/pageGuard";
+import { getPageContent } from "@/lib/pageService";
 import PageView from "@/components/PageView";
 import DatabaseView from "@/components/DatabaseView";
 import PagePage from "./page";
@@ -69,5 +71,25 @@ describe("/p/[id] 페이지", () => {
     const el = (await run()) as { type: unknown; props: Record<string, unknown> };
     expect(el.type).toBe(PageView);
     expect(el.props).toMatchObject({ pageId: "p1", fileBacked: true });
+  });
+
+  it("doc 은 본문을 서버에서 같이 읽어 PageView 에 넘긴다(nonce 포함) — API 와 같은 getPageContent", async () => {
+    m(pageAccess).mockReturnValue("view");
+    m(prisma.page.findUnique).mockResolvedValue({ kind: "doc", deletedAt: null, workspaceId: "w1" });
+    const page = { id: "p1", title: "T", icon: null, parentId: null, kind: "doc", rev: 7 };
+    m(getPageContent).mockResolvedValue({ ok: true, page, markdown: "# hi" });
+    const el = (await run()) as { type: unknown; props: { initial: { page: unknown; markdown: string; nonce: string } } };
+    expect(m(getPageContent).mock.calls[0][1]).toBe("p1");
+    expect(el.props.initial).toMatchObject({ page, markdown: "# hi" });
+    expect(el.props.initial.nonce).toMatch(/.{8,}/);
+  });
+
+  it("본문 미리 읽기가 실패하면 initial=null — 편집기가 종전대로 API 로 받는다", async () => {
+    m(pageAccess).mockReturnValue("view");
+    m(prisma.page.findUnique).mockResolvedValue({ kind: "doc", deletedAt: null, workspaceId: "w1" });
+    m(getPageContent).mockRejectedValue(new Error("fs"));
+    const el = (await run()) as { type: unknown; props: { initial: unknown } };
+    expect(el.type).toBe(PageView);
+    expect(el.props.initial).toBeNull();
   });
 });

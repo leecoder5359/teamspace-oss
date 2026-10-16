@@ -18,6 +18,10 @@
     <key>PATH</key><string>__NODE_BIN_DIR__:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
     <key>NODE_ENV</key><string>production</string>
   </dict>
+  <!-- 같은 머신의 빌드·테스트로 load 가 높을 때도 응답하도록. ProcessType 을 비워 두면
+       launchd 가 CPU·I/O 를 가볍게 스로틀한다(man launchd.plist). Interactive = 앱과 같은 무제한.
+       음수 Nice 는 사용자 에이전트에서 root 권한이 필요해 쓰지 않는다 — 대신 배포 빌드를 nice 로 낮춘다. -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>__HOME__/Library/Logs/teamspace/web.log</string>

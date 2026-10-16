@@ -71,3 +71,25 @@ describe("PageEditor 제목 저장 — 중복 제목 안내", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
+
+describe("PageEditor — 서버 미리 읽기(B1)", () => {
+  it("initial 이 있으면 첫 마운트는 GET 없이 그 본문·rev 로 시작하고, 저장은 그 rev 를 baseRev 로 보낸다", async () => {
+    const initial = { page: { id: "d9", title: "미리 읽은 제목", icon: null, parentId: null, kind: "doc", rev: 5 }, markdown: "", nonce: "nonce-d9" };
+    render(<PageEditor pageId="d9" initial={initial} />);
+    const input = (await screen.findByDisplayValue("미리 읽은 제목")) as HTMLInputElement;
+    // 앞 테스트의 디바운스 저장 타이머가 늦게 터질 수 있다 — 이 문서(d9) 호출만 본다.
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    const mine = () => f.mock.calls.filter(([u]) => String(u).includes("/api/pages/d9"));
+    expect(mine().filter(([, init]) => !init?.method || init.method === "GET")).toHaveLength(0);
+    fireEvent.change(input, { target: { value: "바뀐 제목" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(mine().some(([, init]) => init?.method === "PUT")).toBe(true));
+    const put = mine().find(([, init]) => init?.method === "PUT")!;
+    expect(JSON.parse(put[1].body as string).baseRev).toBe(5);
+
+    // 같은 미리 읽기로 다시 마운트(모드 전환·뒤로 가기)되면 API 에서 새로 받는다
+    cleanup();
+    render(<PageEditor pageId="d9" initial={initial} />);
+    await screen.findByDisplayValue("원래 제목");
+  });
+});

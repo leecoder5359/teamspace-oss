@@ -13,13 +13,16 @@ UID_NUM="$(id -u)"
 mkdir -p "$PLIST_DST" "$LOG_DIR"
 
 cd "$REPO_DIR"
+# 무거운 단계(prisma generate·next build)는 낮은 우선순위로 — 배포 빌드가 지금 떠 있는 web 을 굶기지 않게
+# (2026-10-16, load 240 사고). DEPLOY_NICE=0 이면 기본 우선순위.
+DEPLOY_NICE="${DEPLOY_NICE:-10}"
 # Prisma 클라이언트(app/generated/prisma, gitignore)를 스키마에 맞춰 다시 만든다.
 # 빼먹으면 새 모델/필드가 있는 커밋을 배포해도 옛 클라이언트로 빌드돼 런타임 500 이 난다(env 금고 P1 배포 사고).
-echo "→ prisma generate"
-pnpm exec prisma generate
+echo "→ prisma generate (nice $DEPLOY_NICE)"
+nice -n "$DEPLOY_NICE" pnpm exec prisma generate
 
-echo "→ prod 빌드"
-pnpm exec next build
+echo "→ prod 빌드 (nice $DEPLOY_NICE)"
+nice -n "$DEPLOY_NICE" pnpm exec next build
 
 echo "→ launchd plist 설치"
 # 템플릿(scripts/launchd/templates/*.plist.tmpl)이 있으면 이 머신의 실경로를 치환해 설치하고,
