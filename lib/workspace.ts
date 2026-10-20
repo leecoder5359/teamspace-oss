@@ -70,12 +70,7 @@ async function resolveSessionCtx(): Promise<Ctx | null | { err: NextResponse }> 
     where: { userId: user.id, status: { in: ["active", "invited"] } },
     orderBy: { createdAt: "asc" },
   });
-  const accepted = rows.some((r) => r.status === "invited")
-    ? await prisma.workspaceMember
-        .updateMany({ where: { userId: user.id, status: "invited" }, data: { status: "active" } })
-        .then(() => true, () => false)
-    : false;
-  const memberships = acceptInvites(rows, accepted);
+  const memberships = acceptInvites(rows, await acceptInvitedRows(rows.filter((r) => r.status === "invited").map((r) => r.id)));
 
   // 선택 쿠키는 반드시 본인 멤버십 안에서만 유효 (임의 워크스페이스 전환 차단)
   let member: (typeof memberships)[number] | null = memberships[0] ?? null;
@@ -162,11 +157,24 @@ async function cameFromSiteProxy(): Promise<boolean> {
 }
 
 
-/** 초대 수락 결과를 멤버십 목록에 반영한다(순수) — 수락했으면 invited 를 active 로, 못 했으면 뺀다. */
-export function acceptInvites<T extends { status: string }>(rows: readonly T[], accepted: boolean): T[] {
-  return accepted
-    ? rows.map((r) => (r.status === "invited" ? { ...r, status: "active" } : r))
-    : rows.filter((r) => r.status === "active");
+/** 초대 수락 결과를 멤버십 목록에 반영한다(순수) — 수락된 id 의 invited 는 active 로, 나머지 invited 는 뺀다. */
+export function acceptInvites<T extends { id: string; status: string }>(rows: readonly T[], acceptedIds: ReadonlySet<string>): T[] {
+  return rows.flatMap((r) => (r.status !== "invited" ? [r] : acceptedIds.has(r.id) ? [{ ...r, status: "active" }] : []));
+}
+
+/** 읽어 둔 invited 행을 조건부로 수락하고, 지금 active 인 id 집합을 돌려준다. 쓰기는 `status: "invited"` 일 때만 —
+ *  읽은 뒤 제거된 초대는 건너뛴다. 갱신 수가 모자라면(동시 요청이 먼저 수락했거나 그 사이 제거됨) 다시 읽어
+ *  active 인 것만 인정한다. 쓰기가 실패하면 아무것도 수락하지 않는다. */
+async function acceptInvitedRows(invitedIds: string[]): Promise<ReadonlySet<string>> {
+  if (!invitedIds.length) return new Set();
+  try {
+    const { count } = await prisma.workspaceMember.updateMany({ where: { id: { in: invitedIds }, status: "invited" }, data: { status: "active" } });
+    if (count === invitedIds.length) return new Set(invitedIds);
+    const now = await prisma.workspaceMember.findMany({ where: { id: { in: invitedIds }, status: "active" }, select: { id: true } });
+    return new Set(now.map((r) => r.id));
+  } catch {
+    return new Set();
+  }
 }
 
 /** 토큰 lastUsedAt 갱신 간격 — 훅이 매 호출 토큰을 쓰므로 요청마다 쓰지 않는다(감사 P-10). */

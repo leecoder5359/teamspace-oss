@@ -56,7 +56,7 @@ export default function PresenceBar({ pageId, editing = false }: { pageId: strin
   return (
     <div
       title={editors.length ? `${summarize(editors, 3)} 편집 중` : `${label} 보는 중`}
-      style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}
     >
       <AvatarStack names={viewers.map((v) => v.name)} size={20} />
       <span style={{ whiteSpace: "nowrap" }}>

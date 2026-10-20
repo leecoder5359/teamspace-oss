@@ -218,6 +218,18 @@ describe("GET /api/search 후보 조회 순서", () => {
     expect(j.results.map((r: { id: string }) => r.id).sort()).toEqual(["a", "b"]);
   });
 
+  it("원문이 limit 을 채우면 변형 조회를 기다리지 않고 응답한다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce([row("a"), row("b")]).mockReturnValueOnce(new Promise(() => {})); // 변형은 끝나지 않는다
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&limit=2"))).json();
+    expect(j.results.map((r: { id: string }) => r.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("원문이 limit 을 채우면 변형 조회가 실패해도 응답은 성공한다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce([row("a"), row("b")]).mockRejectedValueOnce(new Error("variant boom"));
+    const res = await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&limit=2"));
+    expect(res.status).toBe(200);
+  });
+
   it("모자라면 변형 OR 로 채우고 id 중복 제거", async () => {
     m(prisma.page.findMany).mockResolvedValueOnce([row("a")]).mockResolvedValueOnce([row("a"), row("b")]);
     const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어")))).json();

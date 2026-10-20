@@ -23,7 +23,9 @@
  *   (agent_type 이 implementer|reviewer|researcher 또는 <이름>-<역할>) — 엔 그 프로젝트 델타(sections=project ~3KB:
  *   프로젝트·스택 레슨·계정·태스크·개수)만 넣는다. 전역·필수 규칙은 이미 세션에 있어서다(감사 doc cmvfg2ytk).
  *   그 밖의 서브에이전트(Explore 등, agent_type 모름 포함)는 시작 주입이 없으므로 종전 compact 전체.
- *   서버가 아직 sections=project 를 모르면(HTTP 400) compact 로 한 번 다시 부른다.
+ *   메인 세션은 SessionStart 표지(teamspace-context.mjs markSessionContext)가 있을 때만 델타 — 없으면(시작 주입 실패)
+ *   전역 규칙이 세션에 없으므로 compact 전체를 넣고 안내에 그렇게 적는다.
+ *   서버가 아직 sections=project 를 모르면(HTTP 400) compact 로 한 번 다시 부른다 — 두 요청이 3초 한 예산을 나눠 쓴다.
  * - 덤으로 라이브 세션 보드 하트비트(POST /api/sessions/heartbeat)를 세션당 10분에 1번 보낸다(1초 제한, 실패 무해).
  * 설정은 teamspace-context.mjs 와 같다: ~/.claude/teamspace.json 또는 env WS_BASE / WS_TOKEN.
  */
@@ -88,6 +90,12 @@ export const ROLE_AGENTS = ["implementer", "reviewer", "researcher"];
 export function roleOf(agentType) {
   if (typeof agentType !== "string") return null;
   return ROLE_AGENTS.find((r) => agentType === r || agentType.endsWith(`-${r}`)) ?? null;
+}
+
+/** teamspace-context.mjs sessionContextMarkerFile 의 사본(훅은 파일 하나씩 전역으로 복사된다) — 같은지는 테스트가 확인한다.
+    SessionStart 주입이 성공했을 때만 생기는 표지. */
+export function sessionContextMarkerFile(sessionId, dir = tmpdir()) {
+  return join(dir, `teamspace-session-context-${String(sessionId).replace(/[^\w.-]/g, "_")}.json`);
 }
 
 /** 델타를 받을 쪽인가 — 세션 시작 주입을 받은 메인 세션(agent_id 없음)과 역할 에이전트만. agent_type 을 모르면 compact. */
@@ -277,12 +285,17 @@ export async function work(input, cwd, deps = {}) {
 
     pick = pickProject(paths, state.rules, state);
     if (!pick) return;
-    let delta = wantsDelta(input);
-    let res = await fetchFn(projectContextUrl(base, pick.cwdPrefix, { delta }), { headers, signal: AbortSignal.timeout(3000) });
+    // 메인 세션은 SessionStart 표지가 있을 때만 델타 — 시작 주입이 실패한 세션엔 전역 규칙이 없으므로 compact 전체.
+    // 역할 에이전트는 SubagentStart 가 넣으므로 표지를 보지 않는다.
+    const noStartContext = !input.agent_id && !existsSync(sessionContextMarkerFile(input.session_id, stateDir));
+    let delta = wantsDelta(input) && !noStartContext;
+    // 델타 요청과 400 폴백이 한 예산(3초)을 나눠 쓴다 — 최악도 ≈3초(라우트룰 요청 제외).
+    const signal = AbortSignal.timeout(3000);
+    let res = await fetchFn(projectContextUrl(base, pick.cwdPrefix, { delta }), { headers, signal });
     if (delta && res.status === 400) {
       // 서버가 아직 sections=project 를 모른다(배포 전) — compact 로 한 번만 다시.
       delta = false;
-      res = await fetchFn(projectContextUrl(base, pick.cwdPrefix), { headers, signal: AbortSignal.timeout(3000) });
+      res = await fetchFn(projectContextUrl(base, pick.cwdPrefix), { headers, signal });
     }
     if (!res.ok) throw new Error(`context HTTP ${res.status}`);
     const md = await res.text();
@@ -295,6 +308,7 @@ export async function work(input, cwd, deps = {}) {
         ? `이 세션은 ${cwd} 에서 시작했지만 ${pick.cwdPrefix} 를 다루고 있어 그 프로젝트의 델타(프로젝트·스택 레슨·태스크)만 주입한다. ` +
           `전역 규칙은 이미 이 세션에 있다 — 이 레포 작업에는 그것과 아래 레슨이 함께 적용된다.`
         : `이 세션은 ${cwd} 에서 시작했지만 ${pick.cwdPrefix} 를 다루고 있어 그 프로젝트의 팀 컨텍스트를 주입한다. ` +
+          (noStartContext ? `세션 시작 컨텍스트가 없어(SessionStart 주입 실패) 델타 대신 전체를 넣는다. ` : "") +
           `이 레포 작업에는 아래 레슨이 적용된다.`) +
       (repoDocs.length ? ` 그 레포의 ${repoDocs.map((f) => join(pick.cwdPrefix, f)).join(" · ")} 도 작업 전에 읽는다.` : "");
     emit(`<teamspace-context source="${base}" cwd="${pick.cwdPrefix}">\n${note}\n\n${md}\n</teamspace-context>`);

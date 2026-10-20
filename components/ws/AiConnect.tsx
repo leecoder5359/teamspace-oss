@@ -46,7 +46,7 @@ type Ctx = { markdown: string; counts: Record<string, number> };
 
 export function LoadErrorNotice({ onRetry, message = "세션 목록을 불러오지 못했어요." }: { onRetry: () => void; message?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 4px", fontSize: 13, color: "var(--text-sub)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 4px", fontSize: "var(--ds-fs-md)", color: "var(--text-sub)" }}>
       <span>{message}</span>
       <button className="ws-btn-soft" onClick={onRetry}>다시 시도</button>
     </div>
@@ -155,10 +155,10 @@ export default function AiConnect() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 11.5, fontWeight: 700, color: k.color }}>{k.label}</span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(it.createdAt).toLocaleTimeString("ko-KR")}</span>
-                          {it.externalRef && <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>{it.externalRef}</span>}
+                          <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>{new Date(it.createdAt).toLocaleTimeString("ko-KR")}</span>
+                          {it.externalRef && <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>{it.externalRef}</span>}
                         </div>
-                        <div style={{ fontSize: 13, color: "var(--text-body)", marginTop: 3, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                        <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", marginTop: 3, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                           {bodyText(it.body) || "—"}
                         </div>
                       </div>
@@ -185,10 +185,10 @@ export default function AiConnect() {
       </p>
 
       {/* 공유 컨텍스트 (Claude가 읽는 내용) */}
-      <section style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
+      <section style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>공유 컨텍스트</span>
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Claude가 읽는 내용</span>
+          <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>공유 컨텍스트</span>
+          <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>Claude가 읽는 내용</span>
           <span style={{ flex: 1 }} />
           <button className="ws-btn-soft" onClick={() => void copyContext()} disabled={!ctx}>
             <Icon name="doc" size={13} /> {copied ? "복사됨" : "복사"}
@@ -201,7 +201,7 @@ export default function AiConnect() {
           <LoadErrorNotice message="컨텍스트를 불러오지 못했어요." onRetry={() => { setCtxError(false); setCtxAttempt((n) => n + 1); }} />
         ) : !ctx ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }} aria-busy="true">
-            <div className="ws-skeleton" style={{ height: 24, width: "60%", borderRadius: 999 }} />
+            <div className="ws-skeleton" style={{ height: 24, width: "60%", borderRadius: "var(--ds-r-pill)" }} />
             <div className="ws-skeleton" style={{ height: 140, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
             <div className="ws-skeleton" style={{ height: 140, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
           </div>
@@ -209,17 +209,17 @@ export default function AiConnect() {
           <>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
               {([["태스크", ctx.counts.tasks], ["문서", ctx.counts.docs], ["결정", ctx.counts.decisions], ["리스크", ctx.counts.risks], ["용어", ctx.counts.glossary]] as [string, number][]).map(([l, n]) => (
-                <span key={l} style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 999, padding: "2px 10px" }}>{l} {n}</span>
+                <span key={l} style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "2px 10px" }}>{l} {n}</span>
               ))}
             </div>
-            <pre style={{ margin: 0, padding: 14, fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.6, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 10, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 280, overflow: "auto" }}>{ctx.markdown}</pre>
+            <pre style={{ margin: 0, padding: 14, fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", lineHeight: 1.6, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 10, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 280, overflow: "auto" }}>{ctx.markdown}</pre>
           </>
         )}
       </section>
 
       {/* 연결 방법 */}
-      <section style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)", marginBottom: 10 }}>연결 방법</div>
+      <section style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
+        <div style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", marginBottom: 10 }}>연결 방법</div>
         <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 7, fontSize: 12.5, color: "var(--text-sub)", lineHeight: 1.6 }}>
           <li>스킬: <code style={mono}>.claude/skills/teamspace/SKILL.md</code> — 이 레포에서 Claude가 자동 로드, 보드·문서·결정을 API로 다루는 법을 안내.</li>
           <li>CLI: <code style={mono}>pnpm ws &lt;명령&gt;</code> — 예: <code style={mono}>ws doc cat &lt;id&gt;</code>, <code style={mono}>ws decision ls</code>, <code style={mono}>ws search &lt;q&gt;</code>.</li>
@@ -229,7 +229,7 @@ export default function AiConnect() {
       </section>
 
       <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", margin: "28px 0 4px" }}>Claude 작업 세션</h2>
-      <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>cwd→워크스페이스로 매핑된 세션. 실시간 인입은 agentmemory 훅 → <code style={mono}>/api/ingest</code>.</p>
+      <p style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 12 }}>cwd→워크스페이스로 매핑된 세션. 실시간 인입은 agentmemory 훅 → <code style={mono}>/api/ingest</code>.</p>
 
       {list === null && loadError ? (
         <LoadErrorNotice onRetry={() => { setLoadError(false); setAttempt((n) => n + 1); }} />
@@ -245,7 +245,7 @@ export default function AiConnect() {
             <Icon name="logo" />
           </div>
           <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>아직 인입된 세션이 없어요</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 5 }}>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>
             agentmemory 훅을 /api/ingest 로 연결하면 관찰·요약·결정·커밋이 여기에 모여요.
           </div>
         </div>
@@ -264,7 +264,7 @@ export default function AiConnect() {
                 <div style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {s.project ?? s.cwd ?? s.externalId}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>
                   {new Date(s.startedAt).toLocaleString("ko-KR")} · {s._count.items}개 항목 · {s.status}
                 </div>
               </div>

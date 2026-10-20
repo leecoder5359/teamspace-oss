@@ -479,6 +479,29 @@ describe("renderSubagentLessons · isMainOnly", () => {
     expect(r.report.statuses.find((s) => s.id === "mine")).toMatchObject({ scope: "personal", status: "title" });
   });
 
+  it("다른 사람의 필수 개인 레슨은 직접 넘겨도 빠진다(라우트 DB 필터에만 기대지 않는다)", () => {
+    const r = renderSubagentLessons({
+      ...base,
+      lessons: [S("req", { mode: "required" }), S("theirsreq", { userId: "u2", mode: "required" }), S("minereq", { userId: "u1", mode: "required" })],
+    });
+    const md = r.lines.join("\n");
+    expect(md).not.toContain("`theirsreq`");
+    expect(md).toContain("`minereq`");
+    expect(r.report.statuses.map((s) => s.id)).not.toContain("theirsreq");
+    expect(r.count).toBe(2);
+  });
+
+  it("사람이 없으면(personId null) 개인 필수 레슨도 빠진다", () => {
+    const r = renderSubagentLessons({ ...base, personId: null, lessons: [S("req", { mode: "required" }), S("anyreq", { userId: "u1", mode: "required" })] });
+    expect(r.lines.join("\n")).not.toContain("`anyreq`");
+    expect(r.count).toBe(1);
+  });
+
+  it("count = 이 출력의 대상 레슨 수 — ondemand(이 프로젝트)는 세지 않는다", () => {
+    const r = renderSubagentLessons({ ...base, lessons: [S("req", { mode: "required" }), S("proj", { projectId: "p1" }), S("odproj", { projectId: "p1", mode: "ondemand" }), S("mine", { userId: "u1" })] });
+    expect(r.count).toBe(3);
+  });
+
   it("개인 섹션은 꼬리 안내(전문은…) 앞에 온다", () => {
     const lines = renderSubagentLessons({ ...base, lessons: [S("req", { mode: "required" }), S("mine", { userId: "u1" })] }).lines;
     const personal = lines.indexOf("### 개인 (1)");

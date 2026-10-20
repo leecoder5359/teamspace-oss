@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
-import { Avatar, AvatarStack, colorFor } from "./ui";
+import { Avatar, AvatarStack, colorFor, selectStyle } from "./ui";
 import { Icon } from "./icons";
 import type { ProjectStat } from "@/lib/projects";
 import { repoLabel } from "@/lib/repo";
@@ -148,7 +148,7 @@ export default function Projects({
         <span style={{ color: "var(--text-sub)", display: "flex" }}>
           <Icon name="folder" size={16} />
         </span>
-        <h1 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>프로젝트</h1>
+        <h1 style={{ margin: 0, fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>프로젝트</h1>
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{showArchived ? `활성 ${projects.filter((p) => !p.archivedAt).length} · 보관 ${projects.filter((p) => p.archivedAt).length}` : `${projects.length}개`}</span>
         <span style={{ flex: 1 }} />
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -230,7 +230,7 @@ export default function Projects({
                       style={{
                         width: 22,
                         height: 22,
-                        borderRadius: 999,
+                        borderRadius: "var(--ds-r-pill)",
                         background: colorFor(c),
                         border: form.color === c ? "2px solid var(--text-strong)" : "2px solid transparent",
                         cursor: "pointer",
@@ -322,7 +322,7 @@ export default function Projects({
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-strong)", marginBottom: 6 }}>
                 아직 프로젝트가 없어요
               </div>
-              <div style={{ fontSize: 13 }}>“새 프로젝트”로 첫 작업 영역을 만들어보세요.</div>
+              <div style={{ fontSize: "var(--ds-fs-md)" }}>“새 프로젝트”로 첫 작업 영역을 만들어보세요.</div>
             </div>
           ) : (
             <div
@@ -497,7 +497,7 @@ function ProjectCard({
               color: "var(--text-muted)",
               background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
               padding: "1px 6px",
-              borderRadius: 999,
+              borderRadius: "var(--ds-r-pill)",
               lineHeight: 1.7,
             }}
           >
@@ -509,8 +509,8 @@ function ProjectCard({
             style={{
               flexShrink: 0,
               padding: "2px 9px",
-              borderRadius: 999,
-              fontSize: 11,
+              borderRadius: "var(--ds-r-pill)",
+              fontSize: "var(--ds-fs-xs)",
               fontWeight: 700,
               color: `color-mix(in srgb, ${accent} 80%, var(--text-strong))`,
               background: `color-mix(in srgb, ${accent} 13%, var(--surface-card))`,
@@ -538,10 +538,10 @@ function ProjectCard({
       {/* 지표: 열린 태스크(강조) + 마감 칩(지연/임박/여유 항상 표시) — 디자인 정합 */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
         <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <span style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 700, color: "var(--text-strong)", lineHeight: 1, letterSpacing: "-0.02em" }}>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--ds-fs-2xl)", fontWeight: 700, color: "var(--text-strong)", lineHeight: 1, letterSpacing: "-0.02em" }}>
             {p.openCount}
           </span>
-          <span style={{ fontSize: 12, color: "var(--text-sub)" }}>열린 태스크</span>
+          <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)" }}>열린 태스크</span>
         </span>
         {p.overdueCount > 0 ? (
           <span style={chip("var(--color-danger)")}>지연 {p.overdueCount}</span>
@@ -606,15 +606,15 @@ function ProjectCard({
         {p.lead ? (
           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <Avatar name={p.lead.name ?? "?"} size={22} />
-            <span style={{ fontSize: 12, color: "var(--text-sub)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {p.lead.name ?? "리드"}
             </span>
           </span>
         ) : (
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>리드 미지정</span>
+          <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>리드 미지정</span>
         )}
         {p.participants.length > 0 && <AvatarStack names={p.participants} size={22} max={3} />}
-        <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
           <Icon name="doc" size={13} />
           {p.docCount}
         </span>
@@ -631,10 +631,10 @@ function ProjectCard({
 
 function chip(color: string): CSSProperties {
   return {
-    fontSize: 11,
+    fontSize: "var(--ds-fs-xs)",
     fontWeight: 600,
     padding: "2px 8px",
-    borderRadius: 999,
+    borderRadius: "var(--ds-r-pill)",
     background: `color-mix(in srgb, ${color} 14%, transparent)`,
     color: `color-mix(in srgb, ${color} 78%, var(--text-strong))`,
   };
@@ -644,7 +644,7 @@ function chip(color: string): CSSProperties {
 const cardStyle: CSSProperties = {
   background: "var(--surface-card)",
   border: "1px solid var(--border-subtle)",
-  borderRadius: 12,
+  borderRadius: "var(--ds-r-md)",
   padding: 18,
 };
 
@@ -655,14 +655,3 @@ const cardHeadStyle: CSSProperties = {
   color: "var(--text-strong)",
 };
 
-const selectStyle: CSSProperties = {
-  height: 32,
-  padding: "0 8px",
-  border: "1px solid var(--border-default)",
-  borderRadius: 9,
-  background: "var(--surface-card)",
-  color: "var(--text-body)",
-  fontSize: 12.5,
-  fontFamily: "inherit",
-  fontWeight: 600,
-};

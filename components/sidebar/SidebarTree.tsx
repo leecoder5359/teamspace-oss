@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { Icon } from "../ws/icons";
 import { DOC_TYPES, DOC_TYPE_LABEL, docTypeIcon, type DocType } from "@/lib/docOrganize";
 import { isTaskNoteFolder, limitChildren, type Group, type PageNode } from "./treeModel";
@@ -28,6 +28,18 @@ export type SidebarTreeProps = {
 };
 
 type Menu = { node: PageNode; hasChildren: boolean; x: number; y: number };
+
+/* 문서 링크의 이동 중 표시(U-14). /p/[id] 에 loading.tsx 를 두면 응답이 스트리밍돼 notFound() 가
+   404 대신 200 이 되므로(Next loading.md "Status Codes"), 라우트 대신 눌린 링크만 살짝 흐리게 한다.
+   크기를 바꾸지 않는 opacity 만 토글한다(use-link-status.md: 레이아웃 이동 없는 힌트). */
+function PendingLabel({ children }: { children: React.ReactNode }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span aria-busy={pending || undefined} style={{ opacity: pending ? 0.5 : 1, transition: "opacity 120ms" }}>
+      {children}
+    </span>
+  );
+}
 
 export function SidebarTree({
   groups, collapsed, ready, toggle, activeId, onNavigate, createPage, createBoard, busy, loaded, move, rename, remove, toggleFavorite, setDocType,
@@ -167,7 +179,7 @@ export function SidebarTree({
             />
           ) : (
             <Link href={`/p/${node.id}`} className="ws-tree-name" onClick={onNavigate} title={node.title || "제목 없음"}>
-              {node.title || "제목 없음"}
+              <PendingLabel>{node.title || "제목 없음"}</PendingLabel>
             </Link>
           )}
           {hasChildren && <span className="ws-nav-count">{node.childCount ?? node.children.length}</span>}

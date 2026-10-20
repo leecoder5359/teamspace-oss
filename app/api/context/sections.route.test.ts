@@ -103,7 +103,7 @@ describe("GET /api/context?sections=lessons", () => {
     seed();
     const j = await (await call("compact=1&sections=lessons&format=json")).json();
     expect(j.markdown).toContain("`req1`");
-    expect(j.counts).toEqual({ lessons: 4 }); // 범위 안 레슨(필수·프로젝트·내 개인, ondemand 포함 — 렌더에선 '필요할 때만' 안내로)
+    expect(j.counts).toEqual({ lessons: 3 }); // 이 출력의 대상 레슨(필수·프로젝트·내 개인) — ondemand 는 세지 않는다(sections=project 와 같은 뜻)
   });
 
   it("keyword audience:main 레슨은 빠지고 '메인 전용 N건 제외' 한 줄 — select 에 keywords 를 싣는다", async () => {
@@ -132,7 +132,8 @@ describe("GET /api/context?sections=project", () => {
       { id: "s", name: "상태", type: "select", config: { options: [{ id: "o1", name: "진행 중" }, { id: "o2", name: "완료" }] }, position: 1 },
       { id: "a", name: "담당", type: "text", config: {}, position: 2 },
     ]);
-    p.dbRow.findMany.mockResolvedValue([
+    // 비정규화 칸이 없는 행(백필 전) — 칸 쿼리엔 안 걸리고 낡은 쪽으로 와서 JS 가 거른다(P-14).
+    p.dbRow.findMany.mockImplementation(async (a: { where: { taskColsKey?: string } }) => a.where.taskColsKey ? [] : [
       { props: { t: "내 일", s: "o1", a: "이준" } },
       { props: { t: "끝난 일", s: "o2", a: "이준" } },
     ]);
@@ -167,6 +168,13 @@ describe("GET /api/context?sections=project", () => {
     const rec = m(recordLessonInjection).mock.calls[0][0];
     expect(rec).toMatchObject({ via: "PostToolUse", mode: "project", projectId: P });
     expect([...rec.ids.gistIds, ...rec.ids.titleIds].sort()).toEqual(["proj1a", "stk1"]);
+  });
+
+  it("format=json counts.lessons = 이 출력의 대상 레슨 수(ondemand 제외) — sections=lessons 와 같은 뜻", async () => {
+    seed();
+    seedBoard();
+    const j = await (await call("sections=project&format=json")).json();
+    expect(j.counts).toEqual({ lessons: 2, tasks: 1, docs: 12, decisions: 3 }); // proj1a·stk1, od1(ondemand) 제외
   });
 
   it("inspect=1 이면 기록하지 않는다", async () => {

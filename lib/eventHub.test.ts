@@ -4,6 +4,7 @@ import { createEventHub, type EventSourceLike } from "./eventHub";
 class FakeES implements EventSourceLike {
   listeners = new Map<string, (() => void)[]>();
   closed = false;
+  readyState = 1;
   addEventListener(type: string, fn: () => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
   }
@@ -15,6 +16,7 @@ class FakeES implements EventSourceLike {
 
 function setup(opts: { hidden?: boolean; openThrows?: boolean } = {}) {
   const sources: FakeES[] = [];
+  const timers: { fn: () => void; ms: number; cancelled: boolean }[] = [];
   let hidden = opts.hidden ?? false;
   let visCb: (() => void) | null = null;
   const unwatch = vi.fn(() => { visCb = null; });
@@ -27,10 +29,24 @@ function setup(opts: { hidden?: boolean; openThrows?: boolean } = {}) {
     },
     isHidden: () => hidden,
     watchVisibility: (cb) => { visCb = cb; return unwatch; },
+    schedule: (fn, ms) => {
+      const t = { fn, ms, cancelled: false };
+      timers.push(t);
+      return () => { t.cancelled = true; };
+    },
   });
+  /** 예약된(취소되지 않은) 타이머를 하나 꺼내 실행한다. */
+  const runTimer = () => {
+    const t = timers.find((x) => !x.cancelled);
+    if (!t) throw new Error("no pending timer");
+    t.cancelled = true;
+    t.fn();
+    return t.ms;
+  };
+  const pending = () => timers.filter((x) => !x.cancelled).map((x) => x.ms);
   const setHidden = (h: boolean) => { hidden = h; visCb?.(); };
   const listener = () => ({ onHello: vi.fn(), onEvent: vi.fn(), onError: vi.fn() });
-  return { hub, sources, setHidden, listener, unwatch, watching: () => visCb !== null };
+  return { hub, sources, setHidden, listener, unwatch, watching: () => visCb !== null, runTimer, pending };
 }
 
 describe("createEventHub — 공유 EventSource", () => {
@@ -123,5 +139,77 @@ describe("createEventHub — 공유 EventSource", () => {
     const a = listener();
     expect(() => hub.subscribe(a)()).not.toThrow();
     expect(a.onHello).not.toHaveBeenCalled();
+  });
+
+  it("연결이 CLOSED 로 끝나면 백오프(5초→2배→60초 상한)로 다시 연다", () => {
+    const { hub, sources, listener, runTimer } = setup();
+    const a = listener();
+    hub.subscribe(a);
+    const delays: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const es = sources[sources.length - 1];
+      es.readyState = 2;
+      es.fire("error");
+      delays.push(runTimer());
+    }
+    expect(delays).toEqual([5_000, 10_000, 20_000, 40_000, 60_000, 60_000]);
+    expect(sources).toHaveLength(7);
+    expect(a.onError).toHaveBeenCalledTimes(6);
+  });
+
+  it("다시 연 연결이 hello 를 받으면 백오프가 처음(5초)으로 돌아간다", () => {
+    const { hub, sources, listener, runTimer } = setup();
+    hub.subscribe(listener());
+    sources[0].readyState = 2;
+    sources[0].fire("error");
+    runTimer();
+    sources[1].readyState = 2;
+    sources[1].fire("error");
+    expect(runTimer()).toBe(10_000);
+    sources[2].fire("hello");
+    sources[2].readyState = 2;
+    sources[2].fire("error");
+    expect(runTimer()).toBe(5_000);
+  });
+
+  it("CLOSED 뒤 새 구독자는 다시 연 연결을 함께 쓴다", () => {
+    const { hub, sources, listener, runTimer } = setup();
+    hub.subscribe(listener());
+    sources[0].readyState = 2;
+    sources[0].fire("error");
+    runTimer();
+    const late = listener();
+    hub.subscribe(late);
+    expect(sources).toHaveLength(2);
+    sources[1].fire("activity");
+    expect(late.onEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("브라우저가 스스로 재연결 중(CONNECTING)인 에러는 다시 열지 않는다", () => {
+    const { hub, sources, listener, pending } = setup();
+    hub.subscribe(listener());
+    sources[0].readyState = 0;
+    sources[0].fire("error");
+    expect(pending()).toEqual([]);
+    expect(sources[0].closed).toBe(false);
+  });
+
+  it("재연결 대기 중 구독자가 모두 떠나거나 탭이 숨으면 예약을 취소한다", () => {
+    const { hub, sources, listener, pending, setHidden } = setup();
+    const off = hub.subscribe(listener());
+    sources[0].readyState = 2;
+    sources[0].fire("error");
+    expect(pending()).toEqual([5_000]);
+    off();
+    expect(pending()).toEqual([]);
+
+    hub.subscribe(listener());
+    sources[1].readyState = 2;
+    sources[1].fire("error");
+    expect(pending()).toHaveLength(1);
+    setHidden(true);
+    expect(pending()).toEqual([]);
+    setHidden(false); // 다시 보이면 기다리지 않고 바로 연다
+    expect(sources).toHaveLength(3);
   });
 });

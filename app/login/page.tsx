@@ -88,7 +88,7 @@ export default function LoginPage() {
             justifyContent: "center",
             width: 56,
             height: 56,
-            borderRadius: 16,
+            borderRadius: "var(--ds-r-lg)",
             background: "var(--color-primary)",
             color: "#fff",
           }}
@@ -105,7 +105,7 @@ export default function LoginPage() {
         >
           리코더팩토리
         </span>
-        <span style={{ fontSize: 13, color: "var(--text-sub)" }}>팀 QA 워크스페이스</span>
+        <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)" }}>팀 QA 워크스페이스</span>
       </div>
 
       {/* 카드 */}
@@ -115,7 +115,7 @@ export default function LoginPage() {
           maxWidth: 380,
           background: "var(--surface-card)",
           border: "1px solid var(--border-subtle)",
-          borderRadius: 20,
+          borderRadius: "var(--ds-r-xl)",
           padding: 28,
           boxShadow: "var(--shadow-sm)",
         }}
@@ -125,7 +125,7 @@ export default function LoginPage() {
             <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "var(--text-strong)" }}>
               로그인
             </h2>
-            <p style={{ margin: "6px 0 20px", fontSize: 13, color: "var(--text-sub)" }}>
+            <p style={{ margin: "6px 0 20px", fontSize: "var(--ds-fs-md)", color: "var(--text-sub)" }}>
               워크스페이스 계정으로 계속하세요
             </p>
 
@@ -166,7 +166,7 @@ export default function LoginPage() {
                 gap: 10,
                 margin: "16px 0",
                 color: "var(--text-muted)",
-                fontSize: 12,
+                fontSize: "var(--ds-fs-sm)",
               }}
             >
               <span style={{ flex: 1, height: 1, background: "var(--border-subtle)" }} />
@@ -194,7 +194,7 @@ export default function LoginPage() {
                   <circle cx="12" cy="10" r="2.5" />
                 </svg>
               </span>
-              <span style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-sub)" }}>
+              <span style={{ fontSize: "var(--ds-fs-sm)", lineHeight: 1.55, color: "var(--text-sub)" }}>
                 로그인하면 소속된 워크스페이스 내부 자료에만 접근해요. 외부에는 공유되지 않습니다.
               </span>
             </div>
@@ -207,7 +207,7 @@ export default function LoginPage() {
             <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "var(--text-strong)" }}>
               새 워크스페이스 만들기
             </h2>
-            <p style={{ margin: "6px 0 18px", fontSize: 13, color: "var(--text-sub)" }}>
+            <p style={{ margin: "6px 0 18px", fontSize: "var(--ds-fs-md)", color: "var(--text-sub)" }}>
               팀 이름과 도메인을 입력하세요
             </p>
 
@@ -227,7 +227,7 @@ export default function LoginPage() {
                 border: "1px solid var(--border-default)",
                 background: "var(--surface-card)",
                 color: "var(--text-strong)",
-                fontSize: 14,
+                fontSize: "var(--ds-fs-base)",
                 fontFamily: "inherit",
               }}
             />
@@ -248,7 +248,7 @@ export default function LoginPage() {
                 border: "1px solid var(--border-default)",
                 background: "var(--surface-card)",
                 color: "var(--text-strong)",
-                fontSize: 14,
+                fontSize: "var(--ds-fs-base)",
                 fontFamily: "inherit",
               }}
             />
@@ -262,7 +262,7 @@ export default function LoginPage() {
                 border: "none",
                 background: "var(--color-primary)",
                 color: "var(--color-on-primary)",
-                fontSize: 14,
+                fontSize: "var(--ds-fs-base)",
                 fontWeight: 600,
                 fontFamily: "inherit",
                 cursor: "pointer",

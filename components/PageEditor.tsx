@@ -356,7 +356,7 @@ export default function PageEditor({ pageId, initial }: { pageId: string; initia
             background: "var(--surface-sunken)", padding: "12px 14px", margin: "8px 0 14px",
           }}
         >
-          <div style={{ fontWeight: 700, fontSize: 13, color: "#E0900F", marginBottom: 4 }}>
+          <div style={{ fontWeight: 700, fontSize: "var(--ds-fs-md)", color: "#E0900F", marginBottom: 4 }}>
             다른 곳에서 먼저 저장됐습니다
           </div>
           <p style={{ fontSize: 12.5, color: "var(--text-sub)", margin: "0 0 10px", lineHeight: 1.6 }}>
@@ -367,11 +367,11 @@ export default function PageEditor({ pageId, initial }: { pageId: string; initia
 
           {conflict.conflicts.map((c, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "6px 9px", background: "var(--surface-card)" }}>
+              <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", padding: "6px 9px", background: "var(--surface-card)" }}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-primary)", marginBottom: 3 }}>내 편집</div>
                 <pre style={{ margin: 0, fontSize: 11.5, whiteSpace: "pre-wrap", color: "var(--text-body)" }}>{c.mine || "(빈 줄)"}</pre>
               </div>
-              <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "6px 9px", background: "var(--surface-card)" }}>
+              <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", padding: "6px 9px", background: "var(--surface-card)" }}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: "#E0900F", marginBottom: 3 }}>서버</div>
                 <pre style={{ margin: 0, fontSize: 11.5, whiteSpace: "pre-wrap", color: "var(--text-body)" }}>{c.theirs || "(빈 줄)"}</pre>
               </div>

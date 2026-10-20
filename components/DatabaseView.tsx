@@ -406,7 +406,7 @@ export default function DatabaseView({
           role="alert"
           style={{
             display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px",
-            padding: "8px 12px", borderRadius: 8,
+            padding: "8px 12px", borderRadius: "var(--ds-r-sm)",
             border: "1px solid var(--color-danger, #F0494E)",
             background: "var(--color-danger-weak, #FEECEC)",
             color: "var(--color-danger, #F0494E)", fontSize: 12.5,
@@ -426,7 +426,7 @@ export default function DatabaseView({
       {!embedded && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
           <h1 className="ws-db-title" style={{ margin: 0 }}>{data.page.title || "제목 없음"}</h1>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--border-subtle)", borderRadius: 999, padding: "3px 8px 3px 10px" }} title="이 보드가 속한 프로젝트">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "3px 8px 3px 10px" }} title="이 보드가 속한 프로젝트">
             <span style={{ width: 8, height: 8, borderRadius: 2, background: data.page.project ? colorFor(data.page.project.color) : "var(--text-disabled)", flex: "0 0 auto" }} />
             <select
               value={data.page.project?.id ?? ""}
@@ -870,7 +870,7 @@ export function TableView({
           {ci === 0 && (blockedRows?.get(row.id) ?? 0) > 0 && (
             <span
               title={`선행 태스크 ${blockedRows!.get(row.id)}건이 아직 끝나지 않았습니다`}
-              style={{ marginRight: 6, fontSize: 11, fontWeight: 700, color: "#E0900F", whiteSpace: "nowrap" }}
+              style={{ marginRight: 6, fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "#E0900F", whiteSpace: "nowrap" }}
             >
               ⛔{blockedRows!.get(row.id)}
             </span>
@@ -887,7 +887,7 @@ export function TableView({
         </td>
       ))}
       {meta.map((k) => (
-        <td key={k} className="ws-td-meta" style={{ color: "var(--text-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
+        <td key={k} className="ws-td-meta" style={{ color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)", whiteSpace: "nowrap" }}>
           {metaCell(row, k, users)}
         </td>
       ))}
@@ -957,7 +957,7 @@ export function TableView({
                 const fn = agg[p.id] ?? "none";
                 const opts = aggOptionsFor(p.type);
                 return (
-                  <td key={p.id} style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                  <td key={p.id} style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                     <select
                       value={fn}
                       onChange={(e) => onAggChange?.(p.id, e.target.value as AggFn)}
@@ -966,7 +966,7 @@ export function TableView({
                         background: "transparent",
                         border: "none",
                         color: fn === "none" ? "var(--text-disabled)" : "var(--text-body)",
-                        fontSize: 12,
+                        fontSize: "var(--ds-fs-sm)",
                         cursor: "pointer",
                         maxWidth: "100%",
                       }}

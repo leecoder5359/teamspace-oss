@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
+import { deriveTaskColumns } from "@/lib/taskColumns";
 import type { Ctx } from "@/lib/workspace";
 import { loadAccess, projectAccess } from "@/lib/pageGuard";
 import { resolveProjectRef } from "@/lib/projectRef";
@@ -352,11 +353,14 @@ export async function importZip(guard: Ctx, input: ImportInput): Promise<ImportR
     }
 
     const rowProps = boardRowProps(b, propIds, optionIds);
+    // 감사 P-14: 열린 태스크 조회용 비정규화 칸 — 방금 만든 속성(열 순서 = position)으로 뽑는다.
+    const propsLite = b.columns.map((col, i) => ({ id: propIds[i], name: col.name, type: col.type }));
     if (rowProps.length > 0) {
       await prisma.dbRow.createMany({
         data: rowProps.map((props, i) => ({
           databasePageId: page.id,
           props: props as object,
+          ...deriveTaskColumns(propsLite, props as Record<string, unknown>),
           position: i,
           createdById: userId,
           updatedById: userId,

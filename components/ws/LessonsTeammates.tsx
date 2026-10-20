@@ -72,12 +72,12 @@ export default function LessonsTeammates() {
           <div className="ws-docs-empty">
             <span style={{ color: "var(--text-muted)" }}><Icon name="users" size={32} /></span>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀원이 공개한 레슨이 없어요</div>
-            <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>팀원이 내 레슨 탭에서 개인 레슨을 만들면 여기에 보입니다.</div>
+            <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>팀원이 내 레슨 탭에서 개인 레슨을 만들면 여기에 보입니다.</div>
           </div>
         ) : (
           groups.map((g) => (
             <div key={g.id} style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)", margin: "0 0 8px" }}>
+              <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)", margin: "0 0 8px" }}>
                 <span>{g.name}</span> <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{g.items.length}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -85,14 +85,14 @@ export default function LessonsTeammates() {
                   <div key={l.id} style={{ ...card, gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ display: "flex", color: "var(--color-primary)" }}><Icon name="flag" size={15} /></span>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{l.title}</span>
+                      <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{l.title}</span>
                       {l.copiedId ? (
                         <span style={badge}>가져옴</span>
                       ) : (
                         <button className="ws-btn-soft" disabled={busy === l.id} onClick={() => void copy(l.id)}>가져오기</button>
                       )}
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text-body)", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{l.body}</div>
+                    <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{l.body}</div>
                   </div>
                 ))}
               </div>

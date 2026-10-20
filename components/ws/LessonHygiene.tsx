@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
-import { IdChip } from "./ui";
+import { IdChip, ghostBtn } from "./ui";
 import { Pill, Table, Sub, td, rowStyle, hint, empty } from "./AiRoutes";
 
 /* =====================================================================
@@ -219,7 +219,3 @@ function SimpleTable({ head, rows, T }: { head: string; rows: { id: string; note
 }
 
 const pre: CSSProperties = { ...hint, marginTop: 0, marginBottom: 10, whiteSpace: "pre-wrap", fontFamily: "inherit" };
-const ghostBtn: CSSProperties = {
-  padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-  border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
-};

@@ -180,7 +180,7 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
           }}
           placeholder={mode === "ask" ? "워크스페이스 문서에 질문하기…" : mode === "concept" ? "개념으로 검색(동의어·연관어 확장)…" : "문서·결정 본문 검색…"}
           aria-label={mode === "ask" ? "질문" : "검색"}
-          style={{ fontSize: 14 }}
+          style={{ fontSize: "var(--ds-fs-base)" }}
         />
         {mode !== "search" && (
           <button
@@ -188,7 +188,7 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
             disabled={loading || q.trim() === ""}
             style={{
               border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
-              borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              borderRadius: "var(--ds-r-sm)", padding: "6px 14px", fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
               whiteSpace: "nowrap", opacity: loading || q.trim() === "" ? 0.5 : 1,
             }}
           >
@@ -204,7 +204,7 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
       ) : mode === "concept" ? (
         <ConceptView loading={loading} concept={concept} onOpen={openSource} />
       ) : q.trim() === "" ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 18 }}>제목과 본문에서 문서·결정을 검색합니다.</p>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 18 }}>제목과 본문에서 문서·결정을 검색합니다.</p>
       ) : loading ? (
         <div className="ws-empty-hint" style={{ marginTop: 18 }}>검색 중…</div>
       ) : total === 0 ? (
@@ -233,7 +233,7 @@ function ConceptView({ loading, concept, onOpen }: { loading: boolean; concept: 
   if (loading) return <div className="ws-empty-hint" style={{ marginTop: 18 }}>개념 확장·검색 중…</div>;
   if (!concept) {
     return (
-      <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 18 }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 18 }}>
         검색어를 동의어·연관 개념으로 확장해 폭넓게 찾습니다. 입력하고 Enter 를 누르세요.
       </p>
     );
@@ -242,9 +242,9 @@ function ConceptView({ loading, concept, onOpen }: { loading: boolean; concept: 
     <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 14 }}>
       {concept.expanded.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>확장어</span>
+          <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", fontWeight: 600 }}>확장어</span>
           {concept.expanded.map((t) => (
-            <span key={t} style={{ fontSize: 11.5, color: "var(--text-sub)", border: "1px solid var(--border-subtle)", borderRadius: 999, padding: "1px 9px" }}>{t}</span>
+            <span key={t} style={{ fontSize: 11.5, color: "var(--text-sub)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "1px 9px" }}>{t}</span>
           ))}
         </div>
       )}
@@ -263,7 +263,7 @@ function ConceptView({ loading, concept, onOpen }: { loading: boolean; concept: 
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>
                   <Icon name={s.kind === "doc" ? "doc" : "flag"} size={13} />
                   {s.title}
-                  {s.heading && <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>› {s.heading}</span>}
+                  {s.heading && <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 500, color: "var(--text-muted)" }}>› {s.heading}</span>}
                 </div>
                 {s.passage && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{s.passage}</div>}
               </button>
@@ -279,7 +279,7 @@ function AskView({ loading, ask, q, onOpen }: { loading: boolean; ask: AskResult
   if (loading) return <div className="ws-empty-hint" style={{ marginTop: 18 }}>답변 생성 중…</div>;
   if (!ask) {
     return (
-      <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 18 }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 18 }}>
         워크스페이스 문서·결정을 근거로 답합니다. 질문을 입력하고 Enter 를 누르세요.
         {q.trim() === "" ? "" : " (Enter 로 질문)"}
       </p>
@@ -288,9 +288,9 @@ function AskView({ loading, ask, q, onOpen }: { loading: boolean; ask: AskResult
   const badge = MODE_BADGE[ask.mode];
   return (
     <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16 }}>
+      <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: 999, padding: "1px 8px" }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--ds-r-pill)", padding: "1px 8px" }}>
             {badge.label}
           </span>
         </div>
@@ -311,7 +311,7 @@ function AskView({ loading, ask, q, onOpen }: { loading: boolean; ask: AskResult
                   <span style={{ color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>[{i + 1}]</span>
                   <Icon name={s.kind === "doc" ? "doc" : "flag"} size={13} />
                   {s.title}
-                  {s.heading && <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>› {s.heading}</span>}
+                  {s.heading && <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 500, color: "var(--text-muted)" }}>› {s.heading}</span>}
                 </div>
                 {s.passage && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{s.passage}</div>}
               </button>

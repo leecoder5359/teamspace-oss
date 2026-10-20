@@ -5,6 +5,7 @@ import { withTreeMeta } from "@/lib/pagesMeta";
 import { archivedPageIds } from "@/lib/pageArchive";
 import type { Ctx } from "@/lib/workspace";
 import type { DocType } from "@/lib/docOrganize";
+import { listProjectsLite } from "@/lib/projects";
 
 /**
  * 사이드바 트리 목록 — `GET /api/pages` 와 (ws) 레이아웃의 초기 주입(U7)이 같이 쓴다.
@@ -100,17 +101,11 @@ export async function listPagesForSidebar(
 
 /**
  * 사이드바 그룹용 프로젝트 — `GET /api/projects` 와 같은 순서(position asc)·같은 잠금 필터.
- * 그 라우트는 카드 지표까지 집계하므로 사이드바엔 id·name 만 가볍게 읽는다.
+ * 그 라우트의 기본 응답은 카드 지표까지 집계하므로 사이드바는 가벼운 listProjectsLite 를 쓴다.
  * 잠긴 프로젝트는 이름 자체가 정보라 빼야 한다(D3) — 그래서 workspaceId 가 아닌 ctx 를 받는다.
  */
 export async function listProjectsForSidebar(ctx: Ctx, access?: AccessIndex): Promise<SidebarProject[]> {
-  const [projects, idx] = await Promise.all([
-    prisma.project.findMany({
-      where: { workspaceId: ctx.workspaceId },
-      orderBy: { position: "asc" },
-      select: { id: true, name: true, archivedAt: true },
-    }),
-    access ?? loadAccess(ctx),
-  ]);
+  // 보관 프로젝트도 남긴다(archived 표시만) — /api/projects?fields=sidebar 와 같은 조회를 쓴다.
+  const [projects, idx] = await Promise.all([listProjectsLite(ctx.workspaceId, "all"), access ?? loadAccess(ctx)]);
   return projects.filter((p) => projectAccess(idx, p.id) !== "none").map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt != null }));
 }

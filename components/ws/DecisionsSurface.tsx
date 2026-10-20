@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import { useDialogEscape } from "@/lib/useDialogEscape";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 결정(decisions) surface — 의사결정 기록. /api/decisions.
    디자인(docs-hub/decisions.jsx) 반영: 타임라인/표/카드 3뷰 + 상태필터 + 검색 + 상세 드로어.
@@ -56,6 +57,12 @@ export default function DecisionsSurface({ project, selId, onSelect }: { project
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  // 받아 온 목록에 없는 선택(?id= 로 들어온 지워진·다른 범위의 결정)은 풀어서 허브가 URL 에서도 빼게 한다.
+  const unknownSel = !!selId && list !== null && !list.some((d) => d.id === selId);
+  useEffect(() => {
+    if (unknownSel) onSelect(null);
+  }, [unknownSel, onSelect]);
 
   async function create() {
     if (!title.trim()) return;
@@ -147,7 +154,7 @@ export default function DecisionsSurface({ project, selId, onSelect }: { project
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: view === "table" ? 1000 : view === "cards" ? 1100 : 760, margin: "0 auto" }}>
           {open && (
-            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               {/* 빈 상태의 '첫 결정 기록' 으로 열었을 때 바로 입력할 수 있게 */}
               <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="결정 제목 (예: 인증은 Auth.js로 간다)" style={inp} />
               <textarea value={context} onChange={(e) => setContext(e.target.value)} placeholder="배경/맥락" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
@@ -172,7 +179,7 @@ export default function DecisionsSurface({ project, selId, onSelect }: { project
               {list.length > 0 ? (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>조건에 맞는 결정이 없어요</div>
-                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>기록된 결정 {list.length}건이 검색어·상태 필터에 걸러졌습니다.</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>기록된 결정 {list.length}건이 검색어·상태 필터에 걸러졌습니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button className="ws-btn-soft" onClick={() => { setQ(""); setFilter("all"); }}>필터 지우기</button>
                   </div>
@@ -180,7 +187,7 @@ export default function DecisionsSurface({ project, selId, onSelect }: { project
               ) : (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>결정 기록이 없어요</div>
-                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
                     무엇을 왜 그렇게 정했는지 남겨 두지 않으면 몇 달 뒤 같은 논의를 처음부터 다시 합니다.
                     에이전트·CLI(<code>pnpm ws decision add</code>)로 쌓인 결정도 여기 모입니다.
                   </div>
@@ -217,13 +224,13 @@ function DecisionTimelineItem({ d, onOpen }: { d: Decision; onOpen: () => void }
   const sup = d.status === "superseded";
   return (
     <div className="ws-tl-item" onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
       style={{ display: "flex", gap: 12, cursor: "pointer" }}>
       <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 4 }}>
-        <span style={{ width: 11, height: 11, borderRadius: 999, background: s.color, boxShadow: `0 0 0 4px color-mix(in srgb, ${s.color} 18%, transparent)` }} />
+        <span style={{ width: 11, height: 11, borderRadius: "var(--ds-r-pill)", background: s.color, boxShadow: `0 0 0 4px color-mix(in srgb, ${s.color} 18%, transparent)` }} />
         <span style={{ flex: 1, width: 2, background: "var(--border-subtle)", marginTop: 4 }} />
       </div>
-      <div className="ws-listrow" style={{ flex: 1, minWidth: 0, border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 12, opacity: sup ? 0.74 : 1 }}>
+      <div className="ws-listrow" style={{ flex: 1, minWidth: 0, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 12, opacity: sup ? 0.74 : 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 5 }}>
           <StatusPill status={d.status} />
           {d.project && <ProjTag p={d.project} />}
@@ -231,7 +238,7 @@ function DecisionTimelineItem({ d, onOpen }: { d: Decision; onOpen: () => void }
           <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{fmtDate(d.decidedAt)}</span>
         </div>
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", textDecoration: sup ? "line-through" : "none", textDecorationColor: "var(--border-default)" }}>{d.title}</div>
-        {d.decision && <p style={{ margin: "5px 0 0", fontSize: 13, color: "var(--text-sub)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{d.decision}</p>}
+        {d.decision && <p style={{ margin: "5px 0 0", fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{d.decision}</p>}
       </div>
     </div>
   );
@@ -242,8 +249,8 @@ function DecisionCard({ d, onOpen }: { d: Decision; onOpen: () => void }) {
   const sup = d.status === "superseded";
   return (
     <div className="ws-listrow" onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
-      style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 9, opacity: sup ? 0.74 : 1 }}>
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
+      style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 9, opacity: sup ? 0.74 : 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <StatusPill status={d.status} />
         {d.project && <ProjTag p={d.project} />}
@@ -259,10 +266,10 @@ function DecisionCard({ d, onOpen }: { d: Decision; onOpen: () => void }) {
 /* ── 표 ── */
 function DecisionTable({ rows, onOpen }: { rows: Decision[]; onOpen: (id: string) => void }) {
   return (
-    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, overflowX: "auto", background: "var(--surface-card)" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", overflowX: "auto", background: "var(--surface-card)" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--ds-fs-md)" }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)", fontSize: 12 }}>
+          <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)" }}>
             <th style={th}>결정</th><th style={{ ...th, width: 92 }}>상태</th><th style={{ ...th, width: 140 }}>프로젝트</th><th style={{ ...th, width: 100 }}>날짜</th>
           </tr>
         </thead>
@@ -301,7 +308,7 @@ function DecisionDetail({ d, busy, err, onClose, onStat, onRemove }: { d: Decisi
           <button ref={closeRef} className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
         </header>
         <div className="ws-drawer-body">
-          <h2 id={titleId} style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{d.title}</h2>
+          <h2 id={titleId} style={{ margin: "0 0 8px", fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{d.title}</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", marginBottom: 18 }}>
             <Icon name="calendar" size={14} /> {fmtDate(d.decidedAt)}
           </div>
@@ -315,7 +322,7 @@ function DecisionDetail({ d, busy, err, onClose, onStat, onRemove }: { d: Decisi
             </Section>
           )}
           {!d.context && !d.decision && (
-            <p style={{ fontSize: 13, color: "var(--text-muted)" }}>본문이 없는 결정이에요.</p>
+            <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>본문이 없는 결정이에요.</p>
           )}
           {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
         </div>
@@ -333,14 +340,14 @@ function DecisionDetail({ d, busy, err, onClose, onStat, onRemove }: { d: Decisi
 function StatusPill({ status }: { status: Status }) {
   const s = STATUS_META[status];
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${s.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${s.color} 80%, var(--text-strong))` }}>
-      <span style={{ width: 6, height: 6, borderRadius: 999, background: s.color }} />{s.label}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${s.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${s.color} 80%, var(--text-strong))` }}>
+      <span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: s.color }} />{s.label}
     </span>
   );
 }
 function ProjTag({ p }: { p: { name: string; color: string } }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--text-sub)" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)" }}>
       <span style={{ width: 7, height: 7, borderRadius: 2, background: projColor(p.color) }} />{p.name}
     </span>
   );
@@ -354,14 +361,6 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-const inp: CSSProperties = {
-  width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
-  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit",
-};
-const primary: CSSProperties = {
-  padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
-  border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
-};
 const th: CSSProperties = { textAlign: "left", padding: "10px 14px", fontWeight: 600 };
 const td: CSSProperties = { padding: "11px 14px", verticalAlign: "middle" };
 const prose: CSSProperties = { margin: 0, fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap" };

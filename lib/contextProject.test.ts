@@ -91,6 +91,33 @@ describe("renderProjectDelta", () => {
     expect(r.ids.gistIds.length + r.ids.titleIds.length + r.ids.omittedIds.length).toBe(60);
   });
 
+  it("끝 자르기로 줄이 빠지면 '외 N줄' 표지를 남기고, 빠진 레슨 줄의 id 는 보인 것으로 기록하지 않는다", () => {
+    const many = Array.from({ length: 6 }, (_, k) => L(`cm${String(k).padStart(23, "0")}`, { projectId: P }));
+    // 계정 줄이 비정상으로 길면(상한 밖 입력) 레슨 줄까지 잘린다
+    const r = renderProjectDelta({ ...base, lessons: many, accountLines: ["- " + "x".repeat(2700)] });
+    expect(r.markdown.length).toBeLessThanOrEqual(PROJECT_DELTA_TARGET);
+    const marks = r.markdown.split("\n").map((l) => l.match(/^- … 외 (\d+)줄 \(MCP `task_list` · `lesson_list`\)$/)).filter(Boolean);
+    expect(marks).toHaveLength(1);
+    const cutN = Number(marks[0]![1]);
+    const shown = [...r.ids.gistIds, ...r.ids.titleIds];
+    for (const id of shown) expect(r.markdown).toContain(`\`${id}\``);
+    const dropped = many.map((l) => l.id).filter((id) => !r.markdown.includes(`\`${id}\``));
+    expect(dropped.length).toBeGreaterThan(0);
+    expect([...r.ids.omittedIds].sort()).toEqual(dropped.sort());
+    expect(cutN).toBeGreaterThanOrEqual(dropped.length); // 잘린 레슨 줄 + 그 뒤 태스크·안내 줄
+    expect(r.markdown.split("\n").at(-1)).toMatch(/^태스크 3 · 문서 40 · 결정 7/);
+  });
+
+  it("목표 안이면 '외 N줄' 표지가 없다", () => {
+    expect(renderProjectDelta(base).markdown).not.toMatch(/외 \d+줄/);
+  });
+
+  it("count = 이 출력의 대상 레슨 수(ondemand 제외) — 보인 것 + 넘친 것", () => {
+    const r = renderProjectDelta(base);
+    expect(r.count).toBe(4);
+    expect(r.count).toBe(r.ids.gistIds.length + r.ids.titleIds.length + r.ids.omittedIds.length);
+  });
+
   it("범위 레슨이 없으면 (없음)", () => {
     const { markdown } = renderProjectDelta({ ...base, lessons: [L("g")] });
     expect(markdown).toContain("- (없음)");

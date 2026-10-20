@@ -174,17 +174,14 @@ export default function Sidebar({
     <aside className="ws-sidebar" aria-label="사이드바" inert={inert}>
       {/* 회사 전환기 */}
       <div className="ws-side-top">
-        {/* 워크스페이스 전환은 아직 없다 — 눌러도 아무 일 없는 버튼 대신 표시만(모양은 같게, 커서만 기본) */}
-        <div className="ws-company" style={{ cursor: "default" }}>
+        {/* 워크스페이스 전환은 아직 없다 — 눌러도 아무 일 없는 버튼 대신 표시만(hover·펼침 화살표 없이) */}
+        <div className="ws-company">
           <span className="ws-company-logo">
             <Icon name="logo" size={18} />
           </span>
           <span className="ws-company-meta">
             <span className="ws-company-name">리코더팩토리</span>
             <span className="ws-company-sub">워크스페이스</span>
-          </span>
-          <span className="ws-company-caret">
-            <Icon name="chevronDown" size={14} />
           </span>
         </div>
         <button
@@ -211,7 +208,7 @@ export default function Sidebar({
           <span className="ws-nav-ico"><Icon name="inbox" /></span>
           <span className="ws-nav-label">알림</span>
           {unread > 0 && (
-            <span style={{ marginLeft: "auto", minWidth: 18, height: 18, borderRadius: 9, background: "var(--color-primary)", color: "#fff", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+            <span style={{ marginLeft: "auto", minWidth: 18, height: 18, borderRadius: 9, background: "var(--color-primary)", color: "#fff", fontSize: "var(--ds-fs-xs)", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
               {unread > 99 ? "99+" : unread}
             </span>
           )}
@@ -220,7 +217,7 @@ export default function Sidebar({
         <SidebarQuick favorites={data.favorites} recents={data.recents} activeId={activeId} onNavigate={onNavigate} />
 
         {dupNotice && (
-          <div role="status" style={{ margin: "6px 10px", padding: "6px 10px", borderRadius: 8, fontSize: 12, color: "#E0900F", border: "1px solid #E0900F", background: "var(--surface-sunken)" }}>
+          <div role="status" style={{ margin: "6px 10px", padding: "6px 10px", borderRadius: "var(--ds-r-sm)", fontSize: "var(--ds-fs-sm)", color: "#E0900F", border: "1px solid #E0900F", background: "var(--surface-sunken)" }}>
             {DUPLICATE_RENAME_NOTICE}
           </div>
         )}
@@ -299,7 +296,7 @@ export default function Sidebar({
               // eslint-disable-next-line @next/next/no-img-element
               <img className="ds-avatar" src={sessionUser.image} alt={userName} style={{ width: 30, height: 30, objectFit: "cover" }} />
             ) : (
-              <span className="ds-avatar" style={{ width: 30, height: 30, background: "var(--ds-primary)", color: "#fff", fontSize: 12 }}>
+              <span className="ds-avatar" style={{ width: 30, height: 30, background: "var(--ds-primary)", color: "#fff", fontSize: "var(--ds-fs-sm)" }}>
                 {userInitials}
               </span>
             )}

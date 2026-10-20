@@ -11,7 +11,7 @@ import LessonInspect from "./LessonInspect";
 import LessonHygiene from "./LessonHygiene";
 import SkillRegistry from "./SkillRegistry";
 import LiveSessions from "./LiveSessions";
-import { StatusPill } from "./ui";
+import { StatusPill, inputBase as inputStyle, primaryBtnNowrap as primaryBtn, ghostBtn } from "./ui";
 import type { IconName } from "./icons";
 
 /* =====================================================================
@@ -141,11 +141,11 @@ export default function Settings() {
                   <Icon name={w.current ? "check" : "folder"} />
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</div>
                   <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{ROLE_LABEL[w.role] ?? w.role} · {w.memberCount}명</div>
                 </div>
                 {w.current ? (
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)" }}>현재</span>
+                  <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--color-primary)" }}>현재</span>
                 ) : (
                   <button onClick={() => switchTo(w.id)} style={ghostBtn}>전환</button>
                 )}
@@ -305,7 +305,7 @@ function TrashSection() {
               <Icon name={t.kind === "database" ? "table" : "doc"} />
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
               <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
                 {t.project?.name ?? "미분류"} · 삭제 {new Date(t.deletedAt).toLocaleString("ko-KR")}
               </div>
@@ -395,7 +395,7 @@ function AgentTokens() {
                 <Icon name="user" />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)" }}>
+                <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)" }}>
                   {t.name}
                   {t.revokedAt && <span style={{ marginLeft: 8, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>회수됨</span>}
                 </div>
@@ -428,10 +428,10 @@ function AgentTokens() {
       </div>
       {issued && (
         <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 9, border: "1px solid var(--color-primary)", background: "var(--surface-muted, rgba(0,0,0,0.02))" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-strong)", marginBottom: 4 }}>
+          <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-strong)", marginBottom: 4 }}>
             토큰이 발급되었습니다 — 지금 복사하세요. 다시 볼 수 없습니다.
           </div>
-          <code style={{ fontSize: 12, wordBreak: "break-all", color: "var(--text-body)" }}>{issued}</code>
+          <code style={{ fontSize: "var(--ds-fs-sm)", wordBreak: "break-all", color: "var(--text-body)" }}>{issued}</code>
           <div style={{ marginTop: 8 }}>
             <button onClick={() => void navigator.clipboard.writeText(issued)} style={ghostBtn}>복사</button>
           </div>
@@ -780,7 +780,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
             같은 묶음인데 값이 서로 다른 키가 있습니다(워크스페이스 전체).
           </div>
           {groups.filter((g) => !g.consistent).map((g) => (
-            <div key={g.name} style={{ fontSize: 12, color: "var(--text-body)" }}>
+            <div key={g.name} style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-body)" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{g.name}</span>
               {" · "}
               {g.members.map((m) => `${m.projectName}/${m.env}/${m.key}`).join(", ")}
@@ -802,7 +802,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
                 <Icon name="lock" />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <span style={{ fontFamily: "var(--font-mono)" }}>{v.key}</span>
                   <span style={{ marginLeft: 8, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>{v.env}</span>
                 </div>
@@ -832,7 +832,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
                   </div>
                 )}
                 {revealed[v.id] !== undefined && (
-                  <code style={{ display: "block", marginTop: 4, fontSize: 12, wordBreak: "break-all", color: "var(--text-body)" }}>{revealed[v.id]}</code>
+                  <code style={{ display: "block", marginTop: 4, fontSize: "var(--ds-fs-sm)", wordBreak: "break-all", color: "var(--text-body)" }}>{revealed[v.id]}</code>
                 )}
               </div>
               {isAdmin && (
@@ -932,7 +932,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {TARGET_KIND_LABEL[t.kind] ?? t.kind}
                   <span style={{ marginLeft: 8, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>{t.env}</span>
                 </div>
@@ -953,7 +953,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
                     <span>점검 기록 없음 — <code>pnpm ws env drift {t.id}</code></span>
                   )}
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{t.id}</div>
+                <div style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{t.id}</div>
               </div>
               {isAdmin && (
                 <button onClick={() => void removeTarget(t)} disabled={busy} style={{ ...ghostBtn, color: "#C0392B" }}>삭제</button>
@@ -968,7 +968,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
       {isAdmin && logs.length > 0 && (
         <details style={{ marginTop: 12 }}>
           <summary style={{ fontSize: 12.5, cursor: "pointer", color: "var(--text-muted)" }}>감사 로그 (최근 {logs.length}건)</summary>
-          <ul style={{ maxHeight: 240, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-body)" }}>
+          <ul style={{ maxHeight: 240, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)", color: "var(--text-body)" }}>
             {logs.map((l) => (
               <li key={l.id}>
                 {new Date(l.at).toLocaleString("ko-KR")} · {l.actorName}
@@ -987,7 +987,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
 
 function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <div id={id} style={{ scrollMarginTop: 16, border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
+    <div id={id} style={{ scrollMarginTop: 16, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>
         {title}
       </div>
@@ -1000,7 +1000,7 @@ function NavCard({ href, icon, label }: { href: string; icon: IconName; label: s
   return (
     <Link
       href={href}
-      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 10, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 10, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontWeight: 600, textDecoration: "none" }}
     >
       <span style={{ display: "flex", color: "var(--color-primary)" }}>
         <Icon name={icon} />
@@ -1011,16 +1011,4 @@ function NavCard({ href, icon, label }: { href: string; icon: IconName; label: s
 }
 
 const labelStyle: CSSProperties = { display: "block", fontSize: 12.5, color: "var(--text-muted)", marginBottom: 4 };
-const inputStyle: CSSProperties = {
-  padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
-  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit",
-};
-const primaryBtn: CSSProperties = {
-  padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
-  border: "1px solid transparent", background: "var(--color-primary)", color: "#fff", whiteSpace: "nowrap",
-};
-const ghostBtn: CSSProperties = {
-  padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-  border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
-};
-const hint: CSSProperties = { fontSize: 12, color: "var(--text-muted)", marginTop: 8 };
+const hint: CSSProperties = { fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 8 };

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { inputStyle, primaryBtnInline as primaryBtn } from "./ui";
 
 /* =====================================================================
    리마인더 — 특정 시각(once) 예약 알림. 기존 Schedule API(/api/schedules) 사용.
@@ -86,7 +86,7 @@ export default function Reminders() {
       </p>
 
       {/* 등록 */}
-      <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, margin: "16px 0" }}>
+      <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, margin: "16px 0" }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="리마인더 내용" style={inputStyle} />
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
@@ -104,7 +104,7 @@ export default function Reminders() {
             <Icon name="bell" />
           </div>
           <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>예약된 리마인더가 없어요</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 5 }}>위에서 시각과 내용을 정해 등록해 보세요.</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>위에서 시각과 내용을 정해 등록해 보세요.</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -115,7 +115,7 @@ export default function Reminders() {
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{s.template?.text ?? "(내용 없음)"}</div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>
                   {fmt(s.spec)}
                   {s.channelId ? "" : " · 채널 미설정"}
                 </div>
@@ -131,27 +131,3 @@ export default function Reminders() {
   );
 }
 
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "9px 12px",
-  borderRadius: 9,
-  border: "1px solid var(--border-default)",
-  background: "var(--surface-card)",
-  color: "var(--text-strong)",
-  fontSize: 13,
-  fontFamily: "inherit",
-};
-const primaryBtn: CSSProperties = {
-  padding: "9px 16px",
-  borderRadius: 9,
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  border: "1px solid transparent",
-  background: "var(--color-primary)",
-  color: "#fff",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  whiteSpace: "nowrap",
-};

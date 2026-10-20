@@ -8,6 +8,8 @@ import { findAssigneeProp, findStatusProp, optionIdByName } from "@/lib/taskProp
 import { notifyTaskAssigned } from "@/lib/notify";
 import { recordActivity } from "@/lib/activity";
 import { findTitleProp } from "@/lib/taskProps";
+import { deriveTaskColumns } from "@/lib/taskColumns";
+import { taskPropOrder } from "@/lib/taskRows";
 
 export const runtime = "nodejs";
 
@@ -35,7 +37,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const props = await prisma.dbProperty.findMany({
     where: { databasePageId: row.databasePageId },
-    orderBy: { position: "asc" },
+    orderBy: taskPropOrder(),
   });
   const propsLite = props.map((p) => ({
     id: p.id,
@@ -69,7 +71,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // CAS: 읽은 시점의 updatedAt 이 그대로일 때만 갱신 — 경쟁자가 먼저 잡았으면 count=0
   const res = await prisma.dbRow.updateMany({
     where: { id, updatedAt: row.updatedAt },
-    data: { props: nextProps as object, updatedById: guard.userId },
+    data: { props: nextProps as object, ...deriveTaskColumns(propsLite, nextProps), updatedById: guard.userId }, // 칸: 감사 P-14
   });
   if (res.count === 0) {
     const fresh = await prisma.dbRow.findUnique({ where: { id } });

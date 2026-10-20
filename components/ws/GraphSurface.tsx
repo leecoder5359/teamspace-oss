@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import { graphToCypher } from "@/lib/wikilink";
 import { isZoomedIn, selectLabelIds, truncateLabel } from "@/lib/graphLabels";
 import { adjacency, computeLayout, degrees, withinDepth, type Point } from "@/lib/graphLayout";
+import { primaryBtn as primary } from "./ui";
 
 function download(name: string, mime: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
@@ -47,7 +47,6 @@ function graphToGraphML(g: { nodes: Node[]; edges: Edge[] }): string {
   return lines.join("\n");
 }
 
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };
 
 const W = 1200;
 const H = 720;
@@ -284,7 +283,7 @@ export default function GraphSurface() {
           <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>{filtered ? "이 필터에 맞는 노드가 없어요" : "그래프에 그릴 문서가 없어요"}</div>
           {!filtered && (
             <>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
                 여기는 문서끼리의 연결만 그립니다. 문서를 만들고 본문에서 <code>[[문서 제목]]</code> 으로 다른 문서를 가리키면 그 관계가 선으로 나타나요.
               </div>
               <div style={{ marginTop: 14 }}>
@@ -368,7 +367,7 @@ export default function GraphSurface() {
                     <text
                       x={p.x + r + 5}
                       y={p.y + 4}
-                      style={{ fontSize: 12, fontWeight: 600, fill: "var(--text-strong)", pointerEvents: "none" }}
+                      style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, fill: "var(--text-strong)", pointerEvents: "none" }}
                     >
                       {truncateLabel(nd.title)}
                     </text>

@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
+import { inputStyleLg as inputStyle, primaryBtnInline as primaryBtn } from "./ui";
 
 /* =====================================================================
    퍼블리시 — HTML/zip 을 올려 초대 이메일로만 열리는 링크를 만든다(/api/sites).
@@ -117,7 +118,7 @@ export default function Sites() {
       {list.length === 0 ? (
         <div className="ws-empty">
           <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>퍼블리시한 페이지가 없어요</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 5 }}>위에서 파일을 올려 보세요. Claude 세션에서는 `pnpm ws site publish` 로 올릴 수 있어요.</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>위에서 파일을 올려 보세요. Claude 세션에서는 `pnpm ws site publish` 로 올릴 수 있어요.</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -126,7 +127,7 @@ export default function Sites() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <Link href={`/sites/${s.id}`} style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{s.title}</Link>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>
                     /pages/{s.slug} · v{s.currentVersion} · 초대 {s.inviteCount}명 · 마지막 열람 {fmt(s.lastAccessAt)}
                     {s.status === "disabled" ? " · 비활성" : ""}
                   </div>
@@ -171,7 +172,5 @@ export default function Sites() {
   );
 }
 
-const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, margin: "16px 0" };
+const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, margin: "16px 0" };
 const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", flexWrap: "wrap" };
-export const inputStyle: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 16, fontFamily: "inherit" };
-export const primaryBtn: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" };

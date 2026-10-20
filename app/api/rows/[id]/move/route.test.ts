@@ -194,6 +194,9 @@ describe("POST /api/rows/[id]/move", () => {
     expect(call.data).toEqual({
       databasePageId: "boardB",
       props: { "t-title": "작업", "t-status": "t-doing" },
+      statusOptionId: "t-doing",
+      assigneeText: null,
+      taskColsKey: "t-status|",
       position: 10,
       parentRowId: null,
       updatedById: "u1",
@@ -230,6 +233,18 @@ describe("POST /api/rows/[id]/move", () => {
     const body = await res.json();
     expect(body.createdOptions).toEqual([]);
     expect(tx.dbRow.updateMany.mock.calls[0][0].data.props["t-status"]).toBe("t-rev-existing");
+  });
+
+  it("옮길 때 대상 보드 속성 기준으로 비정규화 칸을 다시 쓴다(감사 P-14)", async () => {
+    expect((await POST(req({ targetDatabaseId: "boardB" }), params)).status).toBe(200);
+    expect(tx.dbRow.updateMany.mock.calls[0][0].data).toMatchObject({ statusOptionId: "t-doing", assigneeText: null, taskColsKey: "t-status|" });
+  });
+
+  it("옵션 재사용(동시 생성)으로 바뀐 최종 id 로 칸을 쓴다", async () => {
+    m(prisma.dbRow.findUnique).mockResolvedValue(row({ "s-title": "작업", "s-status": "s-rev" }));
+    tx.dbProperty.findUnique.mockResolvedValue({ config: { options: [{ id: "t-doing", name: "진행 중" }, { id: "t-rev-existing", name: "검토" }] } });
+    await POST(req({ targetDatabaseId: "boardB", createMissingOptions: true }), params);
+    expect(tx.dbRow.updateMany.mock.calls[0][0].data.statusOptionId).toBe("t-rev-existing");
   });
 
   it("CAS 0건(사이에 수정됨) → 409", async () => {

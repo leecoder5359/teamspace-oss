@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import ExtractPanel from "./ExtractPanel";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 온보딩(onboarding) surface — 시작 가이드 단계. /api/onboarding. 제품 공통. */
 
@@ -57,7 +57,7 @@ export default function OnboardingSurface() {
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           {open && (
-            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               {/* 빈 상태의 '첫 단계 추가' 로 열었을 때 바로 입력할 수 있게 */}
               <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="단계 제목 (예: 개발 환경 세팅)" style={inp} />
               <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="설명" rows={3} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
@@ -77,10 +77,10 @@ export default function OnboardingSurface() {
               keyOf={(p) => p.title}
               renderProposal={(p) => (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)" }}>{p.title}</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>{p.title}</div>
                   {p.body && <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{p.body}</div>}
                   {p.status === "conflict" && p.existingBody && (
-                    <div style={{ fontSize: 12, color: "#E0900F", marginTop: 4 }}>기존: {p.existingBody}</div>
+                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "#E0900F", marginTop: 4 }}>기존: {p.existingBody}</div>
                   )}
                 </>
               )}
@@ -96,7 +96,7 @@ export default function OnboardingSurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="user" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>온보딩 단계가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>새 팀원이 첫날 무엇부터 해야 하는지 여기 순서대로 쌓입니다. 직접 적거나, 세팅 문서가 이미 있으면 거기서 단계를 뽑아 오세요.</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>새 팀원이 첫날 무엇부터 해야 하는지 여기 순서대로 쌓입니다. 직접 적거나, 세팅 문서가 이미 있으면 거기서 단계를 뽑아 오세요.</div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button style={primary} onClick={() => setOpen(true)}>첫 단계 추가</button>
                 <button className="ws-btn-soft" onClick={() => setExtractOpen(true)}><Icon name="doc" size={15} /> 문서에서 추출</button>
@@ -105,11 +105,11 @@ export default function OnboardingSurface() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {list.map((s, idx) => (
-                <div key={s.id} style={{ display: "flex", gap: 12, border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16 }}>
-                  <div style={{ width: 26, height: 26, flex: "0 0 auto", borderRadius: 999, background: "var(--color-primary-weak)", color: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 800 }}>{idx + 1}</div>
+                <div key={s.id} style={{ display: "flex", gap: 12, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 }}>
+                  <div style={{ width: 26, height: 26, flex: "0 0 auto", borderRadius: "var(--ds-r-pill)", background: "var(--color-primary-weak)", color: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 800 }}>{idx + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-strong)" }}>{s.title}</div>
-                    {s.body && <p style={{ fontSize: 13, color: "var(--text-sub)", lineHeight: 1.6, margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{s.body}</p>}
+                    {s.body && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6, margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{s.body}</p>}
                   </div>
                   <button className="ws-btn-soft" disabled={busy} onClick={() => remove(s.id)} title="삭제" style={{ flex: "0 0 auto", alignSelf: "flex-start" }}><Icon name="close" size={14} /></button>
                 </div>
@@ -122,5 +122,3 @@ export default function OnboardingSurface() {
   );
 }
 
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };

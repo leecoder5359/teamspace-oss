@@ -39,6 +39,7 @@ import { projectAccess } from "@/lib/pageGuard";
 import { prisma } from "@/lib/prisma";
 import { GET } from "./route";
 import { CONTEXT_BUDGET } from "@/lib/lessonInject";
+import { ACCOUNT_CAPS } from "@/lib/envVault/sessionAccounts";
 
 const m = (f: unknown) => f as Mock;
 const P = "proj1";
@@ -113,6 +114,22 @@ describe("GET /api/context — 계정 줄(P3c)", () => {
     expect(base.length).toBeGreaterThan(CONTEXT_BUDGET - 600); // 레슨이 예산을 채우는 상황인지(전제)
     expect(md.length).toBeLessThanOrEqual(CONTEXT_BUDGET);
     expect(db().envTarget.findMany.mock.calls.at(-1)?.[0].where).toEqual({ workspaceId: "w1", projectId: P });
+  });
+
+  it("sections=project(PostToolUse 델타) 계정 줄은 compact 와 같은 상한(ACCOUNT_CAPS.session) — 같은 줄이 나온다", async () => {
+    db().envTarget.findMany.mockResolvedValue([
+      { kind: "ssm", config: { prefix: "/a" }, account: { accountId: "111111111111" } },
+      { kind: "vercel", config: { project: "teamspace" }, account: { user: "me" } },
+      { kind: "gha", config: { repo: "o/r" }, account: { login: "me" } },
+    ]);
+    const section = (md: string) => {
+      const ls = md.split("\n");
+      const at = ls.indexOf("## 계정 (env 금고 반영 대상)");
+      return ls.slice(at, ls.indexOf("", at));
+    };
+    const compact = section(await get("compact=1"));
+    expect(compact).toHaveLength(1 + ACCOUNT_CAPS.session.maxLines);
+    expect(section(await get("sections=project"))).toEqual(compact);
   });
 
   it("brief 는 가장 중요한 1줄만", async () => {

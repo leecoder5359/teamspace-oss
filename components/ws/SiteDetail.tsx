@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
-import { inputStyle, primaryBtn } from "./Sites";
+import { inputStyleLg as inputStyle, primaryBtnInline as primaryBtn } from "./ui";
 
 type Detail = {
   site: { id: string; slug: string; title: string; status: "active" | "disabled"; currentVersion: number; apiUpstream: string | null; aliases?: string[] };
@@ -134,7 +134,7 @@ export default function SiteDetail({ id }: { id: string }) {
     <div className="ws-db" style={{ maxWidth: 820 }}>
       <h1 className="ws-db-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <Icon name="link" /> {site.title}
-        {site.status === "disabled" && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>· 비활성</span>}
+        {site.status === "disabled" && <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>· 비활성</span>}
       </h1>
 
       <div style={{ ...card, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -154,7 +154,7 @@ export default function SiteDetail({ id }: { id: string }) {
           <button onClick={changeSlug} disabled={busy || !slug.trim()} style={primaryBtn}>주소 바꾸기</button>
         </div>
         {site.aliases && site.aliases.length > 0 && (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
+          <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 10 }}>
             옛 주소(새 주소로 넘어감): {site.aliases.map((a) => `/pages/${a}`).join(", ")}
           </div>
         )}
@@ -177,9 +177,9 @@ export default function SiteDetail({ id }: { id: string }) {
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
             {d.invites.map((i) => (
-              <li key={i.email} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 13 }}>
+              <li key={i.email} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: "var(--ds-fs-md)" }}>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{i.email}</span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{i.lastAccessAt ? `열어봄 ${new Date(i.lastAccessAt).toLocaleString("ko-KR")}` : "아직"}</span>
+                <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{i.lastAccessAt ? `열어봄 ${new Date(i.lastAccessAt).toLocaleString("ko-KR")}` : "아직"}</span>
                 <button className="ws-btn-soft" disabled={busy} title="초대 회수" onClick={() => run(() => fetch(`/api/sites/${id}/invites`, json("DELETE", { emails: [i.email] })))}>
                   <Icon name="close" />
                 </button>
@@ -209,8 +209,8 @@ export default function SiteDetail({ id }: { id: string }) {
                 {intake.entries.map((e) => (
                   <li key={e.id} style={{ borderTop: "1px solid var(--border-subtle)", padding: "8px 0" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <b style={{ fontSize: 13 }}>{e.service}</b>
-                      <span style={{ flex: 1, minWidth: 140, fontSize: 12, color: "var(--text-muted)" }}>
+                      <b style={{ fontSize: "var(--ds-fs-md)" }}>{e.service}</b>
+                      <span style={{ flex: 1, minWidth: 140, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                         {e.submittedBy} · {when(e.createdAt)} · {e.fieldCount}칸{e.revealCount > 0 ? ` · 열람 ${e.revealCount}회` : ""}
                       </span>
                       {!revealed[e.id] && (
@@ -258,21 +258,21 @@ export default function SiteDetail({ id }: { id: string }) {
                   aria-expanded={openEmail === a.email}
                   style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left", flexWrap: "wrap", color: "inherit", font: "inherit" }}
                 >
-                  <span style={{ flex: 1, minWidth: 160, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis" }}>{a.email}</span>
-                  <span style={{ fontSize: 11.5, padding: "1px 7px", borderRadius: 999, background: "var(--surface-sunken)", color: a.kind === "revoked" ? "#c0392b" : "var(--text-muted)" }}>{KIND_LABEL[a.kind]}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  <span style={{ flex: 1, minWidth: 160, fontSize: "var(--ds-fs-md)", overflow: "hidden", textOverflow: "ellipsis" }}>{a.email}</span>
+                  <span style={{ fontSize: 11.5, padding: "1px 7px", borderRadius: "var(--ds-r-pill)", background: "var(--surface-sunken)", color: a.kind === "revoked" ? "#c0392b" : "var(--text-muted)" }}>{KIND_LABEL[a.kind]}</span>
+                  <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                     {a.count}회 · 처음 {when(a.firstAt)} · 마지막 {when(a.lastAt)}
                   </span>
                 </button>
                 {openEmail === a.email && (
                   <ul style={{ listStyle: "none", padding: "6px 0 0 12px", margin: 0 }}>
                     {a.recent.map((r) => (
-                      <li key={r.at} style={{ fontSize: 12, color: "var(--text-muted)", padding: "2px 0" }}>
+                      <li key={r.at} style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", padding: "2px 0" }}>
                         {when(r.at)} · v{r.version}
                       </li>
                     ))}
                     {a.count > a.recent.length && (
-                      <li style={{ fontSize: 12, color: "var(--text-muted)", padding: "2px 0" }}>… 이전 {a.count - a.recent.length}건</li>
+                      <li style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", padding: "2px 0" }}>… 이전 {a.count - a.recent.length}건</li>
                     )}
                   </ul>
                 )}
@@ -290,11 +290,11 @@ export default function SiteDetail({ id }: { id: string }) {
         </label>
         <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
           {d.versions.map((v) => (
-            <li key={v.version} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 13, flexWrap: "wrap" }}>
+            <li key={v.version} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: "var(--ds-fs-md)", flexWrap: "wrap" }}>
               <b>v{v.version}</b>
-              <span style={{ flex: 1, color: "var(--text-muted)", fontSize: 12 }}>{v.fileCount}개 · {kb(v.sizeBytes)} · {new Date(v.createdAt).toLocaleString("ko-KR")}</span>
+              <span style={{ flex: 1, color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)" }}>{v.fileCount}개 · {kb(v.sizeBytes)} · {new Date(v.createdAt).toLocaleString("ko-KR")}</span>
               {v.version === site.currentVersion ? (
-                <span style={{ fontSize: 12, color: "var(--color-primary)" }}>현재</span>
+                <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--color-primary)" }}>현재</span>
               ) : (
                 <button className="ws-btn-soft" disabled={busy} onClick={() => run(() => fetch(`/api/sites/${id}`, json("PATCH", { currentVersion: v.version })))}>이 버전으로</button>
               )}
@@ -320,5 +320,5 @@ export default function SiteDetail({ id }: { id: string }) {
   );
 }
 
-const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, margin: "10px 0 16px" };
-const h2: CSSProperties = { fontSize: 14, fontWeight: 700, margin: "18px 0 0", color: "var(--text-strong)" };
+const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, margin: "10px 0 16px" };
+const h2: CSSProperties = { fontSize: "var(--ds-fs-base)", fontWeight: 700, margin: "18px 0 0", color: "var(--text-strong)" };

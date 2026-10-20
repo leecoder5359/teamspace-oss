@@ -478,8 +478,16 @@ model DbRow {
   checklist RowChecklistItem[]
   comments  RowComment[]
 
+  // 열린 태스크 조회용 비정규화(감사 P-14) — props 에서 뽑은 값(lib/taskColumns). props 를 쓰는 모든 경로가 함께 쓴다.
+  // taskColsKey = 뽑을 때 쓴 '상태 속성 id|담당자 속성 id'. 지금 속성과 키가 다른 행(백필 전·속성 변경 뒤)은
+  // 읽기 쪽이 칸을 믿지 않고 props 로 거른다(lib/taskRows).
+  statusOptionId String?
+  assigneeText   String?
+  taskColsKey    String?
+
   @@index([databasePageId])
   @@index([parentRowId])
+  @@index([databasePageId, assigneeText])
 }
 
 // ---------- 태스크(행) 체크리스트 / 댓글 ----------

@@ -233,3 +233,44 @@ export function shortId(id: string, prefix = "TSK"): string {
   const clean = id.replace(/[^a-zA-Z0-9]/g, "");
   return `${prefix}-${clean.slice(-4).toUpperCase()}`;
 }
+
+/*
+ * 입력·버튼 스타일 상수 (U-21) — 화면마다 복제되던 값을 한곳에 모았다.
+ * 값이 다른 변형은 이름으로 구분한다. 화면에 따라 다르게 보이던 값을 하나로 합치지는 않았다(시각 변화 0).
+ */
+/** 폭을 정하지 않는 입력(가로 배치용). */
+export const inputBase: CSSProperties = {
+  padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
+  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit",
+};
+/** 한 줄을 다 쓰는 입력 — 폼의 기본. */
+export const inputStyle: CSSProperties = { width: "100%", ...inputBase };
+/** 사이트 화면의 입력 — 글자 16px. */
+export const inputStyleLg: CSSProperties = { ...inputStyle, fontSize: "var(--ds-fs-lg)" };
+
+export const primaryBtn: CSSProperties = {
+  padding: "9px 16px", borderRadius: 9, fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
+  border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
+};
+/** 좁은 칸에서 줄바꿈하지 않는 기본 버튼. */
+export const primaryBtnNowrap: CSSProperties = { ...primaryBtn, whiteSpace: "nowrap" };
+/** 아이콘을 앞에 붙이는 기본 버튼(인라인 플렉스). */
+export const primaryBtnInline: CSSProperties = { ...primaryBtn, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" };
+
+export const ghostBtn: CSSProperties = {
+  padding: "6px 14px", borderRadius: "var(--ds-r-sm)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+  border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
+};
+
+/** 툴바·행 안의 작은 select. */
+export const selectStyle: CSSProperties = {
+  height: 32,
+  padding: "0 8px",
+  border: "1px solid var(--border-default)",
+  borderRadius: 9,
+  background: "var(--surface-card)",
+  color: "var(--text-body)",
+  fontSize: 12.5,
+  fontFamily: "inherit",
+  fontWeight: 600,
+};

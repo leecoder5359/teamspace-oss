@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Avatar } from "./ui";
+import { Avatar, selectStyle } from "./ui";
 import { splitMembers } from "@/lib/membersSplit";
 import Link from "next/link";
 import { Icon } from "./icons";
@@ -180,7 +180,7 @@ export default function Members({
         <h1
           style={{
             margin: 0,
-            fontSize: 14,
+            fontSize: "var(--ds-fs-base)",
             fontWeight: 700,
             color: "var(--text-strong)",
           }}
@@ -278,7 +278,7 @@ export default function Members({
                     <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "9px 12px" }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: teamColor(t.color), flexShrink: 0 }} />
                       <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>{t.name}</span>
-                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{count}명</span>
+                      <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{count}명</span>
                       <span style={{ flex: 1 }} />
                       <button className="ws-btn-soft" onClick={() => void deleteTeam(t.id)} title="팀 삭제" aria-label="팀 삭제" style={{ padding: "0 9px", color: "var(--color-danger)" }}><Icon name="close" size={13} /></button>
                     </div>
@@ -347,12 +347,12 @@ export default function Members({
                         {isMe && (
                           <span
                             style={{
-                              fontSize: 11,
+                              fontSize: "var(--ds-fs-xs)",
                               fontWeight: 600,
                               color: "var(--color-primary)",
                               background: "var(--color-primary-weak)",
                               padding: "1px 6px",
-                              borderRadius: 999,
+                              borderRadius: "var(--ds-r-pill)",
                               flexShrink: 0,
                               lineHeight: 1.7,
                             }}
@@ -368,7 +368,7 @@ export default function Members({
                               color: "#E0900F",
                               background: "color-mix(in srgb, #F5A623 16%, var(--surface-card))",
                               padding: "1px 6px",
-                              borderRadius: 999,
+                              borderRadius: "var(--ds-r-pill)",
                               flexShrink: 0,
                               lineHeight: 1.7,
                             }}
@@ -379,7 +379,7 @@ export default function Members({
                       </div>
                       <div
                         style={{
-                          fontSize: 12,
+                          fontSize: "var(--ds-fs-sm)",
                           color: "var(--text-muted)",
                           marginTop: 1,
                           overflow: "hidden",
@@ -466,7 +466,7 @@ export default function Members({
             <div style={{ ...listHeadStyle, display: "flex", alignItems: "center", gap: 8 }}>
               <span>에이전트&ensp;·&ensp;{agents.length}</span>
               <span style={{ flex: 1 }} />
-              <Link href="/settings#agent-tokens" style={{ fontSize: 12, fontWeight: 600, textTransform: "none", letterSpacing: 0, color: "var(--color-primary)" }}>
+              <Link href="/settings#agent-tokens" style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, textTransform: "none", letterSpacing: 0, color: "var(--color-primary)" }}>
                 설정 › 에이전트 토큰에서 관리
               </Link>
             </div>
@@ -489,23 +489,23 @@ export default function Members({
                       ...(idx > 0 ? { borderTop: "1px solid var(--border-subtle)" } : {}),
                     }}
                   >
-                    <span aria-hidden style={{ width: 36, height: 36, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-sunken, var(--border-subtle))", fontSize: 18, flexShrink: 0 }}>
+                    <span aria-hidden style={{ width: 36, height: 36, borderRadius: "var(--ds-r-pill)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-sunken, var(--border-subtle))", fontSize: 18, flexShrink: 0 }}>
                       🤖
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {displayName}
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {tok ? `${tok.name} · 마지막 사용 ${tok.lastUsedAt ? fmtAgentLastUsed(tok.lastUsedAt) : "없음"}` : "토큰 정보 없음"}
                       </div>
                     </div>
                     {tok?.revokedAt && (
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-danger)", background: "color-mix(in srgb, var(--color-danger) 12%, var(--surface-card))", padding: "1px 6px", borderRadius: 999, flexShrink: 0, lineHeight: 1.7 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-danger)", background: "color-mix(in srgb, var(--color-danger) 12%, var(--surface-card))", padding: "1px 6px", borderRadius: "var(--ds-r-pill)", flexShrink: 0, lineHeight: 1.7 }}>
                         회수됨
                       </span>
                     )}
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-sub)", border: "1px solid var(--border-default)", padding: "2px 9px", borderRadius: 999, flexShrink: 0 }}>
+                    <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-sub)", border: "1px solid var(--border-default)", padding: "2px 9px", borderRadius: "var(--ds-r-pill)", flexShrink: 0 }}>
                       {ROLE_LABELS[member.role]}
                     </span>
                   </div>
@@ -523,7 +523,7 @@ export default function Members({
 const cardStyle: CSSProperties = {
   background: "var(--surface-card)",
   border: "1px solid var(--border-subtle)",
-  borderRadius: 12,
+  borderRadius: "var(--ds-r-md)",
   padding: 18,
 };
 
@@ -544,14 +544,3 @@ const listHeadStyle: CSSProperties = {
   letterSpacing: "0.05em",
 };
 
-const selectStyle: CSSProperties = {
-  height: 32,
-  padding: "0 8px",
-  border: "1px solid var(--border-default)",
-  borderRadius: 9,
-  background: "var(--surface-card)",
-  color: "var(--text-body)",
-  fontSize: 12.5,
-  fontFamily: "inherit",
-  fontWeight: 600,
-};

@@ -94,7 +94,7 @@ export default function RelationCell({
             style={{
               fontSize: 11.5,
               padding: "1px 7px",
-              borderRadius: 999,
+              borderRadius: "var(--ds-r-pill)",
               border: "1px solid var(--border-subtle)",
               background: "var(--surface-sunken)",
               whiteSpace: "nowrap",
@@ -134,7 +134,7 @@ export default function RelationCell({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="행 검색…"
-              style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--text-body)" }}
+              style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: "var(--ds-fs-md)", color: "var(--text-body)" }}
             />
             <button className="ws-btn-soft" style={{ padding: "2px 6px" }} onClick={() => setOpen(false)}>
               닫기
@@ -159,7 +159,7 @@ export default function RelationCell({
                   border: "none",
                   background: on ? "var(--surface-sunken)" : "transparent",
                   cursor: "pointer",
-                  fontSize: 13,
+                  fontSize: "var(--ds-fs-md)",
                   color: "var(--text-body)",
                 }}
               >

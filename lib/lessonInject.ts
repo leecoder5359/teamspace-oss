@@ -394,7 +394,10 @@ export function renderSubagentLessons(i: {
   budget: number;
 }): { lines: string[]; report: LessonRenderReport; mainOnly: number; count: number } {
   const personId = i.personId ?? null;
+  // 개인 레슨은 요청자 본인 것만 — 필수여도. 라우트 DB 필터(userId null|본인)에 더해 순수 함수에서도 막는다(이중 방어).
+  const ownerOk = (l: LessonLite) => !l.userId || (!!personId && l.userId === personId);
   const inScope = (l: LessonLite) => {
+    if (!ownerOk(l)) return false;
     if (lessonModeOf(l) === "required") return true;
     if (lessonScopeOf(l) === "project") return !!i.projectId && l.projectId === i.projectId;
     return lessonScopeOf(l) === "personal" && !!personId && l.userId === personId && lessonModeOf(l) !== "ondemand";
@@ -427,7 +430,9 @@ export function renderSubagentLessons(i: {
   lines.splice(lines.length - 1, 0, ...note); // 끝 빈 줄 앞
   const personalStatuses: LessonStatusEntry[] = personal.map((l, k) => ({ id: l.id, scope: "personal", mode: lessonModeOf(l), status: k < pr.lines.length ? "title" : "omitted" }));
   const statuses = [...r.report.statuses, ...personalStatuses];
-  return { lines, report: { ...r.report, chars: lines.join("\n").length, statuses }, mainOnly, count: kept.length };
+  // count = 이 출력의 대상 레슨 수(ondemand 는 '필요할 때만' 이라 세지 않는다) — sections=project 의 count 와 같은 뜻.
+  const count = kept.filter((l) => lessonModeOf(l) !== "ondemand").length;
+  return { lines, report: { ...r.report, chars: lines.join("\n").length, statuses }, mainOnly, count };
 }
 
 /** 레슨 스택은 태그 하나(null/빈 문자열 = 해제). */

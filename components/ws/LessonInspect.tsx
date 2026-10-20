@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
-import { ProgressBar, IdChip } from "./ui";
-import { Pill, Table, Sub, td, tdNum, rowStyle, hint, empty, inputStyle } from "./AiRoutes";
+import { ProgressBar, IdChip, ghostBtn, inputBase as inputStyle } from "./ui";
+import { Pill, Table, Sub, td, tdNum, rowStyle, hint, empty } from "./AiRoutes";
 
 /* =====================================================================
    설정 › 레슨 주입 점검(편집자 이상) — GET /api/lessons/inspect · /api/lessons/injections.
@@ -147,7 +146,7 @@ export default function LessonInspect() {
       {data && (
         <>
           <Sub label="대상">
-            <div style={{ fontSize: 13, color: "var(--text-strong)", fontWeight: 600 }}>
+            <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-strong)", fontWeight: 600 }}>
               {data.resolved.projectName ?? "프로젝트 없음"}
               {data.resolved.projectStack.length > 0 && <span style={{ marginLeft: 6, fontWeight: 400, color: "var(--text-muted)" }}>스택 {data.resolved.projectStack.join(", ")}</span>}
             </div>
@@ -422,7 +421,7 @@ function FilterBtn({ active, onClick, label }: { active: boolean; onClick: () =>
       style={{
         ...ghostBtn,
         padding: "4px 10px",
-        fontSize: 12,
+        fontSize: "var(--ds-fs-sm)",
         background: active ? "color-mix(in srgb, var(--color-primary) 12%, var(--surface-card))" : "var(--surface-card)",
         borderColor: active ? "var(--color-primary)" : "var(--border-default)",
       }}
@@ -436,14 +435,14 @@ function CandidateList({ title, items, none }: { title: string; items: { key: st
   if (items.length === 0)
     return (
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4 }}>{title}</div>
         <p style={empty}>{none}</p>
       </div>
     );
   // 길면 접어 둔다(설정 화면 감사 로그와 같은 details 패턴)
   return (
     <details open={items.length <= 5} style={{ marginBottom: 12 }}>
-      <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, cursor: "pointer" }}>{title}</summary>
+      <summary style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, cursor: "pointer" }}>{title}</summary>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--text-body)", lineHeight: 1.7 }}>
         {items.map((it) => (
           <li key={it.key}>
@@ -461,7 +460,3 @@ function CandidateList({ title, items, none }: { title: string; items: { key: st
 }
 
 /* 설정 화면의 ghostBtn 과 같은 모양 */
-const ghostBtn: CSSProperties = {
-  padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-  border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
-};

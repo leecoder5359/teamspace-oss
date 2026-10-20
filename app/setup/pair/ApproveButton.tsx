@@ -18,7 +18,7 @@ export function ApproveButton({ code, label }: { code: string; label: string }) 
   if (state === "ok") return <p>승인됨 — 터미널로 돌아가세요. 설치가 이어집니다.</p>;
   return (
     <>
-      <button onClick={approve} style={{ padding: "10px 20px", fontSize: 16 }}>
+      <button onClick={approve} style={{ padding: "10px 20px", fontSize: "var(--ds-fs-lg)" }}>
         {label}
       </button>
       {state === "err" && <p style={{ color: "crimson" }}>승인 실패 — 링크를 다시 열어 주세요.</p>}

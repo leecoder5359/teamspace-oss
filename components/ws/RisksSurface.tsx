@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import { useDialogEscape } from "@/lib/useDialogEscape";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 리스크(risks) surface — 위험·이슈. /api/risks.
    디자인 반영: 상태 필터 + 행 클릭 상세 드로어(설명/심각도/상태 + 완화·종료·삭제). */
@@ -108,7 +109,7 @@ export default function RisksSurface({ project }: { project: string }) {
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
-            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               {/* 빈 상태의 '첫 리스크 추가' 로 열었을 때 바로 입력할 수 있게 */}
               <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="리스크 제목" style={inp} />
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명/영향" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
@@ -131,7 +132,7 @@ export default function RisksSurface({ project }: { project: string }) {
               {list.length > 0 ? (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 리스크가 없어요</div>
-                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>기록된 리스크 {list.length}건은 다른 상태에 있습니다.</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>기록된 리스크 {list.length}건은 다른 상태에 있습니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button className="ws-btn-soft" onClick={() => setFilter("all")}>전체 상태 보기</button>
                   </div>
@@ -139,7 +140,7 @@ export default function RisksSurface({ project }: { project: string }) {
               ) : (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>리스크가 없어요</div>
-                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>걱정되는 것을 적어 두면 잊히지 않고 상태(열림·완화·종료)로 추적됩니다.</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>걱정되는 것을 적어 두면 잊히지 않고 상태(열림·완화·종료)로 추적됩니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button style={primary} onClick={() => setOpen(true)}>첫 리스크 추가</button>
                   </div>
@@ -152,15 +153,15 @@ export default function RisksSurface({ project }: { project: string }) {
                 const sv = SEV[r.severity], st = ST[r.status];
                 return (
                   <div key={r.id} className="ws-listrow" onClick={() => openSel(r.id)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter") openSel(r.id); }}
-                    style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16, cursor: "pointer" }}>
+                    onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openSel(r.id); } }}
+                    style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, cursor: "pointer" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={pill(sv.color)}>{sv.label}</span>
-                      <span style={pill(st.color)}><span style={{ width: 6, height: 6, borderRadius: 999, background: st.color }} />{st.label}</span>
-                      {r.project && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--text-sub)" }}><span style={{ width: 7, height: 7, borderRadius: 2, background: projColor(r.project.color) }} />{r.project.name}</span>}
+                      <span style={pill(st.color)}><span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: st.color }} />{st.label}</span>
+                      {r.project && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)" }}><span style={{ width: 7, height: 7, borderRadius: 2, background: projColor(r.project.color) }} />{r.project.name}</span>}
                     </div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 10 }}>{r.title}</div>
-                    {r.description && <p style={{ fontSize: 13, color: "var(--text-sub)", lineHeight: 1.6, margin: "8px 0 0", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description}</p>}
+                    {r.description && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6, margin: "8px 0 0", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description}</p>}
                   </div>
                 );
               })}
@@ -175,18 +176,18 @@ export default function RisksSurface({ project }: { project: string }) {
           <aside className="ws-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <header className="ws-drawer-head">
               <span style={pill(SEV[sel.severity].color)}>{SEV[sel.severity].label}</span>
-              <span style={pill(ST[sel.status].color)}><span style={{ width: 6, height: 6, borderRadius: 999, background: ST[sel.status].color }} />{ST[sel.status].label}</span>
+              <span style={pill(ST[sel.status].color)}><span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: ST[sel.status].color }} />{ST[sel.status].label}</span>
               <span className="ws-drawer-head-spacer" style={{ flex: 1 }} />
               <button ref={closeRef} className="ws-icon-btn" onClick={closeSel} title="닫기"><Icon name="close" size={18} /></button>
             </header>
             <div className="ws-drawer-body">
-              <h2 id={titleId} style={{ margin: "0 0 14px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
+              <h2 id={titleId} style={{ margin: "0 0 14px", fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
               {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
               {sel.description ? (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>설명 / 영향
                   <p style={{ margin: "8px 0 0", fontWeight: 400, fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.description}</p>
                 </div>
-              ) : <p style={{ fontSize: 13, color: "var(--text-muted)" }}>설명이 없는 리스크예요.</p>}
+              ) : <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>설명이 없는 리스크예요.</p>}
               {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
             </div>
             <footer className="ws-drawer-foot">
@@ -202,6 +203,4 @@ export default function RisksSurface({ project }: { project: string }) {
   );
 }
 
-const pill = (color: string): CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` });
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };
+const pill = (color: string): CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` });

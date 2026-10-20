@@ -25,3 +25,49 @@ describe("CommandPalette — 결과 목록 ARIA(U-19)", () => {
     expect(screen.getAllByRole("option")[1].getAttribute("aria-selected")).toBe("true");
   });
 });
+
+describe("CommandPalette — Escape 는 팔레트만 닫는다(드로어 등 뒤의 Escape 리스너로 새지 않게)", () => {
+  it("열린 상태의 Escape 는 팔레트를 닫고 window 의 다른 Escape 리스너에 닿지 않는다", async () => {
+    const behind = vi.fn();
+    window.addEventListener("keydown", behind);
+    try {
+      render(<CommandPalette />);
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      const input = await screen.findByRole("textbox", { name: "검색어" });
+      behind.mockClear();
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(behind).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", behind);
+    }
+  });
+
+  it("한글 입력 조합 중(isComposing)의 Escape 는 조합 취소용이라 팔레트를 닫지 않고 막지도 않는다", async () => {
+    const behind = vi.fn();
+    window.addEventListener("keydown", behind);
+    try {
+      render(<CommandPalette />);
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      const input = await screen.findByRole("textbox", { name: "검색어" });
+      behind.mockClear();
+      fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+      expect(screen.getByRole("listbox")).toBeTruthy();
+      expect(behind).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", behind);
+    }
+  });
+
+  it("닫힌 상태의 Escape 는 막지 않는다(드로어가 그대로 닫힐 수 있게)", () => {
+    const behind = vi.fn();
+    window.addEventListener("keydown", behind);
+    try {
+      render(<CommandPalette />);
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(behind).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", behind);
+    }
+  });
+});

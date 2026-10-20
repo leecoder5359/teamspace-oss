@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { Pill, Table, Sub, td, rowStyle, hint, empty } from "./AiRoutes";
+import { ghostBtn } from "./ui";
 
 /* =====================================================================
    설정 › 라이브 세션·잠금(편집자 이상) — GET /api/sessions/live · DELETE /api/locks/<name>?force=1.
@@ -222,7 +223,7 @@ function TaskList({ tasks }: { tasks: Session["tasks"] }) {
       {tasks.slice(0, TASKS_SHOWN).map(link)}
       {rest.length > 0 && (
         <details>
-          <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--text-muted)" }}>외 {rest.length}개</summary>
+          <summary style={{ fontSize: "var(--ds-fs-sm)", cursor: "pointer", color: "var(--text-muted)" }}>외 {rest.length}개</summary>
           {rest.map(link)}
         </details>
       )}
@@ -241,8 +242,4 @@ function LastSeen({ iso, now }: { iso: string; now: number }) {
 const oneLine: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 /** 남는 폭을 다 쓰되 내용 때문에 표가 넓어지지 않게(max-width:0 + width:100% — 안쪽 한 줄 말줄임이 먹는다). */
 const fill: CSSProperties = { width: "100%", maxWidth: 0 };
-const mono: CSSProperties = { fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)", fontSize: 12, whiteSpace: "nowrap" };
-const ghostBtn: CSSProperties = {
-  padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-  border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
-};
+const mono: CSSProperties = { fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)", fontSize: "var(--ds-fs-sm)", whiteSpace: "nowrap" };

@@ -186,7 +186,7 @@ function DashPanel({
           marginBottom: 14,
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>{title}</h3>
+        <h3 style={{ margin: 0, fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -213,7 +213,7 @@ function Metric({
         position: "relative",
         background: "var(--surface-card)",
         border: "1px solid var(--border-subtle)",
-        borderRadius: 12,
+        borderRadius: "var(--ds-r-md)",
         padding: "16px 16px 14px 18px",
         overflow: "hidden",
       }}
@@ -226,7 +226,7 @@ function Metric({
       <div
         style={{
           fontFamily: "var(--font-display)",
-          fontSize: 34,
+          fontSize: "var(--ds-fs-3xl)",
           fontWeight: 700,
           lineHeight: 1.1,
           color: "var(--text-strong)",
@@ -237,7 +237,7 @@ function Metric({
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 12, marginTop: 4, color: alert ? "var(--color-danger)" : "var(--text-muted)" }}>
+        <div style={{ fontSize: "var(--ds-fs-sm)", marginTop: 4, color: alert ? "var(--color-danger)" : "var(--text-muted)" }}>
           {sub}
         </div>
       )}
@@ -396,12 +396,12 @@ export default function Dashboard({ userName }: { userName: string }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-strong)", marginBottom: 6 }}>
             아직 태스크가 없어요
           </div>
-          <div style={{ fontSize: 13, marginBottom: 16 }}>
+          <div style={{ fontSize: "var(--ds-fs-md)", marginBottom: 16 }}>
             태스크 데이터베이스를 만들면 현황 요약이 여기에 나타납니다.
           </div>
           <button
             className="ws-link"
-            style={{ fontSize: 13, padding: "8px 14px", background: "var(--color-primary-weak)" }}
+            style={{ fontSize: "var(--ds-fs-md)", padding: "8px 14px", background: "var(--color-primary-weak)" }}
             onClick={openTask}
           >
             태스크 보드 열기
@@ -619,7 +619,7 @@ export default function Dashboard({ userName }: { userName: string }) {
                     <span
                       style={{
                         display: "block",
-                        fontSize: 13,
+                        fontSize: "var(--ds-fs-md)",
                         fontWeight: 500,
                         color: "var(--text-strong)",
                         overflow: "hidden",
@@ -629,7 +629,7 @@ export default function Dashboard({ userName }: { userName: string }) {
                     >
                       {typeof title === "string" && title ? title : "Untitled"}
                     </span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                    <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                       {shortId(row.id)}
                     </span>
                   </span>
@@ -664,7 +664,7 @@ export default function Dashboard({ userName }: { userName: string }) {
           }
         >
           {!notif || notif.logs.length === 0 ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 6px", color: "var(--text-muted)", fontSize: 13 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 6px", color: "var(--text-muted)", fontSize: "var(--ds-fs-md)" }}>
               <Icon name="slack" size={18} />
               {notif ? "아직 발송된 알림이 없어요." : "불러오는 중…"}
             </div>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -28,12 +29,17 @@ const BASE_METADATA: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/* generateMetadata 와 본문이 같은 요청에서 세션·열람 판정을 한 번만 조회하도록 요청 단위로 기억한다
+   (lib/renderContext 와 같은 React `cache` — 요청 사이에는 공유하지 않는다). 기록·갱신(부수효과)은 본문에만. */
+const getSession = cache(() => auth());
+const getSiteAccess = cache((slug: string, email: string) => siteAccessBySlug(slug, email));
+
 /** 탭 제목 = 사이트 제목. 셸과 같은 판정(로그인 + 열람 가능)을 통과할 때만 — 초대받지 않은 사람에게 제목이 새지 않게. */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const [slug] = decodeAll([(await params).slug]) ?? [];
-  const email = slug ? (await auth())?.user?.email : null;
+  const email = slug ? (await getSession())?.user?.email : null;
   if (!slug || !email) return BASE_METADATA;
-  const access = await siteAccessBySlug(slug, email);
+  const access = await getSiteAccess(slug, email);
   return access.result === "ok" && access.site ? { ...BASE_METADATA, title: access.site.title } : BASE_METADATA;
 }
 
@@ -54,11 +60,11 @@ export default async function SharedSitePage({ params }: { params: Promise<{ slu
   const [slug, ...segments] = decoded;
   const here = shellPath(slug, segments.join("/"));
 
-  const session = await auth();
+  const session = await getSession();
   const email = session?.user?.email ?? null;
   if (!email) redirect(`/login?callbackUrl=${encodeURIComponent(here)}`);
 
-  const access = await siteAccessBySlug(slug, email);
+  const access = await getSiteAccess(slug, email);
   if (access.result === "not_found" || !access.site) {
     const current = await currentSlugForAlias(slug);
     if (current && current !== slug) permanentRedirect(shellPath(current, segments.join("/")));
@@ -75,11 +81,11 @@ export default async function SharedSitePage({ params }: { params: Promise<{ slu
       <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center", padding: "24px 16px", background: "var(--surface-page, #f7f7f8)" }}>
         <div style={{ maxWidth: 420, textAlign: "center" }}>
           <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>이 페이지에 접근 권한이 없습니다</h1>
-          <p style={{ fontSize: 14, color: "var(--text-muted, #666)", margin: "10px 0 18px" }}>
+          <p style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-muted, #666)", margin: "10px 0 18px" }}>
             지금 <b>{email}</b> 계정으로 로그인되어 있습니다. 초대받은 이메일 계정으로 다시 로그인하세요.
           </p>
           <form action={switchAccount}>
-            <button type="submit" style={{ padding: "10px 16px", borderRadius: 9, border: "1px solid var(--border-default, #ddd)", background: "var(--surface-card, #fff)", fontSize: 14, cursor: "pointer" }}>
+            <button type="submit" style={{ padding: "10px 16px", borderRadius: 9, border: "1px solid var(--border-default, #ddd)", background: "var(--surface-card, #fff)", fontSize: "var(--ds-fs-base)", cursor: "pointer" }}>
               다른 계정으로 로그인
             </button>
           </form>

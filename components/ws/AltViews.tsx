@@ -86,7 +86,7 @@ export function GalleryView({ properties, rows, titleId, onOpenRow }: Common) {
               textAlign: "left",
               background: "var(--surface-card)",
               border: "1px solid var(--border-subtle)",
-              borderRadius: 12,
+              borderRadius: "var(--ds-r-md)",
               padding: 14,
               display: "flex",
               flexDirection: "column",
@@ -100,11 +100,11 @@ export function GalleryView({ properties, rows, titleId, onOpenRow }: Common) {
             <div
               style={{
                 height: 6,
-                borderRadius: 999,
+                borderRadius: "var(--ds-r-pill)",
                 background: st ? colorFor(st.color) : "var(--border-subtle)",
               }}
             />
-            <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.4, flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: "var(--ds-fs-base)", lineHeight: 1.4, flex: 1 }}>
               {titleOf(row, titleId)}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -196,7 +196,7 @@ export function CalendarView({
         <button className="ws-btn-soft" onClick={() => setCursor((c) => addMonths(c.year, c.month, -1))} aria-label="이전 달">
           <Icon name="chevronLeft" size={14} />
         </button>
-        <strong style={{ fontSize: 14 }}>{monthLabel(cursor.year, cursor.month)}</strong>
+        <strong style={{ fontSize: "var(--ds-fs-base)" }}>{monthLabel(cursor.year, cursor.month)}</strong>
         <button className="ws-btn-soft" onClick={() => setCursor((c) => addMonths(c.year, c.month, 1))} aria-label="다음 달">
           <Icon name="chevronRight" size={14} />
         </button>
@@ -210,12 +210,12 @@ export function CalendarView({
           오늘
         </button>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: "var(--text-disabled)" }}>기준 속성: {dateProp.name}</span>
+        <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)" }}>기준 속성: {dateProp.name}</span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--border-subtle)", border: "1px solid var(--border-subtle)", borderRadius: 10, overflow: "hidden" }}>
         {WEEKDAYS.map((d) => (
-          <div key={d} style={{ background: "var(--surface-sunken)", padding: "6px 8px", fontSize: 12, fontWeight: 600, textAlign: "center" }}>
+          <div key={d} style={{ background: "var(--surface-sunken)", padding: "6px 8px", fontSize: "var(--ds-fs-sm)", fontWeight: 600, textAlign: "center" }}>
             {d}
           </div>
         ))}
@@ -266,7 +266,7 @@ export function CalendarView({
                 );
               })}
               {list.length > 3 && (
-                <div style={{ fontSize: 11, color: "var(--text-disabled)" }}>+{list.length - 3}건</div>
+                <div style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-disabled)" }}>+{list.length - 3}건</div>
               )}
             </div>
           );
@@ -275,7 +275,7 @@ export function CalendarView({
 
       {undated > 0 && (
         // 날짜 없는 행이 조용히 사라지면 "행이 없어졌다" 로 읽힌다 — 개수를 밝힌다.
-        <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-disabled)" }}>
+        <p style={{ marginTop: 10, fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)" }}>
           날짜가 없어 달력에 놓이지 않은 행 {undated}건
         </p>
       )}
@@ -316,7 +316,7 @@ export function TimelineView({
 
   return (
     <div style={{ padding: "8px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-disabled)", marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)", marginBottom: 8 }}>
         <span>{bounds.min}</span>
         <span>
           기준: {startProp.name}
@@ -341,7 +341,7 @@ export function TimelineView({
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
-                  fontSize: 13,
+                  fontSize: "var(--ds-fs-md)",
                   color: "var(--text-body)",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
@@ -374,7 +374,7 @@ export function TimelineView({
       </div>
 
       {missing > 0 && (
-        <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-disabled)" }}>
+        <p style={{ marginTop: 10, fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)" }}>
           시작 날짜가 없어 막대를 그리지 못한 행 {missing}건
         </p>
       )}

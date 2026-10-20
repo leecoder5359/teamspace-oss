@@ -95,7 +95,12 @@ export default function Inbox() {
   useAutoRefresh(load);
 
   // 읽음 처리. 링크 있는 알림은 <Link> 가 이동을 맡고, 링크 없는 알림은 목록을 새로 받아 읽음 표시를 갱신한다.
+  // ⌘/ctrl 클릭(새 탭)이면 이 탭이 남으므로, 링크 알림은 읽음 표시를 바로 로컬에서 바꾼다(다음 갱신이 서버 값으로 맞춘다).
   async function open(n: Notif) {
+    if (n.link && !n.readAt) {
+      const readAt = new Date().toISOString();
+      setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, readAt } : x)) ?? prev);
+    }
     if (!n.readAt) await fetch(`/api/notifications/${n.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: true }) });
     if (!n.link) void load();
   }
@@ -116,7 +121,7 @@ export default function Inbox() {
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <h1 className="ws-db-title" style={{ display: "flex", alignItems: "center", gap: 10, margin: 0 }}>
           <Icon name="inbox" /> 알림
-          {unread > 0 && <span style={{ fontSize: 13, color: "var(--color-primary)", fontWeight: 700 }}>미읽음 {unread}</span>}
+          {unread > 0 && <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-primary)", fontWeight: 700 }}>미읽음 {unread}</span>}
         </h1>
         <span style={{ flex: 1 }} />
         <button className="ws-btn-soft" onClick={toggleGroup} aria-pressed={grouped}

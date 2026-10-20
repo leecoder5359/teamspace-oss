@@ -78,7 +78,7 @@ export const TagInline = createReactInlineContentSpec(
           background: "var(--surface-sunken)",
           color: "var(--text-sub)",
           border: "1px solid var(--border-subtle)",
-          borderRadius: 999,
+          borderRadius: "var(--ds-r-pill)",
           padding: "1px 8px",
           margin: "0 1px",
         }}
@@ -165,7 +165,7 @@ export const CalloutBlock = createReactBlockSpec(
             title="종류 바꾸기"
             style={{
               font: "inherit",
-              fontSize: 11,
+              fontSize: "var(--ds-fs-xs)",
               fontWeight: 700,
               letterSpacing: "0.03em",
               color: meta.color,
@@ -204,7 +204,7 @@ export const EmbedBlock = createReactBlockSpec(
           borderRadius: 10,
           padding: "10px 14px",
           background: "var(--surface-card)",
-          fontSize: 13,
+          fontSize: "var(--ds-fs-md)",
           width: "100%",
         }}
       >

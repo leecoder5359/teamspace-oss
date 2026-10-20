@@ -124,7 +124,7 @@ function renderInline(nodes: Inline[], ctx: Ctx, keyPrefix = ""): ReactNode[] {
             key={key}
             src={safeHref(n.src)}
             alt={n.alt}
-            style={{ maxWidth: "100%", height: "auto", borderRadius: 8, display: "block", margin: "8px 0" }}
+            style={{ maxWidth: "100%", height: "auto", borderRadius: "var(--ds-r-sm)", display: "block", margin: "8px 0" }}
           />
         );
 
@@ -180,7 +180,7 @@ function renderInline(nodes: Inline[], ctx: Ctx, keyPrefix = ""): ReactNode[] {
               background: "var(--surface-sunken)",
               color: "var(--text-sub)",
               border: "1px solid var(--border-subtle)",
-              borderRadius: 999,
+              borderRadius: "var(--ds-r-pill)",
               padding: "1px 8px",
               margin: "0 1px",
               cursor: ctx.onTagClick ? "pointer" : "default",
@@ -263,11 +263,11 @@ function renderListItems(items: ListItem[], ctx: Ctx, keyPrefix: string): ReactN
 
 const H_STYLE: Record<number, React.CSSProperties> = {
   1: { fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--text-strong)", margin: "4px 0 12px", letterSpacing: "-0.02em" },
-  2: { fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, color: "var(--text-strong)", margin: "20px 0 8px", letterSpacing: "-0.01em" },
-  3: { fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700, color: "var(--text-strong)", margin: "16px 0 6px" },
-  4: { fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, color: "var(--text-strong)", margin: "14px 0 5px" },
+  2: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", margin: "20px 0 8px", letterSpacing: "-0.01em" },
+  3: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", margin: "16px 0 6px" },
+  4: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)", margin: "14px 0 5px" },
   5: { fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 700, color: "var(--text-sub)", margin: "13px 0 5px" },
-  6: { fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700, color: "var(--text-sub)", margin: "12px 0 4px", textTransform: "uppercase", letterSpacing: "0.03em" },
+  6: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-sub)", margin: "12px 0 4px", textTransform: "uppercase", letterSpacing: "0.03em" },
 };
 
 const cellStyle = (a: Align): React.CSSProperties => ({ textAlign: a });
@@ -344,7 +344,7 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
         const pre = (
           <pre
             key={key}
-            style={{ overflowX: "auto", margin: "10px 0", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "12px 14px" }}
+            style={{ overflowX: "auto", margin: "10px 0", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", padding: "12px 14px" }}
           >
             <code
               data-lang={b.lang ?? undefined}
@@ -362,7 +362,7 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
       case "table":
         return (
           <div key={key} className="ws-table-scroll" style={{ overflowX: "auto", margin: "10px 0" }}>
-            <table className="ws-doc-table" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+            <table className="ws-doc-table" style={{ borderCollapse: "collapse", width: "100%", fontSize: "var(--ds-fs-md)" }}>
               <thead>
                 <tr>
                   {b.head.map((c, ci) => (
@@ -428,7 +428,7 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
         return (
           <div
             key={key}
-            style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "10px 14px", margin: "10px 0", background: "var(--surface-card)", fontSize: 13 }}
+            style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "10px 14px", margin: "10px 0", background: "var(--surface-card)", fontSize: "var(--ds-fs-md)" }}
           >
             <span style={{ color: "var(--text-muted)", fontSize: 11.5, marginRight: 6 }}>임베드</span>
             {href ? (

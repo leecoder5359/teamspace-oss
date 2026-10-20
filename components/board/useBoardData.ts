@@ -306,11 +306,13 @@ export function useBoardData(
       const props: Record<string, unknown> = { [nameProp.id]: name };
       if (remindAt && dueProp) props[dueProp.id] = remindAt.slice(0, 10);
       const row = await addRow(props);
+      // 행 추가가 실패하면(addRow 가 이미 error 를 세팅) 행 없는 리마인더를 만들지 않는다
+      if (!row) return;
       if (remindAt) {
         await fetch(`/api/schedules`, {
           method: "POST",
           headers: JSON_HEADERS,
-          body: JSON.stringify({ remindAt, text: name, databasePageId: pageId, rowId: row?.id }),
+          body: JSON.stringify({ remindAt, text: name, databasePageId: pageId, rowId: row.id }),
         });
         await loadReminders();
       }

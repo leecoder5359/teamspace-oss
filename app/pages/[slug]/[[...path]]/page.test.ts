@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 
 class Signal extends Error {
@@ -15,6 +15,20 @@ vi.mock("next/navigation", () => ({
   },
   permanentRedirect: (url: string) => {
     throw new Signal("permanentRedirect", url);
+  },
+}));
+// React `cache` 는 서버 렌더 밖(vitest)에서는 기억하지 않는다 — 요청 하나를 흉내 내는 테스트에서만
+// 인자별로 기억하게 켜고(reqCache.on), 나머지는 그대로 통과시킨다.
+const reqCache = vi.hoisted(() => ({ on: false, store: new Map<unknown, Map<string, unknown>>() }));
+vi.mock("react", async (orig) => ({
+  ...(await orig<typeof import("react")>()),
+  cache: <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => {
+    if (!reqCache.on) return fn(...a);
+    const memo = reqCache.store.get(fn) ?? new Map<string, unknown>();
+    reqCache.store.set(fn, memo);
+    const key = JSON.stringify(a);
+    if (!memo.has(key)) memo.set(key, fn(...a));
+    return memo.get(key) as R;
   },
 }));
 vi.mock("@/auth", () => ({ auth: vi.fn(), signOut: vi.fn() }));
@@ -150,5 +164,30 @@ describe("/pages/[slug] 탭 제목(U-16)", () => {
   it("잘못 인코딩된 슬러그는 기본 제목", async () => {
     m(auth).mockResolvedValue({ user: { email: "g@gmail.com" } });
     expect(await meta("%E0%A4%A")).toEqual({ ...base, title: "공유된 페이지" });
+  });
+});
+
+describe("/pages/[slug] 한 요청 안의 조회 공유", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    reqCache.on = true;
+    reqCache.store.clear();
+    m(auth).mockResolvedValue({ user: { email: "g@gmail.com" } });
+    m(siteAccessBySlug).mockResolvedValue({ result: "ok", site, inviteId: "inv1", member: false });
+    m(prisma.siteInvite.update).mockResolvedValue({});
+    m(recordSiteAccess).mockResolvedValue(undefined);
+    m(resolveShellFile).mockResolvedValue("index.html");
+  });
+  afterEach(() => {
+    reqCache.on = false;
+    reqCache.store.clear();
+  });
+
+  it("generateMetadata 와 본문은 세션·열람 판정을 한 번씩만 조회한다(React cache)", async () => {
+    await generateMetadata({ params: Promise.resolve({ slug: "banjang-handover" }) });
+    await run("banjang-handover");
+    expect(auth).toHaveBeenCalledTimes(1);
+    expect(siteAccessBySlug).toHaveBeenCalledTimes(1);
+    expect(recordSiteAccess).toHaveBeenCalledTimes(1);
   });
 });

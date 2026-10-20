@@ -9,13 +9,14 @@
  * 받은 레슨 섹션의 요약 줄 id(`- **제목** — 요약 \`c…\``)를 UserPromptSubmit 상태 파일(teamspace-prompt-lessons.mjs 와 같은 경로)에 합쳐 둔다 —
  * 세션 시작에 이미 넣은 레슨을 메시지마다 다시 싣지 않게(감사 doc cmvfg2ytk). 제목만 줄은 규칙을 전하지 않으므로 넣지 않는다 —
  * 메시지 기반 주입이 나중에 그 요약을 줄 수 있게. 쓰기 실패는 무해.
+ * 주입에 성공하면 세션 시작 표지(sessionContextMarkerFile)를 남긴다 — PostToolUse 훅이 델타만 넣어도 되는지 이걸로 판단한다.
  *
  * 설정: ~/.claude/teamspace.json { "base": "http://localhost:3002", "token": "wst_..." }
  *   (env WS_BASE / WS_TOKEN 이 있으면 우선. 토큰은 설정 화면 › 에이전트 토큰에서 발급)
  * 서버 다운·미설정 시 아무것도 출력하지 않고 조용히 종료한다.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,6 +155,46 @@ export function seedPromptState(sessionId, ids, dir = tmpdir()) {
   }
 }
 
+const MARKER_PREFIX = "teamspace-session-context-";
+const MARKER_TTL_MS = 7 * 86_400_000;
+
+/**
+ * 세션 시작 컨텍스트 표지 경로 — 이 세션에 시작 주입(compact·brief)이 실제로 들어갔다는 사실만 담는다.
+ * PostToolUse 훅(teamspace-project-context.mjs 에 사본 — 같은지는 테스트가 확인)이 보고, 표지가 없는 메인 세션
+ * (서버 다운 등으로 SessionStart 가 실패)에는 델타 대신 compact 전체를 넣는다.
+ */
+export function sessionContextMarkerFile(sessionId, dir = tmpdir()) {
+  return join(dir, `${MARKER_PREFIX}${String(sessionId).replace(/[^\w.-]/g, "_")}.json`);
+}
+
+/** 7일 넘은 표지를 지운다(best-effort — 목록·stat·삭제 실패는 무시). 표지 접두사 파일만 본다. */
+function pruneMarkers(dir, now = Date.now()) {
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!f.startsWith(MARKER_PREFIX) || !f.endsWith(".json")) continue;
+      try {
+        const p = join(dir, f);
+        if (now - statSync(p).mtimeMs > MARKER_TTL_MS) unlinkSync(p);
+      } catch {
+        /* 무해 */
+      }
+    }
+  } catch {
+    /* 무해 */
+  }
+}
+
+/** 시작 주입 성공 표지를 쓴다(쓰기 전에 7일 넘은 표지 정리). 세션 id 가 없으면 쓰지 않고, 쓰기 실패는 무해(그러면 PostToolUse 가 compact 전체를 넣을 뿐). */
+export function markSessionContext(sessionId, mode, dir = tmpdir()) {
+  if (!sessionId) return;
+  pruneMarkers(dir);
+  try {
+    writeFileSync(sessionContextMarkerFile(sessionId, dir), JSON.stringify({ at: Date.now(), mode }));
+  } catch {
+    /* 무해 */
+  }
+}
+
 function config() {
   let file = {};
   try {
@@ -207,6 +248,7 @@ async function main() {
     const md = await res.text();
     if (!md.trim()) return;
     if (input.session_id) seedPromptState(input.session_id, extractLessonIds(md));
+    markSessionContext(input.session_id, mode);
     process.stdout.write(`<teamspace-context source="${base}" mode="${mode}">\n${md}\n</teamspace-context>\n`);
   } catch {
     /* 서버 다운 → 무해하게 종료 */

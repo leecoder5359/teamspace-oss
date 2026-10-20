@@ -197,13 +197,11 @@ body {
   border: none;
   background: transparent;
   color: var(--ds-text);
-  cursor: pointer;
+  /* 워크스페이스 전환은 아직 없다 — 표시만이라 hover 배경·포인터를 두지 않는다 */
+  cursor: default;
   border-radius: var(--ds-r-md);
   padding: 6px 6px;
   text-align: left;
-}
-.ws-company:hover {
-  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
 }
 .ws-company-logo {
   width: 28px;
@@ -231,12 +229,7 @@ body {
   font-size: var(--ds-fs-xs);
   color: var(--ds-text-3);
 }
-.ws-company-caret {
-  color: var(--ds-text-3);
-  flex-shrink: 0;
-}
 .ws-shell.rail .ws-company-meta,
-.ws-shell.rail .ws-company-caret,
 .ws-shell.rail .ws-nav-label,
 .ws-shell.rail .ws-nav-count,
 .ws-shell.rail .ws-section-label,
@@ -1427,7 +1420,6 @@ body {
   .ws-shell.rail .ws-nav-count,
   .ws-shell.rail .ws-section-label,
   .ws-shell.rail .ws-company-meta,
-  .ws-shell.rail .ws-company-caret,
   .ws-shell.rail .ws-user-meta,
   .ws-shell.rail .ws-tree,
   .ws-shell.rail .ws-head-actions {
@@ -1567,6 +1559,13 @@ body {
   background: linear-gradient(90deg, var(--surface-card), var(--border-subtle), var(--surface-card));
   background-size: 200% 100%;
   animation: ws-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+/* 문서 허브 서피스 청크를 받는 동안의 자리표시자(Docs.tsx next/dynamic loading) */
+.ws-skeleton-surface {
+  flex: 1;
+  min-height: 240px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
 }
 @keyframes ws-skeleton-shimmer {
   0% { background-position: 200% 0; }

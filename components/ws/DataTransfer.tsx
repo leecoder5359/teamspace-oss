@@ -146,7 +146,7 @@ export default function DataTransfer() {
 
       {/* ── 내보내기 ── */}
       <div>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>내보내기</div>
+        <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, marginBottom: 6 }}>내보내기</div>
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.7, margin: "0 0 10px" }}>
           문서(마크다운)·보드(CSV)·구조(workspace.json)를 zip 한 개로 받습니다. 본문의 첨부 링크는 zip 안의
           상대경로로 바뀌어, 서버 없이 옵시디언 같은 도구에서 바로 열립니다.
@@ -154,7 +154,7 @@ export default function DataTransfer() {
           휴지통 문서와 <strong>내가 볼 수 없는 문서</strong>는 빠집니다.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)" }}>
             <input type="checkbox" checked={withAttachments} onChange={(e) => setWithAttachments(e.target.checked)} />
             첨부 포함
           </label>
@@ -168,7 +168,7 @@ export default function DataTransfer() {
 
       {/* ── 가져오기 ── */}
       <div>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>가져오기</div>
+        <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, marginBottom: 6 }}>가져오기</div>
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.7, margin: "0 0 10px" }}>
           우리 내보내기 zip · 노션 export zip · 마크다운 폴더 zip 을 받습니다. 마크다운은 문서로,{" "}
           <strong>CSV 는 보드</strong>로 만듭니다(열 타입은 값을 보고 정합니다). 파일을 고르면{" "}
@@ -187,7 +187,7 @@ export default function DataTransfer() {
               setDone(null);
               setErr(null);
             }}
-            style={{ fontSize: 13 }}
+            style={{ fontSize: "var(--ds-fs-md)" }}
           />
           <button className="ws-btn-soft" onClick={() => void send(true)} disabled={!file || busy}>
             {busy && !plan ? "읽는 중…" : "미리보기"}
@@ -235,13 +235,13 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
       </div>
 
       {plan.warnings.map((w, i) => (
-        <p key={i} style={{ fontSize: 12, color: "#E0900F", margin: "0 0 4px" }}>
+        <p key={i} style={{ fontSize: "var(--ds-fs-sm)", color: "#E0900F", margin: "0 0 4px" }}>
           ⚠ {w}
         </p>
       ))}
 
       {plan.projects.length > 0 && (
-        <div style={{ fontSize: 12, color: "var(--text-muted)", margin: "6px 0" }}>
+        <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", margin: "6px 0" }}>
           프로젝트:{" "}
           {plan.projects
             .map((p) => `${p.name} → ${p.projectId ? "기존" : p.willCreate ? "새로 만듦" : "미분류"}`)
@@ -251,7 +251,7 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
 
       <details style={{ marginTop: 6 }}>
         <summary style={{ fontSize: 12.5, cursor: "pointer" }}>만들어질 문서 {plan.documents.length}건 보기</summary>
-        <ul style={{ maxHeight: 200, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+        <ul style={{ maxHeight: 200, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)" }}>
           {plan.documents.map((d, i) => (
             <li key={i} style={{ color: d.duplicate ? "var(--text-disabled)" : "var(--text-body)" }}>
               {d.title}
@@ -266,7 +266,7 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
       {(plan.boards?.length ?? 0) > 0 && (
         <details style={{ marginTop: 4 }}>
           <summary style={{ fontSize: 12.5, cursor: "pointer" }}>만들어질 보드 {plan.boards!.length}개 보기</summary>
-          <ul style={{ maxHeight: 200, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+          <ul style={{ maxHeight: 200, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)" }}>
             {plan.boards!.map((b, i) => (
               <li key={i}>
                 {b.title}
@@ -288,7 +288,7 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
       {plan.skipped.length > 0 && (
         <details style={{ marginTop: 4 }}>
           <summary style={{ fontSize: 12.5, cursor: "pointer" }}>건너뛴 파일 {plan.skipped.length}건 보기</summary>
-          <ul style={{ maxHeight: 160, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
+          <ul style={{ maxHeight: 160, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
             {plan.skipped.map((s, i) => (
               <li key={i}>
                 {s.path} — {s.reason}
@@ -321,7 +321,7 @@ function Result({ plan }: { plan: Plan }) {
   const c = plan.counts;
   return (
     <div style={{ border: "1px solid var(--color-primary)", borderRadius: 10, padding: 12, background: "var(--surface-sunken)" }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+      <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, marginBottom: 4 }}>
         <Icon name="check" size={14} /> 가져오기 완료
       </div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>

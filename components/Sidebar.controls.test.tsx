@@ -31,6 +31,11 @@ describe("Sidebar — 가짜 컨트롤 없음(U-12)·폴백 사용자(U-13)", ()
     expect(screen.queryByRole("button", { name: /리코더팩토리/ })).toBeNull();
   });
 
+  it("워크스페이스 표시는 눌러질 것처럼 보이지 않는다 — 펼침 화살표(caret)가 없다", () => {
+    const { container } = mount();
+    expect(container.querySelector(".ws-company .ws-company-caret")).toBeNull();
+  });
+
   it("사용자 카드는 설정(/settings)으로 가는 링크다", () => {
     const { container } = mount({ name: "테스터", email: "t@example.com", image: null });
     const card = container.querySelector(".ws-user-card")!;

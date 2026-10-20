@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, pageAccess } from "@/lib/pageGuard";
-import { findAssigneeProp } from "@/lib/taskProps";
-import { applyTaskListFilter, isTaskSort } from "@/lib/taskFilter";
+import { findAssigneeProp, findStatusProp } from "@/lib/taskProps";
+import { applyTaskListFilter, isOpenStatus, isTaskSort } from "@/lib/taskFilter";
+import { closedOptionIds } from "@/lib/taskColumns";
+import { findTaskRows, taskPropOrder } from "@/lib/taskRows";
 
 export const runtime = "nodejs";
 
@@ -43,25 +45,22 @@ export async function GET(request: Request) {
   const db = candidates.find((c) => pageAccess(idx, c.id) !== "none") ?? null;
   if (!db) return NextResponse.json({ total: 0, shown: 0, tasks: [], databaseId: null });
 
-  const [props, rows] = await Promise.all([
-    prisma.dbProperty.findMany({ where: { databasePageId: db.id }, orderBy: { position: "asc" } }),
-    prisma.dbRow.findMany({ where: { databasePageId: db.id }, orderBy: { position: "asc" } }),
-  ]);
+  const props = await prisma.dbProperty.findMany({ where: { databasePageId: db.id }, orderBy: taskPropOrder() });
+  const propsLite = props.map((p) => ({ id: p.id, name: p.name, type: p.type as string, config: p.config as { options?: Opt[] } }));
 
   const titleProp = props.find((p) => p.type === "text") ?? props[0] ?? null;
   const dateProp = props.find((p) => p.type === "date") ?? null;
-  const statusProp =
-    props.find((p) => p.type === "select" && /status|상태/i.test(p.name)) ??
-    props.find((p) => p.type === "select") ??
-    null;
+  const statusProp = findStatusProp(propsLite);
 
-  const statusOpts: Opt[] = statusProp
-    ? (((statusProp.config as { options?: Opt[] })?.options) ?? [])
-    : [];
+  const statusOpts: Opt[] = statusProp?.config?.options ?? [];
   const optName = (id: unknown) => statusOpts.find((o) => o.id === id);
-  const assigneeProp = findAssigneeProp(
-    props.map((p) => ({ id: p.id, name: p.name, type: p.type as string, config: p.config as { options?: Opt[] } })),
-  );
+  const assigneeProp = findAssigneeProp(propsLite);
+
+  // 감사 P-14: 열린 것·담당자 거름을 DB 로(비정규화 칸). 칸을 못 믿는 행만 통째로 와서 아래 JS 필터가 거른다.
+  const rows = await findTaskRows(db.id, propsLite, {
+    closedOptionIds: statusParam === "open" ? closedOptionIds(statusProp, (n) => !isOpenStatus(n)) : [],
+    assignee: assigneeProp ? assigneeFilter : null,
+  });
 
   let tasks = rows.map((r) => {
     const p = r.props as Record<string, unknown>;

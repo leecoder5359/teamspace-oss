@@ -70,7 +70,7 @@ export default function OpsStatus() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+        <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
           {s ? `${new Date(s.checkedAt).toLocaleTimeString("ko-KR")} 확인 · v${s.build.version}${s.build.buildId ? ` (${s.build.buildId.slice(0, 7)})` : ""}` : " "}
         </span>
         <button type="button" onClick={refresh} disabled={loading} aria-label="운영 상태 새로고침" title="새로고침" style={iconBtn}>
@@ -103,7 +103,7 @@ export default function OpsStatus() {
             <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 6 }}>
               {data.warnings.map((w) => (
                 <li key={w.code} style={{ fontSize: 12.5, color: "var(--text-strong)", display: "flex", gap: 8, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: w.level === "crit" ? BAD : WARN, minWidth: 28 }}>{w.level === "crit" ? "위험" : "주의"}</span>
+                  <span style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: w.level === "crit" ? BAD : WARN, minWidth: 28 }}>{w.level === "crit" ? "위험" : "주의"}</span>
                   {w.message}
                 </li>
               ))}
@@ -126,4 +126,4 @@ function Tile({ label, value, sub, color }: { label: string; value: string; sub?
 }
 
 const box: CSSProperties = { padding: "10px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 };
-const iconBtn: CSSProperties = { display: "inline-flex", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", borderRadius: 8, padding: 6, cursor: "pointer" };
+const iconBtn: CSSProperties = { display: "inline-flex", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", borderRadius: "var(--ds-r-sm)", padding: 6, cursor: "pointer" };

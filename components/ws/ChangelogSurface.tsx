@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 변경 이력(changelog) surface — 릴리스 노트. /api/changelog. 제품 공통. */
 
@@ -80,7 +80,7 @@ export default function ChangelogSurface() {
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
-            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               <div style={{ display: "flex", gap: 8 }}>
                 {/* 빈 상태의 '첫 릴리스 추가' 로 열었을 때 바로 입력할 수 있게 */}
                 <input autoFocus value={version} onChange={(e) => setVersion(e.target.value)} placeholder="버전 (예: v1.2.0)" style={{ ...inp, flex: "0 0 160px" }} />
@@ -102,7 +102,7 @@ export default function ChangelogSurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="refresh" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>릴리스 노트가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>배포할 때마다 버전과 바뀐 내용을 남기면, &ldquo;이거 언제부터 이랬죠?&rdquo; 에 답할 수 있는 기록이 됩니다.</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>배포할 때마다 버전과 바뀐 내용을 남기면, &ldquo;이거 언제부터 이랬죠?&rdquo; 에 답할 수 있는 기록이 됩니다.</div>
               <div style={{ marginTop: 14 }}>
                 <button style={primary} onClick={() => setOpen(true)}>첫 릴리스 추가</button>
               </div>
@@ -110,9 +110,9 @@ export default function ChangelogSurface() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {list.map((e) => (
-                <div key={e.id} style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16 }}>
+                <div key={e.id} style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {e.version && <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-weak)", padding: "2px 8px", borderRadius: 6 }}>{e.version}</span>}
+                    {e.version && <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-weak)", padding: "2px 8px", borderRadius: 6 }}>{e.version}</span>}
                     <span style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-strong)" }}>{e.title}</span>
                     {e.projectId && (
                       <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken, var(--border-subtle))", padding: "2px 8px", borderRadius: 6 }}>
@@ -123,7 +123,7 @@ export default function ChangelogSurface() {
                     <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{new Date(e.releasedAt).toLocaleDateString("ko-KR")}</span>
                     <button className="ws-btn-soft" disabled={busy} onClick={() => remove(e.id)} title="삭제"><Icon name="close" size={14} /></button>
                   </div>
-                  {e.body && <p style={{ fontSize: 13, color: "var(--text-sub)", lineHeight: 1.6, margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{e.body}</p>}
+                  {e.body && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6, margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{e.body}</p>}
                 </div>
               ))}
             </div>
@@ -134,5 +134,3 @@ export default function ChangelogSurface() {
   );
 }
 
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };

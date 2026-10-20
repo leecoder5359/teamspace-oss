@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import ExtractPanel from "./ExtractPanel";
 import { getPages } from "@/lib/pagesClient";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 데이터 모델(datamodel) surface — 엔티티·필드. /api/entities. 제품 공통. */
 
@@ -82,7 +83,7 @@ export default function DataModelSurface() {
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
-            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               {/* 빈 상태의 '첫 엔티티 추가' 로 열었을 때 바로 입력할 수 있게 */}
               <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="엔티티 이름 (예: Project)" style={inp} />
               <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명" style={{ ...inp, marginTop: 8 }} />
@@ -103,11 +104,11 @@ export default function DataModelSurface() {
               keyOf={(p) => p.name}
               renderProposal={(p) => (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)" }}>{p.name}</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>{p.name}</div>
                   {p.description && <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2, lineHeight: 1.55 }}>{p.description}</div>}
                   {p.fields && <pre style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, lineHeight: 1.55, color: "var(--text-body)", margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{p.fields}</pre>}
                   {p.status === "conflict" && p.existingDescription && (
-                    <div style={{ fontSize: 12, color: "#E0900F", marginTop: 4 }}>기존: {p.existingDescription}</div>
+                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "#E0900F", marginTop: 4 }}>기존: {p.existingDescription}</div>
                   )}
                 </>
               )}
@@ -119,7 +120,7 @@ export default function DataModelSurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="table" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>엔티티가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>도메인의 뼈대가 되는 개체와 필드를 적어 두는 자리입니다. 직접 적어도 되고, 설계 문서가 있으면 거기서 뽑아 올 수도 있어요.</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>도메인의 뼈대가 되는 개체와 필드를 적어 두는 자리입니다. 직접 적어도 되고, 설계 문서가 있으면 거기서 뽑아 올 수도 있어요.</div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button style={primary} onClick={() => setOpen(true)}>첫 엔티티 추가</button>
                 <button className="ws-btn-soft" onClick={() => setExtractOpen(true)}><Icon name="doc" size={15} /> 문서에서 추출</button>
@@ -128,15 +129,15 @@ export default function DataModelSurface() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {list.map((e) => (
-                <div key={e.id} style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16 }}>
+                <div key={e.id} style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ display: "flex", color: "var(--color-primary)" }}><Icon name="table" size={16} /></span>
                     <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)" }}>{e.name}</span>
                     <span style={{ flex: 1 }} />
                     <button className="ws-btn-soft" disabled={busy} onClick={() => remove(e.id)} title="삭제"><Icon name="close" size={14} /></button>
                   </div>
-                  {e.description && <p style={{ fontSize: 13, color: "var(--text-sub)", margin: "6px 0 0" }}>{e.description}</p>}
-                  {e.fields && <pre style={{ fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.6, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "10px 12px", marginTop: 10, whiteSpace: "pre-wrap" }}>{e.fields}</pre>}
+                  {e.description && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", margin: "6px 0 0" }}>{e.description}</p>}
+                  {e.fields && <pre style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", lineHeight: 1.6, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", padding: "10px 12px", marginTop: 10, whiteSpace: "pre-wrap" }}>{e.fields}</pre>}
                   {e.sourcePageId && pageTitle(e.sourcePageId) && (
                     <a href={`/p/${e.sourcePageId}`} style={sourceChip}>
                       <Icon name="doc" size={11} /> 출처: {pageTitle(e.sourcePageId)}
@@ -152,6 +153,4 @@ export default function DataModelSurface() {
   );
 }
 
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };
-const sourceChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, marginTop: 10, fontSize: 11.5, fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", border: "1px solid var(--border-subtle)", borderRadius: 999, padding: "2px 9px" };
+const sourceChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, marginTop: 10, fontSize: 11.5, fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "2px 9px" };

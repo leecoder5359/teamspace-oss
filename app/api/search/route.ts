@@ -102,10 +102,16 @@ export async function GET(request: Request) {
     run: (vs: string[]) => Promise<T[]>,
     toCandidate: (r: T) => Candidate,
   ): Promise<T[]> {
-    // 직렬로 돌면 3~12자 질의가 조회 두 번을 기다린다(감사 P-2) — 변형 결과는 필요할 때만 합친다.
-    const [first, more] = await Promise.all([run([q]), extra.length ? run(extra) : Promise.resolve([])]);
+    // 직렬로 돌면 3~12자 질의가 조회 두 번을 기다린다(감사 P-2) — 둘을 함께 시작하되, 원문이 (필터 후) limit 을
+    // 채우면 변형은 기다리지도 합치지도 않는다. 이미 보낸 변형 쿼리는 DB 에서 끝까지 돈다(Prisma 는 취소 불가) —
+    // 아끼는 건 응답 지연이고, 버려진 변형의 실패는 삼킨다(unhandled rejection 방지).
+    const original = run([q]);
+    const pending = extra.length ? run(extra) : Promise.resolve([] as T[]);
+    pending.catch(() => {}); // 기다리지 않게 될 수도 있으므로 미리 처리기를 단다 — 기다릴 때는 아래 await 가 그대로 던진다
+    const first = await original;
     const kept = first.filter((r) => passesFilters(toCandidate(r), filters)).length;
-    return mergeVariantRows(first, more, kept >= limit);
+    if (kept >= limit) return mergeVariantRows(first, [], true);
+    return mergeVariantRows(first, await pending, false);
   }
 
   const [pages, decisions] = await Promise.all([

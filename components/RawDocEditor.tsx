@@ -232,7 +232,7 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
             {provCounts && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                 {(Object.keys(TAG_COLOR) as ProvTag[]).map((t) => (
-                  <span key={t} style={{ fontSize: 12, fontWeight: 600, color: TAG_COLOR[t], border: `1px solid ${TAG_COLOR[t]}`, borderRadius: 999, padding: "2px 10px" }}>
+                  <span key={t} style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: TAG_COLOR[t], border: `1px solid ${TAG_COLOR[t]}`, borderRadius: "var(--ds-r-pill)", padding: "2px 10px" }}>
                     {t} {provCounts[t] ?? 0}
                   </span>
                 ))}
@@ -242,9 +242,9 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {provClaims.map((c, i) => (
                   <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", border: "1px solid var(--border-subtle)", borderRadius: 9, background: "var(--surface-card)" }}>
-                    <span title={TAG_HINT[c.tag]} style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 700, color: TAG_COLOR[c.tag], border: `1px solid ${TAG_COLOR[c.tag]}`, borderRadius: 999, padding: "1px 7px", marginTop: 1 }}>{c.tag}</span>
+                    <span title={TAG_HINT[c.tag]} style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 700, color: TAG_COLOR[c.tag], border: `1px solid ${TAG_COLOR[c.tag]}`, borderRadius: "var(--ds-r-pill)", padding: "1px 7px", marginTop: 1 }}>{c.tag}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: "var(--text-strong)", lineHeight: 1.5 }}>{c.claim}</div>
+                      <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-strong)", lineHeight: 1.5 }}>{c.claim}</div>
                       {c.note && <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{c.note}</div>}
                     </div>
                   </div>

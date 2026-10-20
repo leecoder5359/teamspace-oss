@@ -143,6 +143,25 @@ describe("injectionStats", () => {
     expect(s.cleanup.alwaysTruncated.map((l) => l.id)).toEqual(["b"]);
   });
 
+  // SubagentStart(sections=lessons, mode compact)는 개인 레슨을 설계상 제목만 넣는다 — 그건 '잘림' 이 아니다.
+  it("'늘 잘림' 은 SubagentStart 기록의 개인 레슨 제목 줄로는 판단하지 않는다(다른 레슨의 잘림은 센다)", () => {
+    const ls = [...lessons, { id: "me", title: "ME", projectId: null, stack: null, userId: "u1", createdAt: now }];
+    const sub = { ...row("7", 1, "p", [], ["me", "b"], []), via: "SubagentStart" };
+    const s = injectionStats({ rows: [row("1", 1, "p", ["a"], [], []), sub], reads: [], lessons: ls, projects: [], days: 30, now });
+    expect(s.cleanup.alwaysTruncated.map((l) => l.id)).toEqual(["b"]);
+    expect(s.lessons.find((l) => l.id === "me")).toMatchObject({ titleOnly: 1 }); // 레슨별 횟수에는 그대로 센다
+    // 메인 세션 시작(SessionStart compact)에서도 제목만이면 그건 잘림이다
+    const main = injectionStats({ rows: [row("1", 1, "p", ["a"], ["me"], []), sub], reads: [], lessons: ls, projects: [], days: 30, now });
+    expect(main.cleanup.alwaysTruncated.map((l) => l.id)).toEqual(["b", "me"]);
+  });
+
+  it("개인이어도 필수(required) 레슨은 SubagentStart 행의 잘림을 근거로 센다(설계상 제목만인 건 기본 개인뿐)", () => {
+    const ls = [...lessons, { id: "mereq", title: "MEREQ", projectId: null, stack: null, userId: "u1", mode: "required", createdAt: now }];
+    const sub = { ...row("7", 1, "p", [], ["mereq"], []), via: "SubagentStart" };
+    const s = injectionStats({ rows: [row("1", 1, "p", ["a"], [], []), sub], reads: [], lessons: ls, projects: [], days: 30, now });
+    expect(s.cleanup.alwaysTruncated.map((l) => l.id)).toEqual(["mereq"]);
+  });
+
   it("기록이 없으면 정리 후보(잘림·주입 0회)는 비운다", () => {
     const s = injectionStats({ rows: [], reads: [], lessons, projects: [], days: 30, now });
     expect(s.cleanup.alwaysTruncated).toEqual([]);

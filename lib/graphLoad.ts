@@ -104,20 +104,25 @@ function refreshInBackground(workspaceId: string, now: number): void {
   );
 }
 
-function getRaw(workspaceId: string): { gen: number; raw: Promise<Raw> } {
-  const now = Date.now();
-  const hit = rawCache.get(workspaceId);
-  if (hit && now - hit.at < GRAPH_CACHE_TTL_MS) return hit;
-  if (hit && hit.ready && now - hit.at < GRAPH_CACHE_MAX_STALE_MS) {
-    refreshInBackground(workspaceId, now);
-    return hit;
-  }
-  // 기다려야 하는 경우: 다른 워크스페이스의 너무 낡은 원시 항목도 정리한다.
+/** 다른 워크스페이스의 상한(10분)을 넘긴 원시 항목을 버린다 — 워크스페이스 수만큼만 돌아 매 호출해도 싸다.
+ *  SWR 경로에서도 돌려야 한 워크스페이스가 계속 바쁠 때 쉬는 워크스페이스 항목이 남지 않는다. */
+function sweepStale(workspaceId: string, now: number): void {
   for (const [ws, e] of rawCache) {
     if (ws !== workspaceId && now - e.at >= GRAPH_CACHE_MAX_STALE_MS) {
       rawCache.delete(ws);
       dropBuilt(ws);
     }
+  }
+}
+
+function getRaw(workspaceId: string): { gen: number; raw: Promise<Raw> } {
+  const now = Date.now();
+  sweepStale(workspaceId, now);
+  const hit = rawCache.get(workspaceId);
+  if (hit && now - hit.at < GRAPH_CACHE_TTL_MS) return hit;
+  if (hit && hit.ready && now - hit.at < GRAPH_CACHE_MAX_STALE_MS) {
+    refreshInBackground(workspaceId, now);
+    return hit;
   }
   // 진행 중 재로드가 있으면 새로 읽지 않고 그것을 기다린다.
   return adopt(workspaceId, refreshing.get(workspaceId) ?? startLoad(workspaceId, now));

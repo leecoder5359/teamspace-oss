@@ -77,6 +77,10 @@ for i in $(seq 1 20); do
   sleep 1
 done
 echo "web: http://localhost:3002 → $code"
+# 태스크 비정규화 칸 재계산(감사 P-14) — 새 web 이 뜬 **뒤에** 돈다: 빌드 동안 옛 바이너리가 쓴 props(칸은 그대로)까지
+# 바로잡으려면 마지막이어야 한다. 멱등·낮은 우선순위, 실패(마이그레이션 미적용 등)는 경고만 — 읽기는 느려질 뿐 계속 동작한다.
+echo "→ 태스크 칸 재계산 (nice $DEPLOY_NICE)"
+nice -n "$DEPLOY_NICE" pnpm exec tsx scripts/rederive-task-columns.ts || echo "⚠️ 태스크 칸 재계산 실패 — 마이그레이션 적용 후 수동으로: pnpm exec tsx scripts/rederive-task-columns.ts"
 # 변경 이력 초안(D-3) — 실패해도 배포 결과에 영향 없음. WS_TOKEN 이 없으면 CLI 가 알아서 건너뛴다.
 pnpm ws changelog draft || echo "changelog 초안 생략"
 echo "완료. 로그: $LOG_DIR"

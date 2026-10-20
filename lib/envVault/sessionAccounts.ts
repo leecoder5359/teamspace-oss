@@ -14,6 +14,14 @@ export type AccountTargetLite = { kind: string; config: unknown; account: unknow
 export const ACCOUNT_SECTION_TITLE = "## 계정 (env 금고 반영 대상)";
 export const ACCOUNT_LINES_MAX = 3;
 export const ACCOUNT_CHARS_MAX = 300;
+/** 주입 경로별 계정 줄 상한 — 한곳에서 정한다.
+    session: 새 세션 compact(SessionStart)와 PostToolUse 프로젝트 델타(sections=project). 델타는 그 프로젝트의 첫 주입이라
+    계정 착각 방지 줄을 compact 와 같은 양으로 준다(3줄·300자, 델타 목표 3,000자 안).
+    brief: 이어가기·압축(~2.5KB 요약) — 가장 중요한 1줄만. */
+export const ACCOUNT_CAPS = {
+  session: { maxLines: ACCOUNT_LINES_MAX, maxChars: ACCOUNT_CHARS_MAX },
+  brief: { maxLines: 1, maxChars: 120 },
+} as const;
 
 const KIND_ORDER = ["ssm", "vercel", "gha", "dotenv"] as const;
 

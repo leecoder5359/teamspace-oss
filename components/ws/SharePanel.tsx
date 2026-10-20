@@ -118,7 +118,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
       </button>
 
       {open && (
-        <div style={{ marginTop: 12, fontSize: 13 }}>
+        <div style={{ marginTop: 12, fontSize: "var(--ds-fs-md)" }}>
           {err && <p style={{ color: "var(--color-danger)", fontSize: 12.5 }}>{err}</p>}
           {!data && !err && <div className="ws-empty-hint">불러오는 중…</div>}
 
@@ -153,7 +153,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                     <span style={{ flex: 1 }}>
                       {g.team ? `#${g.team.name}` : (g.user?.name ?? g.user?.email ?? "(알 수 없음)")}
                     </span>
-                    <span style={{ color: "var(--text-disabled)", fontSize: 12 }}>
+                    <span style={{ color: "var(--text-disabled)", fontSize: "var(--ds-fs-sm)" }}>
                       {g.level === "edit" ? "편집" : "보기"}
                     </span>
                     {canManage && (
@@ -161,7 +161,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                         className="ws-btn-soft"
                         disabled={busy}
                         onClick={() => call("DELETE", `${base}?grantId=${g.id}`)}
-                        style={{ padding: "2px 8px", fontSize: 12 }}
+                        style={{ padding: "2px 8px", fontSize: "var(--ds-fs-sm)" }}
                       >
                         회수
                       </button>
@@ -175,7 +175,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                   <select
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--border-subtle)" }}
+                    style={{ padding: "5px 8px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)" }}
                   >
                     <option value="">사람·팀 선택…</option>
                     <optgroup label="멤버">
@@ -196,7 +196,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                   <select
                     value={level}
                     onChange={(e) => setLevel(e.target.value as "view" | "edit")}
-                    style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--border-subtle)" }}
+                    style={{ padding: "5px 8px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)" }}
                   >
                     <option value="view">보기</option>
                     <option value="edit">편집</option>
@@ -217,7 +217,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                 </div>
               )}
 
-              <p style={{ marginTop: 12, fontSize: 12, color: "var(--text-disabled)", lineHeight: 1.6 }}>
+              <p style={{ marginTop: 12, fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)", lineHeight: 1.6 }}>
                 {data.adminBypass && "워크스페이스 관리자는 비공개 문서도 볼 수 있습니다(잠금 방지). "}
                 사람에게 공유하면 알림이 갑니다. 하위 문서는 이 설정을 물려받고, 하위에 따로 부여하면 그쪽이 우선합니다.
                 {!canManage && " 범위를 바꾸려면 편집 권한이 필요합니다."}

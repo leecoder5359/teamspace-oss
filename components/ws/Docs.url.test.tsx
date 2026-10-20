@@ -6,7 +6,13 @@ import { render, cleanup, screen, fireEvent, waitFor } from "@testing-library/re
 let search = "";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(search) }));
 vi.mock("@/lib/useAutoRefresh", () => ({ useAutoRefresh: () => {} }));
-vi.mock("@/lib/pagesClient", () => ({ getPages: async () => ({ ok: true, status: 200, data: { pages: [] } }) }));
+const pagesMock = vi.hoisted(() => ({ pages: [] as unknown[], gate: Promise.resolve() as Promise<unknown> }));
+vi.mock("@/lib/pagesClient", () => ({
+  getPages: async () => {
+    await pagesMock.gate;
+    return { ok: true, status: 200, data: { pages: pagesMock.pages } };
+  },
+}));
 
 import Docs from "./Docs";
 
@@ -23,6 +29,8 @@ describe("Docs 허브 — 탭·선택을 URL 로(U-11)", { timeout: 15_000 }, ()
   });
   afterEach(() => {
     cleanup();
+    pagesMock.pages = [];
+    pagesMock.gate = Promise.resolve();
     replaceState.mockRestore();
     vi.unstubAllGlobals();
   });
@@ -65,5 +73,39 @@ describe("Docs 허브 — 탭·선택을 URL 로(U-11)", { timeout: 15_000 }, ()
     expect(replaceState).toHaveBeenLastCalledWith(null, "", "/docs?cat=decisions&id=d1");
     fireEvent.click(screen.getByTitle("닫기"));
     await waitFor(() => expect(replaceState).toHaveBeenLastCalledWith(null, "", "/docs?cat=decisions"));
+  });
+
+  it("문서 탭: 받아 온 목록에 없는 ?id= 는 URL 에서 뺀다(있는 id 는 그대로 연다)", async () => {
+    pagesMock.pages = [{ id: "doc1", title: "있는 문서", kind: "doc", icon: null, projectId: null, parentId: null, updatedAt: "2026-10-01T00:00:00Z" }];
+    search = "id=ghost";
+    render(<Docs initialParams={{ id: "ghost" }} />);
+    await waitFor(() => expect(replaceState).toHaveBeenLastCalledWith(null, "", "/docs"));
+    cleanup();
+    replaceState.mockClear();
+    search = "id=doc1";
+    render(<Docs initialParams={{ id: "doc1" }} />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(replaceState.mock.calls.some((c: unknown[]) => c[2] === "/docs")).toBe(false);
+  });
+
+  it("결정 탭: 받아 온 목록에 없는 ?id= 는 URL 에서 뺀다", async () => {
+    search = "cat=decisions&id=ghost";
+    render(<Docs initialParams={{ cat: "decisions", id: "ghost" }} />);
+    await waitFor(() => expect(replaceState).toHaveBeenLastCalledWith(null, "", "/docs?cat=decisions"));
+  });
+
+  it("문서 탭: 목록을 받는 중(loading)에는 ?id= 를 빼지 않고, 받은 뒤 있는 문서면 그대로 연다", async () => {
+    pagesMock.pages = [{ id: "doc1", title: "있는 문서", kind: "doc", icon: null, projectId: null, parentId: null, updatedAt: "2026-10-01T00:00:00Z" }];
+    let release!: () => void;
+    pagesMock.gate = new Promise<void>((r) => { release = r; });
+    search = "id=doc1";
+    render(<Docs initialParams={{ id: "doc1" }} />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(replaceState.mock.calls.some((c: unknown[]) => c[2] === "/docs")).toBe(false);
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/docs?cat=mddocs&id=doc1");
+    release();
+    await waitFor(() => expect(screen.getAllByText("있는 문서").length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(replaceState.mock.calls.some((c: unknown[]) => c[2] === "/docs")).toBe(false);
   });
 });

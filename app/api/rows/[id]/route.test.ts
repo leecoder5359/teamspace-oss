@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
 import { invalidateGraphCache } from "@/lib/graphLoad";
+import { validateRelationProps } from "@/lib/relationServer";
 import { PATCH, DELETE } from "./route";
 
 const m = (f: unknown) => f as Mock;
@@ -106,5 +107,38 @@ describe("/api/rows/[id] 그래프 캐시 무효화", () => {
     m(prisma.dbRow.findUnique).mockResolvedValue({ id: "r1", databasePageId: "b1", database: { workspaceId: "w2" } });
     expect((await DELETE(new Request("http://t/api/rows/r1", { method: "DELETE" }), ctx)).status).toBe(404);
     expect(invalidateGraphCache).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /api/rows/[id] 비정규화 칸(감사 P-14)", () => {
+  const boardProps = [
+    { id: "t", name: "제목", type: "text", config: {} },
+    { id: "s", name: "상태", type: "select", config: { options: [{ id: "o1", name: "할 일" }, { id: "o2", name: "완료" }] } },
+    { id: "a", name: "담당자", type: "text", config: {} },
+  ];
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m(requireCtx).mockResolvedValue(guard);
+    m(requirePage).mockResolvedValue({ idx: {} });
+    m(prisma.dbRow.findUnique).mockResolvedValue({
+      id: "r1", databasePageId: "b1", props: { t: "일", s: "o1", a: "A" }, updatedAt: new Date(),
+      database: { workspaceId: "w1", dbProperties: boardProps.map(({ id, type }) => ({ id, type })) },
+    });
+    m(prisma.dbRow.update).mockResolvedValue({ id: "r1" });
+    m(prisma.dbProperty.findMany).mockResolvedValue(boardProps);
+    const rel = vi.mocked(validateRelationProps);
+    rel.mockImplementation(async (_b: string, props: Record<string, unknown>) => ({ ok: true, props }) as never);
+  });
+
+  it("props 를 바꾸면 합친 props 로 칸을 다시 쓴다", async () => {
+    expect((await PATCH(patch({ props: { s: "o2" } }), ctx)).status).toBe(200);
+    expect(m(prisma.dbRow.update).mock.calls[0][0].data).toMatchObject({ props: { t: "일", s: "o2", a: "A" }, statusOptionId: "o2", assigneeText: "A", taskColsKey: "s|a" });
+  });
+
+  it("props 없이 위치만 바꾸면 칸을 건드리지 않는다", async () => {
+    await PATCH(patch({ position: 1 }), ctx);
+    const data = m(prisma.dbRow.update).mock.calls[0][0].data;
+    expect(data).not.toHaveProperty("statusOptionId");
+    expect(data).not.toHaveProperty("taskColsKey");
   });
 });

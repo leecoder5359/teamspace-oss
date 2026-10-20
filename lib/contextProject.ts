@@ -46,7 +46,11 @@ function deltaLessons(i: ProjectDeltaInput): { required: LessonLite[]; rest: Les
   };
 }
 
-export function renderProjectDelta(i: ProjectDeltaInput): { markdown: string; ids: InjectionIds } {
+/** 끝 자르기 표지 — 잘린 줄 수를 남긴다(조용히 버리지 않는다). */
+const cutLine = (n: number) => `- … 외 ${n}줄 (MCP \`task_list\` · \`lesson_list\`)`;
+
+/** count = 이 출력의 대상 레슨 수(ondemand 제외 — 보인 것 + '외 N개') — sections=lessons 의 count 와 같은 뜻. */
+export function renderProjectDelta(i: ProjectDeltaInput): { markdown: string; ids: InjectionIds; count: number } {
   const L: string[] = [];
   L.push(`# 워크스페이스: ${i.workspaceName}${i.projectName ? ` · 프로젝트: ${i.projectName}` : ""} (프로젝트 델타)`);
   L.push("_전역·개인·필수(전역) 레슨은 세션 시작에 이미 들어가 있다 — 여기는 이 프로젝트 범위(프로젝트·스택)만 더한다._");
@@ -73,10 +77,22 @@ export function renderProjectDelta(i: ProjectDeltaInput): { markdown: string; id
   L.push("");
   const c = i.counts;
   L.push(`태스크 ${c.tasks} · 문서 ${c.docs} · 결정 ${c.decisions} — MCP \`task_list\` · \`doc_list\` · \`search\``);
-  // 레슨 예산·태스크 바이트 상한으로 보통은 목표 안이다. 계정 줄이 길게 붙는 극단만 여기서 끝을 자른다(개수 줄은 남긴다).
+  // 레슨 예산·태스크 바이트 상한·계정 줄 상한으로 보통은 목표 안이다(합계 ~2.6k). 입력이 상한 밖인 극단만 여기서 끝을 자르고
+  // '외 N줄' 표지를 남긴다(개수 줄은 남긴다).
+  const count = required.length + rest.length;
   const md = L.join("\n");
-  if (md.length <= PROJECT_DELTA_TARGET) return { markdown: md, ids };
+  if (md.length <= PROJECT_DELTA_TARGET) return { markdown: md, ids, count };
+  // 잘린 줄 수는 자르기 전엔 모르므로 최악(전부 잘림)의 표지 몫을 먼저 뺀다.
   const tail = L[L.length - 1];
-  const body = capLines(L.slice(0, -1), PROJECT_DELTA_TARGET - tail.length - 1);
-  return { markdown: [...body.lines, tail].join("\n"), ids };
+  const front = L.slice(0, -1);
+  const body = capLines(front, PROJECT_DELTA_TARGET - tail.length - 1 - (cutLine(front.length).length + 1));
+  // 잘린 줄의 레슨은 보인 것으로 기록하지 않는다 — omitted('외 N' 쪽)로 옮긴다.
+  const shown = body.lines.join("\n");
+  const cut = (id: string) => !shown.includes(`\`${id}\``);
+  const kept: InjectionIds = {
+    gistIds: ids.gistIds.filter((id) => !cut(id)),
+    titleIds: ids.titleIds.filter((id) => !cut(id)),
+    omittedIds: [...ids.omittedIds, ...[...ids.gistIds, ...ids.titleIds].filter(cut)],
+  };
+  return { markdown: [...body.lines, cutLine(body.omitted), tail].join("\n"), ids: kept, count };
 }

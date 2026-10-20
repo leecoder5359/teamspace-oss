@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
 import { LoadErrorNotice } from "./AiConnect";
+import { inputStyle } from "./ui";
 
 /* =====================================================================
    승인 대기 인박스 (design app/approvals.jsx 포팅) — 에이전트/앱이 만든
@@ -87,13 +88,23 @@ export default function Approvals() {
     const lows = list.filter((a) => a.status === "pending" && !a.highRisk);
     if (lows.length === 0) return;
     setBusy(true);
+    setMsg(null);
+    setErr(null);
     try {
-      await Promise.all(
+      // 건마다 성공 여부를 본다 — 실패는 decide 와 같은 문구로 알리고, 안내는 성공한 건수만
+      const results = await Promise.all(
         lows.map((a) =>
-          fetch(`/api/approvals/${a.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "approved" }) }),
+          fetch(`/api/approvals/${a.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "approved" }) })
+            .catch(() => null),
         ),
       );
-      setMsg(`낮은 위험 ${lows.length}건을 자동 승인했어요.`);
+      const okCount = results.filter((r) => r?.ok).length;
+      const failed = results.find((r) => !r?.ok);
+      if (failed !== undefined) {
+        const d = failed ? ((await failed.json().catch(() => ({}))) as { error?: string }) : {};
+        setErr(d.error ?? "처리하지 못했습니다.");
+      }
+      if (okCount > 0) setMsg(`낮은 위험 ${okCount}건을 자동 승인했어요.`);
       await load();
     } finally {
       setBusy(false);
@@ -152,7 +163,7 @@ export default function Approvals() {
         setErr((data as { error?: string }).error ?? "승인 요청을 만들지 못했습니다.");
         return;
       }
-      setMsg(data.sent ? "슬랙으로 승인 요청을 보냈습니다." : `생성됨(슬랙 미발송: ${data.error})`);
+      setMsg(data.sent ? "슬랙으로 승인 요청을 보냈습니다." : data.error ? `생성됨(슬랙 미발송: ${data.error})` : "생성됨(슬랙 미발송)");
       setTitle("");
       setBody("");
       setKind("general");
@@ -198,7 +209,7 @@ export default function Approvals() {
   return (
     <div className="ws-db" style={{ maxWidth: 820 }}>
       {/* 헤더 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", marginBottom: 16, flexWrap: "wrap" }}>
         <div style={aiBadge}>AI</div>
         <div style={{ flex: 1, minWidth: 160 }}>
           <h1 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>승인 대기 인박스</h1>
@@ -213,7 +224,7 @@ export default function Approvals() {
       </div>
 
       {/* 새 승인 요청(테스트/수동) */}
-      <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+      <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="승인 요청 제목" style={inputStyle} />
         <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="내용(선택)" rows={2} style={{ ...inputStyle, marginTop: 8, resize: "vertical" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
@@ -236,6 +247,9 @@ export default function Approvals() {
 
       {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>{err}</div>}
 
+      {/* 이미 받은 목록이 있을 때의 다시 읽기 실패 — 목록은 그대로 두고 같은 안내+다시 시도 */}
+      {loadErr && <LoadErrorNotice message="승인 목록을 불러오지 못했어요." onRetry={() => void load()} />}
+
       {focusId && missingId === focusId && !inList && (
         <div role="status" style={{ fontSize: 12.5, color: "var(--text-sub)", padding: "10px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-sunken)", marginBottom: 12 }}>
           해당 승인을 찾을 수 없어요
@@ -248,7 +262,7 @@ export default function Approvals() {
             <Icon name="inbox" />
           </div>
           <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>승인 대기 중인 제안이 없어요</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 5 }}>새 요청을 만들거나, 에이전트가 제안하면 여기로 알려드릴게요.</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>새 요청을 만들거나, 에이전트가 제안하면 여기로 알려드릴게요.</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -288,13 +302,13 @@ function Card({ a, busy, onDecide, flash }: { a: Approval; busy: boolean; onDeci
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {k && chip(k.label, k.color, k.icon)}
           {a.highRisk ? chip("컨펌 필요", "#E0900F", "alert") : chip("낮은 위험", "#9AA0A6", "circle")}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 24, padding: "0 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: `color-mix(in srgb, ${s.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${s.color} 78%, var(--text-strong))` }}>
-            <span style={{ width: 7, height: 7, borderRadius: 999, background: s.color }} />{s.label}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 24, padding: "0 10px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${s.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${s.color} 78%, var(--text-strong))` }}>
+            <span style={{ width: 7, height: 7, borderRadius: "var(--ds-r-pill)", background: s.color }} />{s.label}
           </span>
         </div>
       </div>
 
-      {a.body && <p style={{ fontSize: 13, color: "var(--text-sub)", lineHeight: 1.55, margin: "12px 0 0", whiteSpace: "pre-wrap" }}>{a.body}</p>}
+      {a.body && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.55, margin: "12px 0 0", whiteSpace: "pre-wrap" }}>{a.body}</p>}
       {a.responseText && (
         <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: "var(--surface-sunken)", fontSize: 12.5, color: "var(--text-body)" }}>
           <b>{a.status === "rejected" ? "거부 사유" : "추가 요청"}:</b> {a.responseText}
@@ -328,15 +342,10 @@ const aiBadge: CSSProperties = {
   width: 34, height: 34, borderRadius: 10, flex: "0 0 auto",
   background: "var(--color-primary-weak)", color: "var(--color-primary)",
   display: "flex", alignItems: "center", justifyContent: "center",
-  fontSize: 12, fontWeight: 800,
-};
-const inputStyle: CSSProperties = {
-  width: "100%", padding: "9px 12px", borderRadius: 9,
-  border: "1px solid var(--border-default)", background: "var(--surface-card)",
-  color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit",
+  fontSize: "var(--ds-fs-sm)", fontWeight: 800,
 };
 const primaryBtn: CSSProperties = {
-  padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600,
+  padding: "8px 14px", borderRadius: 9, fontSize: "var(--ds-fs-md)", fontWeight: 600,
   cursor: "pointer", border: "1px solid transparent",
   background: "var(--color-primary)", color: "#fff",
   display: "inline-flex", alignItems: "center", gap: 5,

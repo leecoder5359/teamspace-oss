@@ -45,7 +45,28 @@ describe("resolveSessionCtx — 초대 수락 쓰기는 invited 행이 있을 �
   it("invited 가 있으면 수락하고 그 멤버십을 바로 쓴다", async () => {
     m(prisma.workspaceMember.findMany).mockResolvedValue([member("w2", "invited")]);
     const ctx = await requireCtx("viewer");
-    expect(prisma.workspaceMember.updateMany).toHaveBeenCalledWith({ where: { userId: "u1", status: "invited" }, data: { status: "active" } });
+    expect(prisma.workspaceMember.updateMany).toHaveBeenCalledWith({ where: { id: { in: ["m-w2"] }, status: "invited" }, data: { status: "active" } });
+    expect(ctx).toMatchObject({ workspaceId: "w2", role: "editor" });
+    expect(prisma.workspaceMember.findMany).toHaveBeenCalledTimes(1); // 다 수락됐으면 다시 읽지 않는다
+  });
+
+  it("읽은 뒤 초대가 제거되면(count 가 모자람) 다시 읽어 active 가 된 것만 쓴다", async () => {
+    vi.stubEnv("AUTH_ALLOWED_DOMAINS", "team.com");
+    m(prisma.workspaceMember.findMany)
+      .mockResolvedValueOnce([member("w2", "invited")])
+      .mockResolvedValueOnce([]); // 다시 읽기: m-w2 는 이제 removed — active 아님
+    m(prisma.workspaceMember.updateMany).mockResolvedValue({ count: 0 });
+    const r = await requireCtx("viewer");
+    expect(m(prisma.workspaceMember.findMany).mock.calls[1][0]).toEqual({ where: { id: { in: ["m-w2"] }, status: "active" }, select: { id: true } });
+    expect("err" in r && r.err.status).toBe(403);
+  });
+
+  it("동시 요청이 먼저 수락했으면(count 0 이지만 active) 그 멤버십을 쓴다", async () => {
+    m(prisma.workspaceMember.findMany)
+      .mockResolvedValueOnce([member("w2", "invited")])
+      .mockResolvedValueOnce([{ id: "m-w2" }]);
+    m(prisma.workspaceMember.updateMany).mockResolvedValue({ count: 0 });
+    const ctx = await requireCtx("viewer");
     expect(ctx).toMatchObject({ workspaceId: "w2", role: "editor" });
   });
 

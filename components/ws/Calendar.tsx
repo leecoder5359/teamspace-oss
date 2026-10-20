@@ -163,7 +163,7 @@ export default function Calendar() {
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
           <button className="ws-btn-soft" onClick={() => shift(-1)} title="이전"><Icon name="chevronLeft" /></button>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)", minWidth: 150, textAlign: "center", whiteSpace: "nowrap" }}>{label}</div>
+          <div style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", minWidth: 150, textAlign: "center", whiteSpace: "nowrap" }}>{label}</div>
           <button className="ws-btn-soft" onClick={() => shift(1)} title="다음"><Icon name="chevronRight" /></button>
         </div>
         <button className="ws-btn-soft" onClick={() => setRef(new Date())}>오늘</button>
@@ -184,11 +184,11 @@ export default function Calendar() {
                 key={s}
                 onClick={() => setScopeOn((p) => ({ ...p, [s]: !p[s] }))}
                 title={sc.label}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 11px", borderRadius: 8, cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: 600, border: `1px solid ${on ? `color-mix(in srgb, ${sc.color} 45%, transparent)` : "var(--border-default)"}`, background: on ? `color-mix(in srgb, ${sc.color} 13%, var(--surface-card))` : "var(--surface-card)", color: on ? `color-mix(in srgb, ${sc.color} 76%, var(--text-strong))` : "var(--text-muted)" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 11px", borderRadius: "var(--ds-r-sm)", cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: 600, border: `1px solid ${on ? `color-mix(in srgb, ${sc.color} 45%, transparent)` : "var(--border-default)"}`, background: on ? `color-mix(in srgb, ${sc.color} 13%, var(--surface-card))` : "var(--surface-card)", color: on ? `color-mix(in srgb, ${sc.color} 76%, var(--text-strong))` : "var(--text-muted)" }}
               >
-                <span style={{ width: 8, height: 8, borderRadius: 999, background: on ? sc.color : "var(--text-disabled)", flex: "0 0 auto" }} />
+                <span style={{ width: 8, height: 8, borderRadius: "var(--ds-r-pill)", background: on ? sc.color : "var(--text-disabled)", flex: "0 0 auto" }} />
                 {sc.label}
-                {rangeCount[s] ? <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>{rangeCount[s]}</span> : null}
+                {rangeCount[s] ? <span style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, opacity: 0.8 }}>{rangeCount[s]}</span> : null}
               </button>
             );
           })}
@@ -207,12 +207,12 @@ export default function Calendar() {
           {view !== "day" && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
               {WD.map((w, i) => (
-                <div key={w} style={{ fontSize: 12, fontWeight: 700, textAlign: "center", padding: "4px 0", color: i === 0 ? "#F0494E" : i === 6 ? "#2F62FF" : "var(--text-muted)" }}>{w}</div>
+                <div key={w} style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, textAlign: "center", padding: "4px 0", color: i === 0 ? "#F0494E" : i === 6 ? "#2F62FF" : "var(--text-muted)" }}>{w}</div>
               ))}
             </div>
           )}
           {loadError ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 4px", fontSize: 13, color: "var(--text-sub)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 4px", fontSize: "var(--ds-fs-md)", color: "var(--text-sub)" }}>
               <span>캘린더를 불러오지 못했어요.</span>
               <button className="ws-btn-soft" onClick={() => { setLoadError(false); setAttempt((n) => n + 1); }}>다시 시도</button>
             </div>
@@ -253,9 +253,9 @@ function EventPill({ e, onSelect }: { e: CalEvent; onSelect: (e: CalEvent) => vo
     <button
       onClick={(ev) => { ev.stopPropagation(); onSelect(e); }}
       title={e.title}
-      style={{ display: "flex", alignItems: "center", gap: 5, width: "100%", textAlign: "left", border: "none", cursor: "pointer", height: 19, padding: "0 6px", borderRadius: 5, fontSize: 11, fontWeight: 600, font: "inherit", background: `color-mix(in srgb, ${color} 15%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` }}
+      style={{ display: "flex", alignItems: "center", gap: 5, width: "100%", textAlign: "left", border: "none", cursor: "pointer", height: 19, padding: "0 6px", borderRadius: 5, fontSize: "var(--ds-fs-xs)", fontWeight: 600, font: "inherit", background: `color-mix(in srgb, ${color} 15%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` }}
     >
-      <span style={{ width: 5, height: 5, borderRadius: 999, background: color, flex: "0 0 auto" }} />
+      <span style={{ width: 5, height: 5, borderRadius: "var(--ds-r-pill)", background: color, flex: "0 0 auto" }} />
       <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {e.scope === "deadline" ? `${e.title} 마감` : e.scope === "reminder" && e.time ? `${e.time} ${e.title}` : e.title}
       </span>
@@ -271,7 +271,7 @@ function DayCell({ d, inMonth, tall, events, today, onSelect }: { d: Date; inMon
   return (
     <div style={{ minHeight: tall ? 220 : 94, borderRadius: 10, border: "1px solid var(--border-subtle)", background: inMonth ? "var(--surface-card)" : "var(--surface-sunken)", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
       <div style={{ display: "flex", justifyContent: tall ? "flex-start" : "flex-end", marginBottom: 2 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: isToday ? "var(--color-primary)" : "transparent", color: isToday ? "#fff" : !inMonth ? "var(--text-disabled)" : dow === 0 ? "#F0494E" : dow === 6 ? "#2F62FF" : "var(--text-muted)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: isToday ? "var(--color-primary)" : "transparent", color: isToday ? "#fff" : !inMonth ? "var(--text-disabled)" : dow === 0 ? "#F0494E" : dow === 6 ? "#2F62FF" : "var(--text-muted)" }}>
           {tall ? `${d.getMonth() + 1}/${d.getDate()} (${WD[dow]})` : d.getDate()}
         </span>
       </div>
@@ -303,8 +303,8 @@ export function EventDetail({
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(25,31,40,0.40)", zIndex: 900 }} />
       <div role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 901, width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 64px)", overflow: "auto", background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 18, boxShadow: "var(--ds-shadow-lg, var(--shadow-lg))", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 22, padding: "0 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
-            <span style={{ width: 7, height: 7, borderRadius: 999, background: sc.color }} />{sc.label}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
+            <span style={{ width: 7, height: 7, borderRadius: "var(--ds-r-pill)", background: sc.color }} />{sc.label}
           </span>
           <span style={{ flex: 1 }} />
           <button ref={closeRef} className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
@@ -318,7 +318,7 @@ export function EventDetail({
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-disabled)", letterSpacing: "0.02em", marginBottom: 7 }}>
+          <div style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--text-disabled)", letterSpacing: "0.02em", marginBottom: 7 }}>
             {ev.scope === "deadline" ? "연결된 태스크" : ev.scope === "document" ? "문서" : "알림"}
           </div>
           {ev.scope === "reminder" ? (
@@ -326,7 +326,7 @@ export function EventDetail({
               <span style={{ width: 26, height: 26, borderRadius: 7, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
                 <Icon name="bell" size={15} />
               </span>
-              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-body)" }}>{ev.title}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-md)", color: "var(--text-body)" }}>{ev.title}</span>
             </div>
           ) : (
             <button
@@ -338,7 +338,7 @@ export function EventDetail({
               <span style={{ width: 26, height: 26, borderRadius: 7, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
                 <Icon name={sc.icon} size={15} />
               </span>
-              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {ev.title}
               </span>
               <Icon name="chevronRight" size={16} />

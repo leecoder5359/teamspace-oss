@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { getPages } from "@/lib/pagesClient";
+import { inputStyle as inp, primaryBtnNowrap as primary } from "./ui";
 
 /* =====================================================================
    "문서에서 추출 (AI)" 패널 — 문서 선택 → 추출 → 제안 검토 → 개별 반영.
@@ -102,7 +103,7 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
   }
 
   return (
-    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>{label}</div>
       <div style={{ display: "flex", gap: 8 }}>
         <select value={pageId} onChange={(e) => setPageId(e.target.value)} aria-label="추출할 문서" style={{ ...inp, flex: 1, cursor: "pointer" }}>
@@ -115,7 +116,7 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
           {extracting ? "추출 중…" : "추출"}
         </button>
       </div>
-      {extracting && <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>{runningText}</p>}
+      {extracting && <p style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 8 }}>{runningText}</p>}
       {err && <p style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</p>}
 
       {proposals && proposals.length === 0 && !extracting && (
@@ -128,12 +129,12 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
             const done = accepted.has(keyOf(p));
             return (
               <div key={`${keyOf(p)}-${i}`} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", border: "1px solid var(--border-subtle)", borderRadius: 9 }}>
-                <span style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: 999, padding: "1px 7px", marginTop: 2 }}>{badge.label}</span>
+                <span style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--ds-r-pill)", padding: "1px 7px", marginTop: 2 }}>{badge.label}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>{renderProposal(p)}</div>
                 {p.status === "duplicate" ? (
-                  <span style={{ flex: "0 0 auto", fontSize: 12, color: "var(--text-disabled)", alignSelf: "center" }}>있음</span>
+                  <span style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)", alignSelf: "center" }}>있음</span>
                 ) : done ? (
-                  <span style={{ flex: "0 0 auto", fontSize: 12, color: "var(--color-primary)", fontWeight: 600, alignSelf: "center" }}>반영됨</span>
+                  <span style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-sm)", color: "var(--color-primary)", fontWeight: 600, alignSelf: "center" }}>반영됨</span>
                 ) : (
                   // 모순 제안은 기존 항목을 고쳐 쓴다(중복 항목이 쌓이지 않도록) — 버튼 문구도 그렇게 읽혀야 한다.
                   <button className="ws-btn-soft" style={{ flex: "0 0 auto", alignSelf: "center" }} onClick={() => accept(p)}>
@@ -149,5 +150,3 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
   );
 }
 
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff", whiteSpace: "nowrap" };

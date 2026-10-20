@@ -13,6 +13,7 @@ import {
   resolveRule,
   roleOf,
   ROLE_AGENTS,
+  sessionContextMarkerFile,
   wantsDelta,
   work,
 } from "./teamspace-project-context.mjs";
@@ -202,15 +203,20 @@ describe("work — 델타 URL·폴백", () => {
   const conf = { base: "http://h", token: "t" };
   const touch = { tool_input: { file_path: "/Users/u/dev/banjang/y.ts" } };
   const ok = (body: unknown, text = "") => ({ ok: true, status: 200, json: async () => body, text: async () => text });
-  const go = async (input: object, ctx: (url: string) => unknown) => {
+  // marked = SessionStart 훅이 이 세션에 시작 컨텍스트를 넣었다는 표지(teamspace-context.mjs markSessionContext) — 기본은 있음.
+  const go = async (input: object, ctx: (url: string) => unknown, { marked = true } = {}) => {
     const urls: string[] = [];
+    const signals: (AbortSignal | undefined)[] = [];
     const out: string[] = [];
-    const fetchFn = async (url: string) => {
+    const fetchFn = async (url: string, init?: { signal?: AbortSignal }) => {
       urls.push(url);
+      if (url.includes("/api/context")) signals.push(init?.signal);
       return url.includes("/api/route-rules") ? ok({ rules }) : ctx(url);
     };
-    await work({ session_id: "s1", ...input }, cwd, { fetchFn, stateDir: mkdtempSync(join(tmpdir(), "pd-")), conf, write: (s: string) => out.push(s) });
-    return { urls: urls.filter((u) => u.includes("/api/context")), ctx: out.map((o) => JSON.parse(o).hookSpecificOutput.additionalContext as string) };
+    const stateDir = mkdtempSync(join(tmpdir(), "pd-"));
+    if (marked) writeFileSync(sessionContextMarkerFile("s1", stateDir), JSON.stringify({ at: 1, mode: "full" }));
+    await work({ session_id: "s1", ...input }, cwd, { fetchFn, stateDir, conf, write: (s: string) => out.push(s) });
+    return { urls: urls.filter((u) => u.includes("/api/context")), signals, ctx: out.map((o) => JSON.parse(o).hookSpecificOutput.additionalContext as string) };
   };
 
   it("메인 세션은 sections=project 를 부르고, 안내는 델타·전역 규칙은 이미 있음", async () => {
@@ -231,6 +237,25 @@ describe("work — 델타 URL·폴백", () => {
     expect(r.urls).toEqual([projectContextUrl("http://h", "/Users/u/dev/banjang", { delta: true }), projectContextUrl("http://h", "/Users/u/dev/banjang")]);
     expect(r.ctx[0]).toContain("# 전체");
     expect(r.ctx[0]).not.toContain("델타");
+  });
+
+  it("400 폴백은 델타 요청과 같은 신호(전체 3초 한 예산)를 쓴다 — 최악도 ≈3초", async () => {
+    const r = await go(touch, (url) => (url.includes("sections=project") ? { ok: false, status: 400, text: async () => "" } : ok(null, "# 전체")));
+    expect(r.signals).toHaveLength(2);
+    expect(r.signals[0]).toBeInstanceOf(AbortSignal);
+    expect(r.signals[1]).toBe(r.signals[0]);
+  });
+
+  it("메인 세션인데 세션 시작 표지가 없으면(SessionStart 실패) 델타 대신 compact 전체, 안내도 그렇게", async () => {
+    const r = await go(touch, () => ok(null, "# 전체"), { marked: false });
+    expect(r.urls).toEqual([projectContextUrl("http://h", "/Users/u/dev/banjang")]);
+    expect(r.ctx[0]).toContain("세션 시작 컨텍스트가 없어");
+    expect(r.ctx[0]).not.toContain("전역 규칙은 이미 이 세션에 있다");
+  });
+
+  it("역할 에이전트는 세션 시작 표지와 무관하게 델타(SubagentStart 가 넣는다)", async () => {
+    const r = await go({ ...touch, agent_id: "a1", agent_type: "gate-implementer" }, () => ok(null, "# 델타"), { marked: false });
+    expect(r.urls).toEqual([projectContextUrl("http://h", "/Users/u/dev/banjang", { delta: true })]);
   });
 
   it("400 이 아닌 실패는 폴백하지 않는다(에러 한 줄)", async () => {

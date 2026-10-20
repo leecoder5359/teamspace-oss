@@ -128,8 +128,8 @@ describe("GET /api/context — brief 현실적 fixture", () => {
       { id: "a", name: "담당", type: "text", config: {}, position: 2 },
       { id: "u", name: "마감", type: "date", config: {}, position: 3 },
     ]);
-    // 열린 150 + 완료 20(제외돼야 함)
-    pm(prisma.dbRow.findMany).mockResolvedValue([
+    // 열린 150 + 완료 20(제외돼야 함). 비정규화 칸이 없는 행(백필 전) — 칸 쿼리(taskColsKey 지정)엔 안 걸리고 낡은 쪽으로 온다(P-14).
+    pm(prisma.dbRow.findMany).mockImplementation(async (a: { where: { taskColsKey?: string } }) => a.where.taskColsKey ? [] : [
       ...Array.from({ length: 150 }, (_, i) => ({ props: { t: `열린 태스크 ${i}`, s: i % 3 === 0 ? "o2" : "o1", a: i % 7 === 0 ? "이준" : "남", u: null } })),
       ...Array.from({ length: 20 }, (_, i) => ({ props: { t: `끝난 태스크 ${i}`, s: "o3", a: "이준", u: null } })),
     ]);
@@ -179,6 +179,18 @@ describe("GET /api/context — brief 현실적 fixture", () => {
     expect(lines.slice(0, mineN).every((l) => l.includes("이준"))).toBe(true);
     expect(sec.length).toBeLessThanOrEqual(700 + 120); // 제목·'외 N건' 줄 포함
     expect(sec).toMatch(/- … 외 \d+건 \(MCP `task_list`\)/);
+  });
+
+  it("완료(마지막 상태 옵션) 제외를 비정규화 칸 조건으로 DB 에 넘긴다 — 칸 있는 행은 DB 가 거르고 낡은 행은 JS 가(P-14)", async () => {
+    pm(prisma.dbRow.findMany).mockImplementation(async (a: { where: { taskColsKey?: string } }) =>
+      a.where.taskColsKey
+        ? [{ position: 0, props: { t: "칸 있는 열린 일", s: "o1", a: "남", u: null } }]
+        : [{ position: 1, props: { t: "낡은 열린 일", s: "o2", a: "남", u: null } }, { position: 2, props: { t: "낡은 끝난 일", s: "o3", a: "남", u: null } }],
+    );
+    const body = await (await GET(new Request("http://t/api/context?brief=1&format=json&cwd=/work/banjang"))).json();
+    expect(body.counts.tasks).toBe(2);
+    const fast = pm(prisma.dbRow.findMany).mock.calls.map((c) => c[0].where).find((w) => w.taskColsKey);
+    expect(fast).toEqual({ databasePageId: "db1", taskColsKey: "s|a", OR: [{ statusOptionId: null }, { statusOptionId: { notIn: ["o3"] } }] });
   });
 
   it("format=json counts 는 전체 행 수를 담는다", async () => {

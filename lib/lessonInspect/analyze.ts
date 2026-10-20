@@ -161,9 +161,17 @@ export function injectionStats(i: {
   // 정리 후보 — 기록이 하나도 없으면 판단 근거가 없으므로 비운다(새로 깐 서버에서 전부 '0회' 로 뜨지 않게).
   // '늘 잘림' 은 compact(새 세션) 기록으로만 판단한다 — brief(이어가기)는 설계상 요약이 없고 전역을 개수로만 접는다.
   // prompt(UserPromptSubmit)는 메시지에 맞춘 것만 요약으로 넣으므로 '세션 시작에서 잘림' 판단에 섞지 않는다.
+  // SubagentStart(sections=lessons, mode compact)는 개인 레슨을 설계상 제목만 넣는다 — 그 행의 개인 레슨 제목·잘림은 '잘림' 근거에서 뺀다
+  // (레슨별 횟수에는 그대로 센다). 개인이 아닌 레슨(필수·프로젝트)의 잘림은 서브에이전트 행이어도 센다.
+  // 필수 개인 레슨은 서브에이전트에도 요약으로 들어가야 하므로(필수 섹션) 그 잘림은 근거로 남긴다 — 빼는 건 기본·ondemand 개인만.
+  const personal = new Set(lessons.filter((l) => l.scope === "personal" && l.mode !== "required").map((l) => l.id));
+  const truncationEvidence = (r: InjectionRow) => {
+    const ids = [...r.titleIds, ...r.omittedIds];
+    return r.via === "SubagentStart" ? ids.filter((id) => !personal.has(id)) : ids;
+  };
   const compactRows = i.rows.filter((r) => r.mode === "compact");
   const cg = new Set(compactRows.flatMap((r) => r.gistIds));
-  const cSeen = new Set(compactRows.flatMap((r) => [...r.titleIds, ...r.omittedIds]));
+  const cSeen = new Set(compactRows.flatMap(truncationEvidence));
   const alwaysTruncated = compactRows.length ? lessons.filter((l) => !cg.has(l.id) && cSeen.has(l.id)) : [];
   // ondemand 는 설계상 주입되지 않으므로 '한 번도 안 들어감' 후보에서 뺀다.
   const neverInjected = i.rows.length ? lessons.filter((l) => l.mode !== "ondemand" && l.gist + l.titleOnly + l.omitted === 0) : [];

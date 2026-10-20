@@ -10,6 +10,8 @@ import { wouldCycle } from "@/lib/subitems";
 import { checkExpectedUpdatedAt } from "@/lib/concurrency";
 import { notifyTaskAssigned, notifyTaskStatus } from "@/lib/notify";
 import { findAssigneeProp, findTitleProp } from "@/lib/taskProps";
+import { deriveTaskColumns } from "@/lib/taskColumns";
+import { taskPropOrder } from "@/lib/taskRows";
 import { pushNotification, recordActivity, userIdsByNames } from "@/lib/activity";
 
 // PATCH /api/rows/[id] → props 부분 갱신 + position 변경 + 문서 연결(contentPageId)
@@ -134,11 +136,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     incoming = rel.props;
   }
   const mergedProps = incoming ? { ...oldProps, ...incoming } : oldProps;
+  // 보드 속성은 props 를 바꿀 때만 읽는다 — 비정규화 칸(감사 P-14)과 아래 담당자 알림이 같이 쓴다.
+  const lite = incoming
+    ? (await prisma.dbProperty.findMany({ where: { databasePageId: row.databasePageId }, orderBy: taskPropOrder() })).map(
+        (p) => ({ id: p.id, name: p.name, type: p.type as string, config: p.config as { options?: { id: string; name: string }[] } }),
+      )
+    : [];
 
   const updated = await prisma.dbRow.update({
     where: { id },
     data: {
       props: mergedProps as object,
+      ...(incoming ? deriveTaskColumns(lite, mergedProps) : {}),
       ...(body.position !== undefined ? { position: body.position } : {}),
       ...(body.contentPageId !== undefined ? { contentPageId: body.contentPageId } : {}),
       ...(body.parentRowId !== undefined ? { parentRowId: body.parentRowId?.trim() || null } : {}),
@@ -148,8 +157,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (incoming) {
     void notifyTaskStatus(row.databasePageId, oldProps, mergedProps);
     // 담당자 변경 알림 (W5 task-5 + W6 인앱 인박스)
-    const props = await prisma.dbProperty.findMany({ where: { databasePageId: row.databasePageId } });
-    const lite = props.map((p) => ({ id: p.id, name: p.name, type: p.type as string, config: p.config as { options?: { id: string; name: string }[] } }));
     const ap = findAssigneeProp(lite);
     const tp = findTitleProp(lite);
     const title = tp ? String(mergedProps[tp.id] ?? "(제목 없음)") : "(제목 없음)";

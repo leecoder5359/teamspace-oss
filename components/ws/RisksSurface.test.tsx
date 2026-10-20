@@ -57,6 +57,16 @@ describe("RisksSurface 변경 실패(U-2)", () => {
   });
 });
 
+describe("RisksSurface 행 키보드(U-4 후속)", () => {
+  it.each(["Enter", " "])("행에서 %j 키로 상세를 열고 기본 동작(스크롤)을 막는다", async (key) => {
+    fetchMock.mockImplementation(async () => json({ risks: [risk] }));
+    render(<RisksSurface project="" />);
+    const item = (await screen.findByText("배포 지연")).closest<HTMLElement>("[role=button]")!;
+    expect(fireEvent.keyDown(item, { key })).toBe(false);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+});
+
 describe("RisksSurface 상세 다이얼로그(U-5)", () => {
   it("제목으로 이름이 붙고, 닫기에 포커스, Escape 로 닫히며 연 행으로 포커스가 돌아간다", async () => {
     fetchMock.mockImplementation(async () => json({ risks: [risk] }));

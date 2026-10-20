@@ -23,7 +23,7 @@ import dynamic from "next/dynamic";
 // 서피스는 한 번에 하나만 보인다 — 정적 import 하면 전부가 /docs 초기 JS 에 실린다. 고른 서피스만 받는다.
 // 기본 탭(mddocs)은 서피스를 그리지 않는다. ?cat= 딥링크로 열면 서버 HTML 은 스켈레톤이고 서피스는 하이드레이션 뒤
 // 받는다 — 서피스는 데이터를 어차피 클라이언트에서 읽으므로 잃는 것은 청크 한 번 받는 시간뿐이다.
-const surfaceLoading = () => <div className="ws-skeleton" style={{ flex: 1, minHeight: 240, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />;
+const surfaceLoading = () => <div className="ws-skeleton ws-skeleton-surface" />;
 const DatabaseView = dynamic(() => import("../DatabaseView"), { ssr: false, loading: surfaceLoading });
 const DecisionsSurface = dynamic(() => import("./DecisionsSurface"), { ssr: false, loading: surfaceLoading });
 const GlossarySurface = dynamic(() => import("./GlossarySurface"), { ssr: false, loading: surfaceLoading });
@@ -120,7 +120,7 @@ function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocIt
                 color: "var(--text-muted)",
                 background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
                 padding: "1px 6px",
-                borderRadius: 999,
+                borderRadius: "var(--ds-r-pill)",
                 flexShrink: 0,
                 lineHeight: 1.7,
               }}
@@ -137,7 +137,7 @@ function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocIt
                 color: "var(--text-muted)",
                 background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
                 padding: "1px 6px",
-                borderRadius: 999,
+                borderRadius: "var(--ds-r-pill)",
                 flexShrink: 0,
                 lineHeight: 1.7,
               }}
@@ -146,7 +146,7 @@ function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocIt
             </span>
           )}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{fmtEditedShort(doc.updatedAt)}</div>
+        <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>{fmtEditedShort(doc.updatedAt)}</div>
       </div>
       <Icon name="chevronRight" size={16} />
     </div>
@@ -178,7 +178,7 @@ function GroupedDocRows({
   const [shown, setShown] = useState<Record<string, number>>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const card: CSSProperties = { background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "4px 10px" };
+  const card: CSSProperties = { background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "4px 10px" };
   const first = mode === "flat" ? DOCS_PAGE : GROUP_PAGE;
   const step = mode === "flat" ? DOCS_PAGE : 2 * GROUP_PAGE;
 
@@ -287,7 +287,7 @@ function DocsList({
           value={docType}
           onChange={(e) => setDocType(e.target.value as DocType | "")}
           aria-label="문서 종류 필터"
-          style={{ width: "auto", padding: "7px 10px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" }}
+          style={{ width: "auto", padding: "7px 10px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit" }}
         >
           <option value="">전체 종류</option>
           {DOC_TYPES.map((t) => (
@@ -366,7 +366,7 @@ function DocsList({
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>
                 {q.trim() ? "검색 결과가 없어요" : archivedView === "only" ? "보관한 문서가 없어요" : "문서가 없어요"}
               </div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
                 {q.trim() ? "다른 검색어로 시도해 보세요." : "새 문서를 만들어 마크다운으로 기록을 시작하세요."}
               </div>
               {!q.trim() && (
@@ -430,7 +430,7 @@ function EmbedCard({
   return (
     <div style={box} data-toc-skip="">
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>임베드</span>
+        <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>임베드</span>
         {href ? (
           <a href={href} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-primary)", textDecoration: "none" }}>
             {target}
@@ -666,7 +666,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.02em", margin: "0 0 4px" }}>
             {title || "제목 없음"}
           </h1>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>마지막 수정 {fmtEditedLong(doc.updatedAt)}</div>
+          <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 18 }}>마지막 수정 {fmtEditedLong(doc.updatedAt)}</div>
           {archiveErr && (
             <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>
               {archiveErr}
@@ -685,7 +685,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {revs.map((r) => (
-                    <div key={r.rev} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 8 }}>
+                    <div key={r.rev} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: "var(--ds-r-sm)" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-muted)", width: 34 }}>v{r.rev}</span>
                       <span style={{ flex: 1, fontSize: 12.5, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {new Date(r.createdAt).toLocaleString("ko-KR")} {r.authorName ? `· ${r.authorName}` : ""}
@@ -770,7 +770,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                     {c.inline && (
                       <div
                         style={{
-                          fontSize: 12,
+                          fontSize: "var(--ds-fs-sm)",
                           marginBottom: 5,
                           paddingLeft: 8,
                           borderLeft: `3px solid ${c.orphan ? "var(--text-disabled)" : "var(--color-primary)"}`,
@@ -781,7 +781,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                         {c.orphan && <span style={{ marginLeft: 6 }}>— 본문에서 이 문구를 더는 찾을 수 없습니다</span>}
                       </div>
                     )}
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 3 }}>
+                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 3 }}>
                       <b style={{ color: "var(--text-strong)" }}>{c.authorName}</b>
                       {c.authorIsAgent && <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>에이전트</span>}
                       {" · "}{new Date(c.createdAt).toLocaleString("ko-KR")}
@@ -789,7 +789,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                       {c.inline && (
                         <button
                           className="ws-btn-soft"
-                          style={{ marginLeft: 8, padding: "1px 7px", fontSize: 11 }}
+                          style={{ marginLeft: 8, padding: "1px 7px", fontSize: "var(--ds-fs-xs)" }}
                           onClick={async () => {
                             await fetch(`/api/pages/${doc.id}/comments?commentId=${c.id}`, {
                               method: "PATCH",
@@ -803,16 +803,16 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                         </button>
                       )}
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text-body)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</div>
+                    <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</div>
                   </div>
                 ))}
                 {selection && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 10px", borderRadius: 8, background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--ds-fs-sm)", padding: "6px 10px", borderRadius: "var(--ds-r-sm)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)" }}>
                     <span style={{ color: "var(--text-muted)" }}>이 문구에 답니다:</span>
                     <span style={{ flex: 1, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       “{selection.quote}”
                     </span>
-                    <button className="ws-btn-soft" style={{ padding: "1px 7px", fontSize: 11 }} onClick={() => setSelection(null)}>
+                    <button className="ws-btn-soft" style={{ padding: "1px 7px", fontSize: "var(--ds-fs-xs)" }} onClick={() => setSelection(null)}>
                       해제
                     </button>
                   </div>
@@ -823,7 +823,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                     onChange={(e) => setCommentDraft(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void postComment(); }}
                     placeholder={selection ? "선택한 문구에 코멘트…" : "코멘트 작성 — 본문에서 문구를 선택하면 그 문장에 달립니다"}
-                    style={{ flex: 1, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" }}
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit" }}
                   />
                   <button className="ws-btn-soft" onClick={() => void postComment()} disabled={posting || !commentDraft.trim()}>등록</button>
                 </div>
@@ -847,7 +847,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                     <button
                       key={b.id}
                       onClick={() => target && onOpen(target)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
                     >
                       <Icon name="doc" size={13} /> {b.title}
                     </button>
@@ -875,11 +875,11 @@ function ComingSoon({ cat }: { cat: Cat }) {
   return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 360 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${cat.color} 13%, var(--surface-card))`, color: cat.color }}>
+        <div style={{ width: 56, height: 56, borderRadius: "var(--ds-r-lg)", margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${cat.color} 13%, var(--surface-card))`, color: cat.color }}>
           <Icon name={cat.icon} size={26} />
         </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-strong)" }}>{cat.label}</div>
-        <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 6, lineHeight: 1.7 }}>
+        <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)" }}>{cat.label}</div>
+        <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 6, lineHeight: 1.7 }}>
           {cat.sub} · 구조화 화면은 곧 추가됩니다. 지금은 ‘문서’ 카테고리에서 마크다운 문서를 관리할 수 있어요.
         </div>
       </div>
@@ -903,7 +903,7 @@ function CatItem({ cat, active, onGo }: { cat: Cat; active: boolean; onGo: () =>
         <Icon name={cat.icon} size={18} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: active ? "var(--text-strong)" : "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.label}</span>
+        <span style={{ display: "block", fontSize: "var(--ds-fs-md)", fontWeight: 600, color: active ? "var(--text-strong)" : "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.label}</span>
         <span style={{ display: "block", fontSize: 10.5, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.sub}</span>
       </span>
     </button>
@@ -917,7 +917,7 @@ function CatChip({ cat, active, onGo }: { cat: Cat; active: boolean; onGo: () =>
       onClick={onGo}
       style={{
         flex: "0 0 auto", display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "7px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", font: "inherit",
+        padding: "7px 12px", borderRadius: "var(--ds-r-pill)", cursor: "pointer", whiteSpace: "nowrap", font: "inherit",
         border: `1px solid ${active ? "var(--color-primary)" : "var(--border-default)"}`,
         background: active ? "var(--color-primary-weak)" : "var(--surface-card)",
         color: active ? "var(--color-primary)" : "var(--text-body)",
@@ -955,7 +955,7 @@ function BoardPanel({
       }}
     >
       <div className="ws-filterbar">
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: "var(--text-strong)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>
           <span style={{ display: "flex", color: "var(--color-primary)" }}>
             <Icon name="board" size={16} />
           </span>
@@ -1001,6 +1001,8 @@ export default function Docs({ initialParams = {} }: { initialParams?: { cat?: s
   // 실제 '데이터베이스' 종류 페이지 id 집합 — 태스크 보드 패널을 진짜 DB일 때만 띄우기 위함
   // (boardPageId 는 DB가 없으면 문서 페이지로 폴백되므로 그대로 임베드하면 빈 보드가 뜬다)
   const [dbPageIds, setDbPageIds] = useState<Set<string>>(new Set());
+  // 문서 목록을 한 번이라도 받았는가 — 받기 전·실패 시에는 ?id= 를 '없는 문서'로 판정하지 않는다.
+  const [docsLoaded, setDocsLoaded] = useState(false);
 
   // 보관 보기를 빠르게 바꿀 때 늦게 온 이전 응답이 최신 결과를 덮지 않도록 요청 번호로 거른다.
   const loadSeq = useRef(0);
@@ -1023,6 +1025,7 @@ export default function Docs({ initialParams = {} }: { initialParams?: { cat?: s
     }
     const data = pagesRes.data as { pages: DocItem[] };
     setDocs(data.pages.filter((p) => p.kind === "doc").sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)));
+    setDocsLoaded(true);
     // 보관함 모드엔 활성 DB 가 빠져 있어 보드 패널 판정을 덮어쓰지 않는다
     if (archivedView !== "only") setDbPageIds(new Set(data.pages.filter((p) => p.kind === "database").map((p) => p.id)));
     if (projectsRes.ok) {
@@ -1087,6 +1090,13 @@ export default function Docs({ initialParams = {} }: { initialParams?: { cat?: s
     if (window.location.pathname + window.location.search !== href) window.history.replaceState(null, "", href);
   }, [active, itemId]);
   const selected = active === "mddocs" && itemId ? docs.find((d) => d.id === itemId) ?? null : null;
+  // 받아 온 목록에 없는 ?id=(지워졌거나 잘못된 링크)는 선택을 풀어 위 effect 가 URL 에서도 빼게 한다.
+  // 보관 보기 전환 중(loading)에는 이전 보기의 목록이라 판정하지 않는다.
+  const unknownDocId = active === "mddocs" && !!itemId && docsLoaded && !loading && !selected;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (unknownDocId) setItemId(null);
+  }, [unknownDocId]);
   const openDoc = useCallback((d: DocItem) => setItemId(d.id), []);
 
   const isMobile = useIsMobile();
@@ -1202,7 +1212,7 @@ export default function Docs({ initialParams = {} }: { initialParams?: { cat?: s
 }
 
 const railLabel: CSSProperties = {
-  fontSize: 11, fontWeight: 700, color: "var(--text-muted)", padding: "4px 10px 6px", textTransform: "uppercase", letterSpacing: "0.04em",
+  fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--text-muted)", padding: "4px 10px 6px", textTransform: "uppercase", letterSpacing: "0.04em",
 };
 
 /* =====================================================================
@@ -1246,13 +1256,13 @@ function SimilarDocs({ pageId, onOpen }: { pageId: string; onOpen: (id: string) 
             onClick={() => onOpen(x.id)}
             style={{
               display: "flex", alignItems: "center", gap: 8, textAlign: "left", width: "100%",
-              padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)",
-              background: "var(--surface-card)", cursor: "pointer", fontSize: 13, color: "var(--text-body)",
+              padding: "7px 10px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)",
+              background: "var(--surface-card)", cursor: "pointer", fontSize: "var(--ds-fs-md)", color: "var(--text-body)",
             }}
           >
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.title}</span>
             {x.project && <span style={{ fontSize: 11.5, color: "var(--text-disabled)" }}>{x.project}</span>}
-            <span style={{ fontSize: 11, color: "var(--text-disabled)", fontVariantNumeric: "tabular-nums" }}>{x.score.toFixed(2)}</span>
+            <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-disabled)", fontVariantNumeric: "tabular-nums" }}>{x.score.toFixed(2)}</span>
           </button>
         ))}
       </div>

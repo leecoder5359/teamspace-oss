@@ -9,6 +9,7 @@ vi.mock("@/lib/prisma", () => ({
 import { prisma } from "@/lib/prisma";
 import { loadAccess, visibleOnly, projectAccess } from "@/lib/pageGuard";
 import { listPagesForSidebar, listProjectsForSidebar } from "./pagesList";
+import { listProjectsLite } from "./projects";
 
 const m = (f: unknown) => f as Mock;
 const ctx = { workspaceId: "w1", userId: "u1", role: "editor" as const, actor: { type: "user" as const, id: "u1", name: "U" } };
@@ -138,5 +139,12 @@ describe("listProjectsForSidebar", () => {
     expect(m(prisma.project.findMany).mock.calls[0][0]).toMatchObject({ where: { workspaceId: "w1" }, orderBy: { position: "asc" } });
     // 보관 프로젝트도 남긴다(archived 표시만) — 빼면 그 페이지가 미분류로 떨어진다(F10)
     expect(out).toEqual([{ id: "p1", name: "One", archived: false }, { id: "p2", name: "Two", archived: true }]);
+  });
+
+  it("projects 목록 API 의 sidebar 조회(listProjectsLite, 보관 포함)와 같은 쿼리를 쓴다 — 사이드바 프로젝트 쿼리는 하나", async () => {
+    await listProjectsForSidebar(ctx);
+    await listProjectsLite("w1", "all");
+    const [a, b] = m(prisma.project.findMany).mock.calls.map((c) => c[0]);
+    expect(a).toEqual(b);
   });
 });

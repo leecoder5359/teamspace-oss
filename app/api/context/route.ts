@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { findAssigneeProp, findDateProp, findStatusProp } from "@/lib/taskProps";
+import { closedOptionIds } from "@/lib/taskColumns";
+import { findTaskRows, taskPropOrder } from "@/lib/taskRows";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, pageAccess, projectAccess, visibleOnly } from "@/lib/pageGuard";
 import { hiddenPageIds } from "@/lib/pageAccess";
@@ -14,7 +16,7 @@ import { recordLessonInjection, injectionIds, briefInjectionIds } from "@/lib/le
 import { renderBrief, sortTasksForContext } from "@/lib/contextBrief";
 import { renderProjectDelta } from "@/lib/contextProject";
 import { viewerPersonId } from "@/lib/viewerPerson";
-import { accountSection, buildAccountLines } from "@/lib/envVault/sessionAccounts";
+import { ACCOUNT_CAPS, accountSection, buildAccountLines } from "@/lib/envVault/sessionAccounts";
 import { archivedPageIds } from "@/lib/pageArchive";
 import { withReq } from "@/lib/log";
 import { homedir } from "node:os";
@@ -37,9 +39,12 @@ type Opt = { id: string; name: string };
    보드·문서·결정·지식 지도는 읽지 않는다. 렌더는 lib/lessonInject.renderSubagentLessons(순수).
    sections=project → PostToolUse 훅용 프로젝트 델타(~3KB): 그 프로젝트·스택 범위 레슨(필수 먼저) + 계정 줄 + 내 담당·진행 중 태스크 +
    개수 한 줄. 세션 시작에 이미 들어간 전역·개인·필수(전역) 레슨과 지식 지도·용어집·문서 목록·결정은 싣지 않는다. 렌더는 lib/contextProject(순수).
-   주입 기록 mode=project.
+   주입 기록 mode=project. 끝 자르기(입력이 상한 밖인 극단)로 줄이 빠지면 '외 N줄' 표지를 남기고 그 레슨 id 는 omitted 로 기록한다.
+   계정 줄 상한은 lib/envVault/sessionAccounts.ACCOUNT_CAPS 한곳 — compact·project 는 session(3줄·300자), brief 는 brief(1줄·120자).
    다른 sections 값은 400. 없으면 기존 동작 그대로.
-   format=json → { markdown, counts }, 기본 → text/markdown. */
+   format=json → { markdown, counts }, 기본 → text/markdown.
+   counts.lessons 뜻: sections=lessons·project 는 **그 출력의 대상 레슨 수**(보인 것 + '외 N개', ondemand·범위 밖·다른 사람 개인 제외 —
+   두 모드가 같은 뜻). 그 밖(compact·brief·full)은 lessonWhere 에 걸리는 행 수 전체(ondemand 포함, 범위 판정 전). */
 export async function GET(request: Request) {
   const guard = await requireCtx();
   if ("err" in guard) return guard.err;
@@ -140,10 +145,7 @@ export async function GET(request: Request) {
     (await visibleBoard({ kind: "database", workspaceId, deletedAt: null, ...notArchivedPage }));
   const tasks: { title: string; status: string | null; due: string | null; assignee: string | null }[] = [];
   if (db) {
-    const [props, rows] = await Promise.all([
-      prisma.dbProperty.findMany({ where: { databasePageId: db.id }, orderBy: { position: "asc" } }),
-      prisma.dbRow.findMany({ where: { databasePageId: db.id }, orderBy: { position: "asc" } }),
-    ]);
+    const props = await prisma.dbProperty.findMany({ where: { databasePageId: db.id }, orderBy: taskPropOrder() });
     // 속성 해석은 공용 헬퍼로 — 자체 구현이 lib/taskProps 와 갈라져 있었고,
     // 특히 담당자를 text 로만 찾아 person 타입 보드에서 항상 빈 값이었다(D8).
     // claim 라우트와 같은 형태로 좁혀서 넘긴다(Prisma JsonValue → PropLite.config)
@@ -159,6 +161,8 @@ export async function GET(request: Request) {
     const asgnProp = findAssigneeProp(propsLite);
     const statusOpts: Opt[] = statusProp ? (((statusProp.config as { options?: Opt[] })?.options) ?? []) : [];
     const doneName = statusOpts[statusOpts.length - 1]?.name;
+    // 감사 P-14: 완료 제외를 DB 로(비정규화 칸). 칸을 못 믿는 행만 통째로 오고 아래 루프가 같은 규칙으로 거른다.
+    const rows = await findTaskRows(db.id, propsLite, { closedOptionIds: closedOptionIds(statusProp, (n) => !!n && n === doneName) });
     for (const r of rows) {
       const p = r.props as Record<string, unknown>;
       const sName = statusProp ? statusOpts.find((o) => o.id === p[statusProp.id])?.name ?? null : null;
@@ -220,13 +224,13 @@ export async function GET(request: Request) {
       tasks,
       me: [guard.actor?.name ?? "", guard.userId],
       counts: { tasks: tasks.length, docs: nDocs, decisions: nDecisions },
-      accountLines: buildAccountLines(targets, { home: homedir() }),
+      accountLines: buildAccountLines(targets, { home: homedir(), ...ACCOUNT_CAPS.session }),
     });
     if (url.searchParams.get("inspect") !== "1") {
       void recordLessonInjection({ workspaceId, actorName: guard.actor?.name, cwd, projectId, via: url.searchParams.get("via"), mode: "project", ids: r.ids, chars: r.markdown.length });
     }
     return fmt === "json"
-      ? NextResponse.json({ markdown: r.markdown, counts: { lessons: r.ids.gistIds.length + r.ids.titleIds.length + r.ids.omittedIds.length, tasks: tasks.length, docs: nDocs, decisions: nDecisions } })
+      ? NextResponse.json({ markdown: r.markdown, counts: { lessons: r.count, tasks: tasks.length, docs: nDocs, decisions: nDecisions } })
       : new NextResponse(r.markdown, { headers: { "content-type": "text/markdown; charset=utf-8" } });
   }
 
@@ -280,7 +284,7 @@ export async function GET(request: Request) {
       tasks,
       me,
       counts,
-      accountLines: buildAccountLines(accountTargets, { home, maxLines: 1, maxChars: 120 }),
+      accountLines: buildAccountLines(accountTargets, { home, ...ACCOUNT_CAPS.brief }),
     });
     logInjection("brief", briefInjectionIds(md, lessons, projectId, projectStack, personId), md.length);
     return respond(md);
@@ -292,7 +296,7 @@ export async function GET(request: Request) {
   L.push("");
 
   // 계정 줄은 머리말 바로 뒤(레슨 앞). L 에 먼저 넣어 두므로 레슨 예산(restChars)에서 그만큼 빠진다 — 대상이 없으면 빈 배열.
-  if (compact) L.push(...accountSection(buildAccountLines(accountTargets, { home })));
+  if (compact) L.push(...accountSection(buildAccountLines(accountTargets, { home, ...ACCOUNT_CAPS.session })));
 
   const headerLen = L.length; // 레슨은 나머지 섹션을 다 그린 뒤 이 자리에 끼운다(남는 예산을 레슨에 주기 위해)
 

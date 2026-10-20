@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { Icon } from "./icons";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 웹 클리퍼 진입점 — 북마클릿이 /clip#<payload> 로 열면 자동 저장, 아니면 수동 붙여넣기.
    동일 출처라 세션 쿠키가 정상 전달된다. /api/clip 이 요약·프로젝트 자동분류 후 문서 생성. */
@@ -77,18 +78,18 @@ export default function Clip() {
 
       {status === "done" && result && (
         <div style={{ ...card, marginTop: 16, borderColor: "var(--color-primary)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>
             <Icon name="check" size={16} /> 저장했어요
           </div>
           <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 6 }}>
             프로젝트: {result.projectName ?? "미분류"} · {result.mode === "classified" ? "AI 분류·요약" : "원문 저장"}
           </div>
-          {result.summary && <p style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 8, lineHeight: 1.6 }}>{result.summary}</p>}
+          {result.summary && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 8, lineHeight: 1.6 }}>{result.summary}</p>}
           <Link href={`/p/${result.pageId}`} style={{ ...primary, display: "inline-block", marginTop: 12, textDecoration: "none" }}>문서 열기</Link>
         </div>
       )}
 
-      {status === "error" && <p style={{ fontSize: 13, color: "var(--color-danger)", marginTop: 16 }}>{err}</p>}
+      {status === "error" && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginTop: 16 }}>{err}</p>}
 
       {/* 북마클릿 설치 */}
       <Section title="북마클릿 설치">
@@ -127,8 +128,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16 };
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };
+const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 };
 const hint: CSSProperties = { fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6 };
-const bmChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "1px dashed var(--color-primary)", background: "var(--surface-card)", color: "var(--color-primary)", fontSize: 13, fontWeight: 700, textDecoration: "none", cursor: "grab" };
+const bmChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "1px dashed var(--color-primary)", background: "var(--surface-card)", color: "var(--color-primary)", fontSize: "var(--ds-fs-md)", fontWeight: 700, textDecoration: "none", cursor: "grab" };

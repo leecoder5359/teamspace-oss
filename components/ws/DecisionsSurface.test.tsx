@@ -90,6 +90,23 @@ describe("DecisionsSurface 표 행 키보드(U-4)", () => {
   });
 });
 
+describe("DecisionsSurface 타임라인·카드 키보드(U-4 후속)", () => {
+  it.each([
+    ["타임라인", "Enter"],
+    ["타임라인", " "],
+    ["카드", "Enter"],
+    ["카드", " "],
+  ])("%s 항목에서 %j 키로 상세를 열고 기본 동작(스크롤)을 막는다", async (viewTitle, key) => {
+    fetchMock.mockImplementation(async () => json({ decisions: [dec] }));
+    render(<Surface project="" />);
+    await screen.findByText("인증은 Auth.js");
+    fireEvent.click(screen.getByTitle(viewTitle));
+    const item = screen.getByText("인증은 Auth.js").closest<HTMLElement>("[role=button]")!;
+    expect(fireEvent.keyDown(item, { key })).toBe(false);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+});
+
 describe("DecisionsSurface 상세 다이얼로그(U-5)", () => {
   it("제목으로 이름이 붙고, 닫기에 포커스, Escape 로 닫히며 연 행으로 포커스가 돌아간다", async () => {
     fetchMock.mockImplementation(async () => json({ decisions: [dec] }));

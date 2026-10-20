@@ -229,7 +229,7 @@ function PropEditor({
     return (
       <>
         <DDay value={value} />
-        {fmtDateK(value) && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{fmtDateK(value)}</span>}
+        {fmtDateK(value) && <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{fmtDateK(value)}</span>}
         <input
           className="ws-prop-date"
           type="date"
@@ -368,7 +368,7 @@ const taskInp: CSSProperties = {
   borderRadius: 9,
   background: "var(--surface-sunken)",
   padding: "0 12px",
-  fontSize: 13,
+  fontSize: "var(--ds-fs-md)",
   color: "var(--text-strong)",
   fontFamily: "inherit",
 };
@@ -636,7 +636,7 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                 {checklist.length > 0 && <div style={{ marginBottom: 10 }}><ProgressBar value={(doneN / checklist.length) * 100} /></div>}
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {checklist.map((item) => (
-                    <div key={item.id} className="ws-listrow" style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px", borderRadius: 8 }}>
+                    <div key={item.id} className="ws-listrow" style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px", borderRadius: "var(--ds-r-sm)" }}>
                       <button
                         type="button"
                         onClick={() => void toggleCheck(item)}
@@ -645,7 +645,7 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                       >
                         {item.done && <Icon name="check" size={12} />}
                       </button>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: item.done ? "var(--text-muted)" : "var(--text-body)", textDecoration: item.done ? "line-through" : "none" }}>{item.text}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-md)", color: item.done ? "var(--text-muted)" : "var(--text-body)", textDecoration: item.done ? "line-through" : "none" }}>{item.text}</span>
                       <button type="button" onClick={() => void removeCheck(item.id)} title="삭제" aria-label="항목 삭제" style={{ border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", padding: 2, display: "flex" }}><Icon name="close" size={13} /></button>
                     </div>
                   ))}
@@ -669,7 +669,7 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                           <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-strong)" }}>{c.user?.name ?? "익명"}</span>
                           <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{new Date(c.createdAt).toLocaleString("ko-KR")}</span>
                         </div>
-                        <p style={{ fontSize: 13, color: "var(--text-body)", lineHeight: 1.55, margin: "3px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</p>
+                        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", lineHeight: 1.55, margin: "3px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</p>
                       </div>
                     </div>
                   ))}

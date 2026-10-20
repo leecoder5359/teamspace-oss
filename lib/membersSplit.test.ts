@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { splitMembers, latestTokenByUser } from "./membersSplit";
+import { staticImportClosure } from "./moduleImports";
 
 const m = (id: string, email: string) => ({ id, user: { email } });
 
@@ -41,16 +42,18 @@ describe("latestTokenByUser", () => {
 });
 
 describe("membersSplit 는 클라이언트 번들에 node:crypto 를 끌어오지 않는다(감사 P-4)", () => {
-  const src = (f: string) => readFileSync(new URL(`./${f}`, import.meta.url), "utf8");
-  const importsOf = (code: string) => [...code.matchAll(/^import[^;]*from\s+"([^"]+)"/gm)].map((x) => x[1]);
+  // 지정자는 TS 파서로 뽑고(여러 줄·re-export·타입 전용 구분), 정적 import 를 끝까지 따라간다 — 간접 의존도 잡는다.
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const closure = (f: string) => staticImportClosure(fileURLToPath(new URL(`./${f}`, import.meta.url)), root);
 
   it("membersSplit 은 agentToken(node:crypto) 대신 엣지 안전 agentTokenFormat 을 import", () => {
-    const deps = importsOf(src("membersSplit.ts"));
+    const deps = closure("membersSplit.ts");
     expect(deps).toContain("./agentTokenFormat");
-    expect(deps).not.toContain("./agentToken");
+    expect([...deps].filter((d) => /(^|\/)agentToken$/.test(d))).toEqual([]);
   });
 
-  it("agentTokenFormat 은 node:crypto 를 import 하지 않는다", () => {
-    expect(importsOf(src("agentTokenFormat.ts"))).not.toContain("node:crypto");
+  it("membersSplit 에서 정적으로 닿는 어디에도 node:crypto 가 없다", () => {
+    const deps = closure("membersSplit.ts");
+    expect([...deps].filter((d) => d === "node:crypto" || d === "crypto")).toEqual([]);
   });
 });

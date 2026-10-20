@@ -149,4 +149,24 @@ describe("Inbox — 링크 있는 알림은 링크(U-18)", { timeout: 15_000 }, 
     fireEvent.click(link);
     await waitFor(() => expect(fetchMock2.mock.calls.some(([u, i]) => u === "/api/notifications/n1" && i?.method === "PATCH")).toBe(true));
   });
+
+  it("⌘/ctrl 클릭(새 탭)으로 링크 알림을 열어도 읽음 처리(PATCH)하고, 이 탭의 읽음 표시를 바로 바꾼다", async () => {
+    const rows = [
+      { id: "n1", type: "mention", title: "링크 알림", link: "/p/abc", readAt: null, createdAt: "2026-10-09T00:00:00Z" },
+    ];
+    const fetchMock2 = vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method === "PATCH" ? { ok: true, json: async () => ({}) } : { ok: true, json: async () => ({ notifications: rows, unread: 1, byType: {} }) },
+    );
+    vi.stubGlobal("fetch", fetchMock2);
+    try { localStorage.setItem("ws.inbox.group", "0"); } catch { /* noop */ }
+    render(<Inbox />);
+    const link = await screen.findByRole("link", { name: /링크 알림/ });
+    expect(link.style.opacity).toBe("1");
+    const listCalls = () => fetchMock2.mock.calls.filter(([, i]) => !i?.method).length;
+    const before = listCalls();
+    fireEvent.click(link, { metaKey: true });
+    await waitFor(() => expect(fetchMock2.mock.calls.some(([u, i]) => u === "/api/notifications/n1" && i?.method === "PATCH")).toBe(true));
+    await waitFor(() => expect(screen.getByRole("link", { name: /링크 알림/ }).style.opacity).toBe("0.65"));
+    expect(listCalls()).toBe(before);
+  });
 });

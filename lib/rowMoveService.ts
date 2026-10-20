@@ -22,6 +22,9 @@ import {
   type MoveProp,
 } from "@/lib/rowMove";
 
+import { deriveTaskColumns } from "@/lib/taskColumns";
+import { taskPropOrder } from "@/lib/taskRows";
+
 const propSelect = { id: true, name: true, type: true, config: true } as const;
 
 type PropRow = { id: string; name: string; type: string; config: unknown };
@@ -86,7 +89,7 @@ export async function moveRow(guard: Ctx, id: string, input: MoveRowInput): Prom
     where: { id },
     include: {
       database: {
-        select: { workspaceId: true, title: true, dbProperties: { select: propSelect, orderBy: { position: "asc" } } },
+        select: { workspaceId: true, title: true, dbProperties: { select: propSelect, orderBy: taskPropOrder() } },
       },
     },
   });
@@ -115,7 +118,7 @@ export async function moveRow(guard: Ctx, id: string, input: MoveRowInput): Prom
       title: true,
       workspaceId: true,
       deletedAt: true,
-      dbProperties: { select: propSelect, orderBy: { position: "asc" } },
+      dbProperties: { select: propSelect, orderBy: taskPropOrder() },
     },
   });
   // 게이트는 통과했지만(색인에 있고 접근 가능) 실제로는 못 쓸 대상인 경우
@@ -247,6 +250,7 @@ export async function moveRow(guard: Ctx, id: string, input: MoveRowInput): Prom
         data: {
           databasePageId: targetId,
           props: finalProps as object,
+          ...deriveTaskColumns(lite(target.dbProperties), finalProps), // 감사 P-14 — 대상 보드 속성 기준
           position: (last?.position ?? -1) + 1,
           parentRowId: null,
           updatedById: guard.userId,

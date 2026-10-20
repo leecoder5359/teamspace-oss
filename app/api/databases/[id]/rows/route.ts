@@ -9,6 +9,7 @@ import { validateRelationProps } from "@/lib/relationServer";
 import { notifyTaskCreated } from "@/lib/notify";
 import { recordActivity } from "@/lib/activity";
 import { withIdempotency } from "@/lib/idempotency";
+import { taskColumnsForBoard } from "@/lib/taskRows";
 
 // POST /api/databases/[id]/rows → 새 행 생성
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -38,8 +39,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const rel = await validateRelationProps(id, (body.props ?? {}) as Record<string, unknown>);
   if (!rel.ok) return rel.err;
 
+  // 감사 P-14: 열린 태스크 조회용 비정규화 칸을 props 와 함께 쓴다.
+  const cols = await taskColumnsForBoard(id, rel.props);
   const row = await prisma.dbRow.create({
-    data: { databasePageId: id, props: rel.props as object, position, updatedById: guard.userId, createdById: guard.userId },
+    data: { databasePageId: id, props: rel.props as object, ...cols, position, updatedById: guard.userId, createdById: guard.userId },
   });
   void notifyTaskCreated(id, (body.props ?? {}) as Record<string, unknown>);
   const firstText = Object.values((body.props ?? {}) as Record<string, unknown>).find((v) => typeof v === "string" && v);

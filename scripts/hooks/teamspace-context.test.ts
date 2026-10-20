@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { contextModeFor, contextUrl, extractLessonIds, gitInfo, ingestPayload, promptStateFile, repoInfoFromRevParse, seedPromptState } from "./teamspace-context.mjs";
+import { contextModeFor, contextUrl, extractLessonIds, gitInfo, ingestPayload, markSessionContext, promptStateFile, repoInfoFromRevParse, seedPromptState, sessionContextMarkerFile } from "./teamspace-context.mjs";
+import { sessionContextMarkerFile as projectHookMarkerFile } from "./teamspace-project-context.mjs";
 import { promptStateFile as promptHookStateFile, readState } from "./teamspace-prompt-lessons.mjs";
 
 // SessionStart 훅: 새 세션(startup·clear)엔 전체, 이어가기(resume·compact)엔 요약만 주입한다.
@@ -96,5 +97,38 @@ describe("seedPromptState", () => {
   });
   it("쓰기 실패는 무해(throw 하지 않는다)", () => {
     expect(() => seedPromptState("s3", ["x"], join(tmpdir(), "no-such-dir-xyz", "deeper"))).not.toThrow();
+  });
+});
+
+// 세션 시작 컨텍스트 표지 — PostToolUse 훅이 '이 세션은 시작 주입을 받았다' 를 알고 델타만 넣게(없으면 compact 전체).
+describe("markSessionContext", () => {
+  it("표지 경로는 PostToolUse 훅 사본과 같다", () => {
+    expect(sessionContextMarkerFile("s/1", "/d")).toBe(projectHookMarkerFile("s/1", "/d"));
+  });
+  it("성공 시 표지 파일을 쓴다(모드 기록)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mark-"));
+    markSessionContext("s1", "full", dir);
+    expect(JSON.parse(readFileSync(sessionContextMarkerFile("s1", dir), "utf8"))).toMatchObject({ mode: "full" });
+  });
+  it("새 표지를 쓸 때 7일 넘은 표지는 지운다(다른 파일·최근 표지는 남긴다)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mark-"));
+    const old = sessionContextMarkerFile("old", dir);
+    const recent = sessionContextMarkerFile("recent", dir);
+    const other = join(dir, "teamspace-prompt-lessons-old-main.json");
+    for (const f of [old, recent, other]) writeFileSync(f, "{}");
+    const eightDaysAgo = (Date.now() - 8 * 86_400_000) / 1000;
+    utimesSync(old, eightDaysAgo, eightDaysAgo);
+    utimesSync(other, eightDaysAgo, eightDaysAgo);
+    markSessionContext("s9", "full", dir);
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(recent)).toBe(true);
+    expect(existsSync(other)).toBe(true);
+    expect(existsSync(sessionContextMarkerFile("s9", dir))).toBe(true);
+  });
+  it("세션 id 가 없으면 쓰지 않고, 쓰기 실패는 무해", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mark-"));
+    markSessionContext(undefined, "full", dir);
+    expect(() => readFileSync(sessionContextMarkerFile("undefined", dir))).toThrow();
+    expect(() => markSessionContext("s3", "full", join(tmpdir(), "no-such-dir-xyz", "deeper"))).not.toThrow();
   });
 });

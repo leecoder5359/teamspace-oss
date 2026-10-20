@@ -30,3 +30,10 @@ describe("saebit.css 접근성 규칙", () => {
     expect(css).toMatch(/\.ws-search:focus-within \{ outline: none; border-color: var\(--ds-primary\); box-shadow: 0 0 0 3px var\(--ds-primary-weak\);/);
   });
 });
+
+describe("saebit.css 비대화형 표시(U-12 후속)", () => {
+  it(".ws-company 는 hover 배경이 없고 커서가 기본이다(클릭할 수 있어 보이지 않게)", () => {
+    expect(css.includes(".ws-company:hover")).toBe(false);
+    expect(css.match(/\.ws-company \{[^}]*\}/)?.[0]).toContain("cursor: default;");
+  });
+});

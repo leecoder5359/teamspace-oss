@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { inputBase as inputStyle } from "./ui";
 
 /* =====================================================================
    설정 › AI 실행 경로 (관리자) — GET /api/ai-routes.
@@ -268,7 +269,7 @@ function RelayPart({ relay, days }: { relay: Data["relay"]; days: number }) {
               ))}
             </Table>
 
-            <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>실패 코드별 건수</div>
+            <div style={{ marginTop: 12, fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-muted)" }}>실패 코드별 건수</div>
             {u.failureCodes.length === 0 ? (
               <p style={empty}>이 기간에 실패가 없습니다.</p>
             ) : (
@@ -281,7 +282,7 @@ function RelayPart({ relay, days }: { relay: Data["relay"]; days: number }) {
 
             {u.recentFailures.length > 0 && (
               <>
-                <div style={{ marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>최근 실패 {u.recentFailures.length}건</div>
+                <div style={{ marginTop: 12, marginBottom: 6, fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-muted)" }}>최근 실패 {u.recentFailures.length}건</div>
                 <Table head={["시각", "코드", "상태", "경로", "걸린 시간"]} numericFrom={4}>
                   {u.recentFailures.map((f, i) => (
                     <tr key={`${f.at}-${i}`} style={rowStyle}>
@@ -367,8 +368,8 @@ function StatusCard({ title, color, label, detail, title2, mono }: View & { titl
 /* 결정 화면(DecisionsSurface)의 상태 알약과 같은 모양 */
 export function Pill({ color, label }: { color: string; label: string }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` }}>
-      <span style={{ width: 6, height: 6, borderRadius: 999, background: color }} />
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` }}>
+      <span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: color }} />
       {label}
     </span>
   );
@@ -377,10 +378,10 @@ export function Pill({ color, label }: { color: string; label: string }) {
 /* 결정 화면의 표와 같은 모양(테두리 카드 + 헤더 줄) */
 export function Table({ head, numericFrom, children }: { head: string[]; numericFrom: number; children: React.ReactNode }) {
   return (
-    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, overflowX: "auto", background: "var(--surface-card)" }}>
+    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", overflowX: "auto", background: "var(--surface-card)" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)", fontSize: 12 }}>
+          <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)" }}>
             {head.map((h, i) => (
               <th key={h} style={{ ...th, textAlign: i >= numericFrom ? "right" : "left" }}>
                 {h}
@@ -411,9 +412,5 @@ export const th: CSSProperties = { padding: "8px 12px", fontWeight: 600, whiteSp
 export const td: CSSProperties = { padding: "8px 12px", verticalAlign: "middle", color: "var(--text-body)" };
 export const tdNum: CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
 export const rowStyle: CSSProperties = { borderBottom: "1px solid var(--border-subtle)" };
-export const hint: CSSProperties = { fontSize: 12, color: "var(--text-muted)", marginTop: 8 };
+export const hint: CSSProperties = { fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 8 };
 export const empty: CSSProperties = { ...hint, marginTop: 0 };
-export const inputStyle: CSSProperties = {
-  padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
-  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit",
-};

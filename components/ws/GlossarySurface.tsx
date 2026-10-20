@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import ExtractPanel from "./ExtractPanel";
 import { getPages } from "@/lib/pagesClient";
+import { inputStyle as inp, primaryBtn as primary } from "./ui";
 
 /* 용어집(glossary) surface — 도메인 용어. /api/glossary. 제품 공통(프로젝트 무관). */
 
@@ -101,7 +102,7 @@ export default function GlossarySurface() {
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 56px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           {open && (
-            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
+            <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
               {/* 빈 상태의 '첫 용어 추가' 로 열었을 때 바로 입력할 수 있게 */}
               <input autoFocus value={term} onChange={(e) => setTerm(e.target.value)} placeholder="용어 (예: 워크스페이스)" style={inp} />
               <textarea value={definition} onChange={(e) => setDefinition(e.target.value)} placeholder="정의" rows={2} style={{ ...inp, marginTop: 8, resize: "vertical" }} />
@@ -122,10 +123,10 @@ export default function GlossarySurface() {
               keyOf={(p) => p.term}
               renderProposal={(p) => (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-strong)" }}>{p.term}</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>{p.term}</div>
                   <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2, lineHeight: 1.55 }}>{p.definition}</div>
                   {p.status === "conflict" && p.existingDefinition && (
-                    <div style={{ fontSize: 12, color: "#E0900F", marginTop: 4 }}>기존: {p.existingDefinition}</div>
+                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "#E0900F", marginTop: 4 }}>기존: {p.existingDefinition}</div>
                   )}
                 </>
               )}
@@ -137,7 +138,7 @@ export default function GlossarySurface() {
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="tag" size={32} /></span>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>용어가 없어요</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>같은 말을 서로 다르게 쓰기 시작하면 되돌리기 어렵습니다. 직접 적어도 되고, 이미 쓴 문서가 있으면 거기서 뽑아 올 수도 있어요.</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>같은 말을 서로 다르게 쓰기 시작하면 되돌리기 어렵습니다. 직접 적어도 되고, 이미 쓴 문서가 있으면 거기서 뽑아 올 수도 있어요.</div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button style={primary} onClick={() => setOpen(true)}>첫 용어 추가</button>
                 <button className="ws-btn-soft" onClick={() => setExtractOpen(true)}><Icon name="doc" size={15} /> 문서에서 추출</button>
@@ -149,7 +150,7 @@ export default function GlossarySurface() {
                 <div key={t.id} style={{ display: "flex", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>{t.term}</div>
-                    <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 3, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{t.definition}</div>
+                    <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 3, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{t.definition}</div>
                     {t.sourcePageId && pageTitle(t.sourcePageId) && (
                       <a href={`/p/${t.sourcePageId}`} style={sourceChip}>
                         <Icon name="doc" size={11} /> 출처: {pageTitle(t.sourcePageId)}
@@ -167,6 +168,4 @@ export default function GlossarySurface() {
   );
 }
 
-const inp: CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, fontFamily: "inherit" };
-const primary: CSSProperties = { padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid transparent", background: "var(--color-primary)", color: "#fff" };
-const sourceChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, marginTop: 7, fontSize: 11.5, fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", border: "1px solid var(--border-subtle)", borderRadius: 999, padding: "2px 9px" };
+const sourceChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, marginTop: 7, fontSize: 11.5, fontWeight: 600, color: "var(--text-muted)", textDecoration: "none", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "2px 9px" };

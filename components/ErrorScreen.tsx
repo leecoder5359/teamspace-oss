@@ -46,16 +46,16 @@ export function ErrorScreen({
           maxWidth: 380,
           background: "var(--surface-card)",
           border: "1px solid var(--border-subtle)",
-          borderRadius: 20,
+          borderRadius: "var(--ds-r-xl)",
           padding: 28,
           boxShadow: "var(--shadow-sm)",
         }}
       >
         <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "var(--text-strong)" }}>{title}</h1>
-        <p style={{ margin: "6px 0 20px", fontSize: 13, lineHeight: 1.5, color: "var(--text-sub)" }}>{body}</p>
+        <p style={{ margin: "6px 0 20px", fontSize: "var(--ds-fs-md)", lineHeight: 1.5, color: "var(--text-sub)" }}>{body}</p>
         {actions && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{actions}</div>}
         {digest && (
-          <p style={{ margin: "16px 0 0", fontSize: 11, color: "var(--text-muted)" }}>오류 코드: {digest}</p>
+          <p style={{ margin: "16px 0 0", fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>오류 코드: {digest}</p>
         )}
       </div>
     </div>

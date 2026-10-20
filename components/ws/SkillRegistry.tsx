@@ -2,7 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { Pill, Table, Sub, td, tdNum, rowStyle, hint, empty, inputStyle } from "./AiRoutes";
+import { Pill, Table, Sub, td, tdNum, rowStyle, hint, empty } from "./AiRoutes";
+import { ghostBtn, inputBase as inputStyle } from "./ui";
 
 /* =====================================================================
    설정 › 스킬 레지스트리 (관리자) — GET /api/skills/registry · /diff.
@@ -126,7 +127,7 @@ export default function SkillRegistry() {
         </button>
       </div>
 
-      <p style={{ fontSize: 13, color: "var(--text-strong)", fontWeight: 600, margin: "0 0 4px" }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-strong)", fontWeight: 600, margin: "0 0 4px" }}>
         스킬 {n(s.groups)} · 사본 {n(s.copies)} · 낡은 사본 <span style={{ color: s.staleCopies ? BAD : undefined }}>{n(s.staleCopies)}</span>
         {s.differingCopies - s.staleCopies > 0 && <span style={{ fontWeight: 500, color: "var(--text-muted)" }}> · 기준본보다 새 사본 {n(s.differingCopies - s.staleCopies)}</span>}
       </p>
@@ -151,7 +152,7 @@ export default function SkillRegistry() {
       )}
       {calm.length > 0 && (
         <details open={busy.length === 0 && calm.length <= 10}>
-          <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", cursor: "pointer", marginBottom: 8 }}>사본이 모두 같은 스킬 {n(calm.length)}개</summary>
+          <summary style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-muted)", cursor: "pointer", marginBottom: 8 }}>사본이 모두 같은 스킬 {n(calm.length)}개</summary>
           <GroupTable groups={calm} open={open} setOpen={setOpen} />
         </details>
       )}
@@ -239,7 +240,7 @@ function Copies({ group }: { group: Group }) {
               {n(c.lines)}줄 · {day(c.mtime)} 수정
             </span>
             {c.status !== "canonical" && c.status !== "same" && (
-              <button type="button" onClick={() => void compare(c.id)} style={{ ...ghostBtn, padding: "3px 10px", fontSize: 12, marginLeft: "auto" }} aria-pressed={diffFor === c.id}>
+              <button type="button" onClick={() => void compare(c.id)} style={{ ...ghostBtn, padding: "3px 10px", fontSize: "var(--ds-fs-sm)", marginLeft: "auto" }} aria-pressed={diffFor === c.id}>
                 {diffFor === c.id ? "비교 닫기" : "기준본과 비교"}
               </button>
             )}
@@ -283,7 +284,7 @@ function FilterBtn({ active, onClick, label }: { active: boolean; onClick: () =>
       style={{
         ...ghostBtn,
         padding: "4px 10px",
-        fontSize: 12,
+        fontSize: "var(--ds-fs-sm)",
         background: active ? "color-mix(in srgb, var(--color-primary) 12%, var(--surface-card))" : "var(--surface-card)",
         borderColor: active ? "var(--color-primary)" : "var(--border-default)",
       }}
@@ -294,10 +295,6 @@ function FilterBtn({ active, onClick, label }: { active: boolean; onClick: () =>
 }
 
 /* 설정 화면의 ghostBtn 과 같은 모양 */
-const ghostBtn: CSSProperties = {
-  padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-  border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
-};
 /* 레슨 주입 점검의 미리보기 pre 와 같은 모양 */
 const preStyle: CSSProperties = {
   margin: 0, padding: 12, borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", fontSize: 11.5, lineHeight: 1.55,

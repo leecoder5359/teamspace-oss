@@ -115,6 +115,35 @@ describe("useBoardData", () => {
     expect(result.current.error).toBe("행을 추가하지 못했습니다.");
   });
 
+  it("quickAdd 는 행 추가가 실패하면 리마인더를 만들지 않는다(rowId 없는 스케줄 금지)", async () => {
+    const fn = mockFetch((url, init) =>
+      url === "/api/databases/db1/rows" && init?.method === "POST" ? json({ error: "권한이 없습니다." }, 403) : undefined,
+    );
+    const { result } = renderHook(() => useBoardData("db1"));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    await act(() => result.current.quickAdd("새 일", "2026-10-21T09:00"));
+    expect(fn.mock.calls.some(([u, i]) => String(u) === "/api/schedules" && i?.method === "POST")).toBe(false);
+    expect(result.current.error).toBe("권한이 없습니다.");
+  });
+
+  it("quickAdd 는 행 추가가 성공하면 그 행 id 로 리마인더를 만든다", async () => {
+    const fn = mockFetch((url, init) =>
+      url === "/api/databases/db1/rows" && init?.method === "POST"
+        ? json({ row: { id: "r2", props: { p1: "새 일" }, position: 1 } })
+        : undefined,
+    );
+    const { result } = renderHook(() => useBoardData("db1"));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    await act(() => result.current.quickAdd("새 일", "2026-10-21T09:00"));
+    const call = fn.mock.calls.find(([u, i]) => String(u) === "/api/schedules" && i?.method === "POST");
+    expect(JSON.parse(String(call![1]?.body))).toEqual({
+      remindAt: "2026-10-21T09:00",
+      text: "새 일",
+      databasePageId: "db1",
+      rowId: "r2",
+    });
+  });
+
   describe("saveViewConfig", () => {
     const VIEW_URL = "/api/databases/db1/views/v1";
     /** 뷰 PATCH 응답을 테스트가 직접 풀어 주도록 붙잡아 둔다 — 응답 전 화면 상태를 보기 위해 */

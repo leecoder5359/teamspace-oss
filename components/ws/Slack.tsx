@@ -137,7 +137,7 @@ export default function Slack() {
             margin: "12px 0",
             padding: "10px 14px",
             borderRadius: 10,
-            fontSize: 13,
+            fontSize: "var(--ds-fs-md)",
             background: msg.tone === "ok" ? "var(--color-primary-weak)" : "var(--color-danger-weak)",
             color: msg.tone === "ok" ? "var(--color-primary)" : "var(--color-danger)",
           }}
@@ -148,7 +148,7 @@ export default function Slack() {
 
       {!status.connected ? (
         <div style={{ marginTop: 16 }}>
-          <ol style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 2, paddingLeft: 18 }}>
+          <ol style={{ color: "var(--text-muted)", fontSize: "var(--ds-fs-md)", lineHeight: 2, paddingLeft: 18 }}>
             <li>api.slack.com 에서 Slack App 생성</li>
             <li>
               OAuth &amp; Permissions → 봇 스코프 <code>chat:write</code> 추가
@@ -182,7 +182,7 @@ export default function Slack() {
         </div>
       ) : (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: "var(--ds-fs-base)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
             <Icon name="check" /> <b>{status.teamName ?? status.teamId ?? "슬랙"}</b> 워크스페이스에 연결됨
           </div>
 
@@ -313,7 +313,7 @@ function NotifRules() {
               <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-sub)" }}>{EVENT_LABEL[r.event] ?? r.event}</span>
               <span style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-sub)" }}>{r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : "전역"}</span>
               <Icon name="arrowRight" size={13} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)", flex: 1, minWidth: 0 }}>{r.targetId}</span>
+              <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", flex: 1, minWidth: 0 }}>{r.targetId}</span>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--text-muted)", cursor: "pointer" }}>
                 <input type="checkbox" checked={r.enabled} onChange={() => void toggle(r)} /> 활성
               </label>
@@ -371,11 +371,11 @@ function SendLog() {
       {/* 요약 스탯 */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
         {([["오늘 전송", data.sentToday, "#12B886"], ["전체 발송", data.total, "#2F62FF"], ["전송 실패", data.failed, data.failed ? "#F0494E" : "#8B95A1"]] as [string, number, string][]).map(([l, v, c]) => (
-          <div key={l} style={{ flex: "1 1 130px", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "12px 16px", background: "var(--surface-card)", display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ width: 3, alignSelf: "stretch", borderRadius: 999, background: c }} />
+          <div key={l} style={{ flex: "1 1 130px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "12px 16px", background: "var(--surface-card)", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ width: 3, alignSelf: "stretch", borderRadius: "var(--ds-r-pill)", background: c }} />
             <div>
               <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-strong)", lineHeight: 1 }}>{v}</div>
-              <div style={{ fontSize: 12, color: "var(--text-sub)", marginTop: 3 }}>{l}</div>
+              <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)", marginTop: 3 }}>{l}</div>
             </div>
           </div>
         ))}
@@ -389,19 +389,19 @@ function SendLog() {
       </div>
 
       {data.logs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 32, color: "var(--text-muted)", fontSize: 13, border: "1px dashed var(--border-subtle)", borderRadius: 12 }}>아직 발송된 알림이 없어요.</div>
+        <div style={{ textAlign: "center", padding: 32, color: "var(--text-muted)", fontSize: "var(--ds-fs-md)", border: "1px dashed var(--border-subtle)", borderRadius: "var(--ds-r-md)" }}>아직 발송된 알림이 없어요.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {groups.map((g) => (
             <div key={g.key}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", padding: "0 4px 6px" }}>{dayLabel(g.items[0].createdAt)}</div>
-              <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", overflow: "hidden" }}>
+              <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-muted)", padding: "0 4px 6px" }}>{dayLabel(g.items[0].createdAt)}</div>
+              <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", overflow: "hidden" }}>
                 {g.items.map((l, i) => {
                   const failed = l.state === "failed";
                   const kc = KIND_COLOR[l.kind] ?? "#8B95A1";
                   return (
                     <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderTop: i ? "1px solid var(--border-subtle)" : "none" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, flex: "0 0 auto", background: "var(--surface-sunken)", color: "var(--text-sub)" }}><Icon name="hash" size={14} /></span>
+                      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: "var(--ds-r-sm)", flex: "0 0 auto", background: "var(--surface-sunken)", color: "var(--text-sub)" }}><Icon name="hash" size={14} /></span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-strong)" }}>{l.channel}</span>
@@ -441,13 +441,13 @@ const inputStyle: CSSProperties = {
   border: "1px solid var(--border-default)",
   background: "var(--surface-card)",
   color: "var(--text-strong)",
-  fontSize: 13,
+  fontSize: "var(--ds-fs-md)",
 };
 const baseBtn: CSSProperties = {
   marginTop: 16,
   padding: "9px 16px",
   borderRadius: 9,
-  fontSize: 13,
+  fontSize: "var(--ds-fs-md)",
   fontWeight: 600,
   cursor: "pointer",
   border: "1px solid transparent",

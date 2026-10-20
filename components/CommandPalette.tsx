@@ -56,13 +56,25 @@ export default function CommandPalette() {
           }
           return !v;
         });
-        return;
       }
-      if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // 열린 동안의 Escape 는 팔레트만 닫는다 — window 캡처 단계에서 받아 전파를 끊어
+  // 뒤에 있는 드로어·메뉴·다이얼로그의 Escape 리스너(window/document 버블)가 같이 닫히지 않게.
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => {
+      // 한글 IME 조합 중의 Escape 는 조합 취소 — 팔레트를 닫거나 전파를 막지 않는다
+      if (e.key !== "Escape" || e.isComposing) return;
+      e.stopPropagation();
+      setOpen(false);
+    };
+    window.addEventListener("keydown", onEsc, true);
+    return () => window.removeEventListener("keydown", onEsc, true);
+  }, [open]);
 
   /* ── 열릴 때 후보 적재(한 번만) ── */
   useEffect(() => {
@@ -168,14 +180,14 @@ export default function CommandPalette() {
               color: "var(--text-strong)", fontSize: 15, fontFamily: "inherit",
             }}
           />
-          <kbd style={{ fontSize: 11, color: "var(--text-muted)", border: "1px solid var(--border-subtle)", borderRadius: 5, padding: "1px 5px" }}>
+          <kbd style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", border: "1px solid var(--border-subtle)", borderRadius: 5, padding: "1px 5px" }}>
             esc
           </kbd>
         </div>
 
         <div ref={listRef} role="listbox" aria-label="이동할 곳" style={{ maxHeight: "52vh", overflowY: "auto", padding: 6 }}>
           {results.length === 0 && (
-            <div style={{ padding: "20px 12px", color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
+            <div style={{ padding: "20px 12px", color: "var(--text-muted)", fontSize: "var(--ds-fs-md)", textAlign: "center" }}>
               {loaded ? "일치하는 항목이 없습니다." : "불러오는 중…"}
             </div>
           )}
@@ -192,7 +204,7 @@ export default function CommandPalette() {
                 onClick={() => go(r.item)}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, width: "100%",
-                  padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+                  padding: "8px 10px", borderRadius: "var(--ds-r-sm)", border: "none", cursor: "pointer",
                   background: active ? "var(--surface-hover)" : "transparent",
                   color: "var(--text-body)", font: "inherit", textAlign: "left",
                 }}
@@ -214,7 +226,7 @@ export default function CommandPalette() {
           })}
         </div>
 
-        <div style={{ display: "flex", gap: 12, padding: "7px 14px", borderTop: "1px solid var(--border-subtle)", fontSize: 11, color: "var(--text-muted)" }}>
+        <div style={{ display: "flex", gap: 12, padding: "7px 14px", borderTop: "1px solid var(--border-subtle)", fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>
           <span>↑↓ 이동</span>
           <span>⏎ 열기</span>
           <span>esc 닫기</span>

@@ -314,7 +314,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
               {list.length > 0 ? (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>검색어에 맞는 규칙이 없어요</div>
-                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>등록된 규칙 {list.length}건이 검색어에 걸러졌습니다.</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>등록된 규칙 {list.length}건이 검색어에 걸러졌습니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button className="ws-btn-soft" onClick={() => setQ("")}>검색어 지우기</button>
                   </div>
@@ -322,7 +322,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
               ) : (
                 <>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀 작업규칙이 없어요</div>
-                  <div style={{ fontSize: 13, color: "var(--text-sub)", marginTop: 6 }}>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
                     규칙이 하나도 없으면 세션 시작 시 주입할 것도 없습니다. 반복해서 설명하게 되는 규범을 하나씩 승격하세요.
                     (CLI: <code>pnpm ws lesson add</code>)
                   </div>
@@ -366,7 +366,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                   <div key={l.id} style={{ ...card, gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ display: "flex", color: "var(--color-primary)" }}><Icon name="flag" size={15} /></span>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{l.title}</span>
+                      <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{l.title}</span>
                       {l.mode && l.mode !== "default" && (
                         <span
                           style={l.mode === "required" ? badge : { ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" }}
@@ -417,7 +417,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                         <Icon name="close" size={14} />
                       </button>
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text-body)", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{l.body}</div>
+                    <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{l.body}</div>
                     <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
                       수정 {new Date(l.updatedAt).toLocaleString("ko-KR")}
                       {l.keywords?.length ? <span title="메시지에 이 단어가 나오면 주입"> · 키워드: {l.keywords.join(", ")}</span> : null}
@@ -434,18 +434,18 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
 }
 
 export const card: CSSProperties = {
-  display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", borderRadius: 12,
+  display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", borderRadius: "var(--ds-r-md)",
   border: "1px solid var(--border-subtle)", background: "var(--surface-card)", marginBottom: 4,
 };
 const inp: CSSProperties = {
   padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
-  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, width: "100%",
+  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", width: "100%",
 };
 export const primaryBtn: CSSProperties = {
-  padding: "8px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+  padding: "8px 16px", borderRadius: 9, fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
   border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
 };
 export const badge: CSSProperties = {
-  fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 7,
+  fontSize: "var(--ds-fs-xs)", fontWeight: 700, padding: "2px 8px", borderRadius: 7,
   background: "rgba(47,98,255,0.12)", color: "var(--color-primary)",
 };

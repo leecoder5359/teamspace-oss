@@ -269,6 +269,20 @@ describe("loadGraph — stale-while-revalidate", () => {
     expect(prisma.page.findMany).toHaveBeenCalledTimes(2); // 새 세대는 다시 신선
   });
 
+  it("한 워크스페이스가 SWR 로만 계속 돌아도 10분 넘게 쉰 다른 워크스페이스의 원시 항목은 쓸려난다", async () => {
+    m(prisma.page.findMany).mockResolvedValue(page("제목"));
+    const other = { workspaceId: "w2", userId: "u1", role: "member" } as never;
+    await loadGraph(ctx);
+    await loadGraph(other);
+    vi.advanceTimersByTime(GRAPH_CACHE_MAX_STALE_MS / 2);
+    await loadGraph(ctx); // SWR — 백그라운드 재로드
+    await flush();
+    vi.advanceTimersByTime(GRAPH_CACHE_MAX_STALE_MS / 2 + 1);
+    expect(__graphCacheSizes().raw).toBe(2);
+    await loadGraph(ctx); // w1 은 아직 SWR 구간 — 기다리는 경로를 타지 않는다
+    expect(__graphCacheSizes()).toEqual({ raw: 1, built: 1 });
+  });
+
   it("상한(10분)을 넘긴 항목은 돌려주지 않고 다시 읽기를 기다린다", async () => {
     m(prisma.page.findMany).mockResolvedValueOnce(page("옛 제목")).mockResolvedValueOnce(page("새 제목"));
     await loadGraph(ctx);
