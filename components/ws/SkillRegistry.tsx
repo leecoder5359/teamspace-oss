@@ -167,7 +167,14 @@ function GroupTable({ groups, open, setOpen }: { groups: Group[]; open: string |
         const isOpen = open === g.key;
         return (
           <Fragment key={g.key}>
-            <tr style={{ ...rowStyle, cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : g.key)} aria-expanded={isOpen}>
+            <tr
+              style={{ ...rowStyle, cursor: "pointer" }}
+              onClick={() => setOpen(isOpen ? null : g.key)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setOpen(isOpen ? null : g.key); } }}
+              aria-expanded={isOpen}
+            >
               <td style={{ ...td, wordBreak: "break-word" }}>
                 <div style={{ display: "flex", gap: 4, fontWeight: 600, color: "var(--text-strong)" }}>
                   <span style={{ flex: "none", width: 12, color: "var(--text-muted)" }}>{isOpen ? "▾" : "▸"}</span>

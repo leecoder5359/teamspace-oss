@@ -1,4 +1,4 @@
-import { isAgentEmail } from "./agentToken";
+import { isAgentEmail } from "./agentTokenFormat";
 
 /** 멤버 목록을 사람/에이전트로 분리한다(순수, 순서 보존, 입력 불변). */
 export function splitMembers<T extends { user: { email: string } }>(

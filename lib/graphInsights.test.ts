@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { KGraph, GNode, GEdge, EdgeKind } from "./knowledgeGraph";
 import { KIND_TAG } from "./knowledgeGraph";
-import { degreeMap, hubs, communities, neighbors, subgraph, projectSlice, weakDocs, renderKnowledgeMap } from "./graphInsights";
+import { degreeMap, hubs, communities, neighbors, subgraph, projectSlice, weakDocs, renderKnowledgeMap, knowledgeMapLine } from "./graphInsights";
 
 const N = (id: string, type: GNode["type"] = "doc", projectId: string | null = null): GNode => ({ id, title: `T-${id}`, type, href: `/p/${id}`, projectId });
 const E = (from: string, to: string, kind: EdgeKind = "link"): GEdge => ({ from, to, kind, kinds: [kind], tag: KIND_TAG[kind] });
@@ -120,5 +120,15 @@ describe("graphInsights", () => {
     expect(neighbors(g, "a", 0)).toEqual(one);
     expect(neighbors(g, "a", -3)).toEqual(one);
     expect(neighbors(g, "a", Number.NaN)).toEqual(one);
+  });
+});
+
+// compact(세션 훅) 지도는 한 줄 — 허브·군집 목록은 MCP 로 본다(감사 doc cmvfg2ytk).
+describe("knowledgeMapLine", () => {
+  it("허브(연결된 문서) 수·군집 수와 MCP 안내 한 줄", () => {
+    expect(knowledgeMapLine(g)).toBe("## 지식 지도 — 허브 5 · 군집 2 (MCP graph_neighbors / pnpm ws graph)");
+  });
+  it("연결된 문서가 없어도 개수 0 으로 한 줄", () => {
+    expect(knowledgeMapLine({ nodes: [N("q")], edges: [] })).toBe("## 지식 지도 — 허브 0 · 군집 0 (MCP graph_neighbors / pnpm ws graph)");
   });
 });

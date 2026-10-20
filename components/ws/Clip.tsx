@@ -88,7 +88,7 @@ export default function Clip() {
         </div>
       )}
 
-      {status === "error" && <p style={{ fontSize: 13, color: "#D14343", marginTop: 16 }}>{err}</p>}
+      {status === "error" && <p style={{ fontSize: 13, color: "var(--color-danger)", marginTop: 16 }}>{err}</p>}
 
       {/* 북마클릿 설치 */}
       <Section title="북마클릿 설치">

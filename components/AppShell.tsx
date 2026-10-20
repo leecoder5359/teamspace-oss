@@ -12,8 +12,19 @@ import type { SidebarPage, SidebarProject } from "@/lib/pagesList";
 import { seedPages } from "@/lib/pagesClient";
 import { seedProjects } from "@/lib/projectsClient";
 import { isPacked, unpackRows, type PackedRows } from "@/lib/rowPack";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type Theme = "light" | "dark";
+
+/** 브라우저 UI 색(theme-color) — 앱 표면색 `--surface-card`(saebit.css 의 --gray-0)와 같은 값. */
+export const THEME_COLOR: Record<Theme, string> = { light: "#FFFFFF", dark: "#1E232B" };
+
+/** 앱 토글이 OS 선호를 따르지 않으므로, 미디어별 theme-color 메타를 모두 현재 앱 테마 색으로 맞춘다. */
+function applyThemeColor(theme: Theme) {
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
+    m.content = THEME_COLOR[theme];
+  });
+}
 
 export type SessionUser = {
   name: string | null;
@@ -82,12 +93,14 @@ export default function AppShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [rail, setRail] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
+  const isMobile = useIsMobile();
 
   // 마운트 시 현재 적용된 테마(레이아웃 인라인 스크립트가 설정)를 읽어온다.
   useEffect(() => {
     const current = (document.documentElement.dataset.theme as Theme) || "light";
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(current);
+    applyThemeColor(current);
     try {
       setRail(localStorage.getItem("ws-rail") === "1");
     } catch {}
@@ -97,6 +110,7 @@ export default function AppShell({
     setTheme((prev) => {
       const next: Theme = prev === "dark" ? "light" : "dark";
       document.documentElement.dataset.theme = next;
+      applyThemeColor(next);
       try {
         localStorage.setItem("ws-theme", next);
       } catch {}
@@ -116,6 +130,16 @@ export default function AppShell({
 
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
+  // 열린 드로어는 Escape 로 닫는다.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeDrawer();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen, closeDrawer]);
+
   return (
     <div
       className={`ws-shell${rail ? " rail" : ""}${drawerOpen ? " drawer-open" : ""}`}
@@ -124,6 +148,7 @@ export default function AppShell({
         className="ws-hamburger"
         onClick={() => setDrawerOpen(true)}
         aria-label="메뉴 열기"
+        aria-expanded={drawerOpen}
       >
         <Icon name="menu" size={20} />
       </button>
@@ -137,6 +162,8 @@ export default function AppShell({
           onToggleRail={toggleRail}
           onToggleTheme={toggleTheme}
           onNavigate={closeDrawer}
+          // 모바일에서 닫힌 드로어의 링크가 탭 순서·스크린리더에 남지 않게.
+          inert={isMobile && !drawerOpen}
           sessionUser={sessionUser}
           initialSidebar={initialSidebar}
         />

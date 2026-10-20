@@ -49,3 +49,11 @@ describe("Members — 에이전트 절", () => {
     expect(out).toContain("에이전트 토큰이 없어요.");
   });
 });
+
+describe("Members — 화면 제목(U-29)", () => {
+  it("<h1> 은 '멤버' 하나", () => {
+    const out = html([human("h1", "사람하나")]);
+    expect(out.match(/<h1[ >]/g)).toHaveLength(1);
+    expect(out).toMatch(/<h1[^>]*>멤버<\/h1>/);
+  });
+});

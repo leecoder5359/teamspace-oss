@@ -142,7 +142,7 @@ export default function SiteDetail({ id }: { id: string }) {
         <button className="ws-btn-soft" onClick={() => navigator.clipboard.writeText(d.url)}>링크 복사</button>
         <a className="ws-btn-soft" href={d.url} target="_blank" rel="noreferrer">미리보기</a>
       </div>
-      {msg && <pre style={{ whiteSpace: "pre-wrap", fontSize: 12.5, color: "#c0392b" }}>{msg}</pre>}
+      {msg && <pre style={{ whiteSpace: "pre-wrap", fontSize: 12.5, color: "var(--color-danger)" }}>{msg}</pre>}
 
       <h2 style={h2}>주소</h2>
       <div style={card}>

@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { parseLessonMode, parseLessonStack, type LessonMode } from "@/lib/lessonInject";
 import { recordLessonRead } from "@/lib/lessonInspect/log";
 import { normalizeTerms } from "@/lib/lessonPromptMatch";
-import { canSeeLesson, withLessonMeta, PERSONAL_NEEDS_PERSON, PERSONAL_SCOPE_CONFLICT } from "@/lib/lessonAccess";
+import { canSeeLesson, canSetSharedWithTeam, withLessonMeta, PERSONAL_NEEDS_PERSON, PERSONAL_SCOPE_CONFLICT } from "@/lib/lessonAccess";
 import { viewerPersonId } from "@/lib/viewerPerson";
 
 export const runtime = "nodejs";
@@ -25,7 +26,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ lesson: withLessonMeta(lesson) });
 }
 
-// PATCH /api/lessons/[id] { title?, body?, projectId?, stack?, personal?, mode?, keywords? }
+// PATCH /api/lessons/[id] { title?, body?, projectId?, stack?, personal?, mode?, keywords?, sharedWithTeam? }
+// sharedWithTeam = 개인 레슨의 팀원 공개 여부(주인만 — admin 도 남의 것은 403, 개인 레슨이 아니면 400).
 // keywords: "a,b" | ["a","b"] = 통째로 바꾼다, null·"" = 비운다(프롬프트 매칭 키워드).
 // 범위는 넷 중 하나: 전역(모두 null) · 프로젝트 · 스택 · 개인(personal:true → 요청한 사람, 에이전트 토큰이면 발급자).
 // 한쪽을 새로 정하면 나머지는 비운다. personal:true 를 projectId·stack 과 함께 주면 거절한다. personal:false = 개인 해제(전역으로).
@@ -46,8 +48,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     personal?: boolean;
     mode?: string;
     keywords?: string | string[] | null;
+    sharedWithTeam?: boolean;
   };
-  const data: { title?: string; body?: string; projectId?: string | null; stack?: string | null; userId?: string | null; mode?: LessonMode; keywords?: string[] } = {};
+  const data: { title?: string; body?: string; projectId?: string | null; stack?: string | null; userId?: string | null; mode?: LessonMode; keywords?: string[]; sharedWithTeam?: boolean } = {};
   if (body.title !== undefined) {
     const t = body.title.trim();
     if (!t) return NextResponse.json({ error: "title 이 비었습니다." }, { status: 400 });
@@ -82,6 +85,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!kw.ok) return NextResponse.json({ error: kw.error }, { status: 400 });
     data.keywords = kw.terms;
   }
+  if (body.sharedWithTeam !== undefined) {
+    if (typeof body.sharedWithTeam !== "boolean") return NextResponse.json({ error: "sharedWithTeam 은 true/false 입니다." }, { status: 400 });
+    if (!lesson.userId) return NextResponse.json({ error: "팀원 공개 여부는 개인 레슨에만 있습니다." }, { status: 400 });
+    if (!canSetSharedWithTeam(lesson, { personId, role: guard.role })) {
+      return NextResponse.json({ error: "팀원 공개 여부는 레슨 주인만 바꿀 수 있습니다." }, { status: 403 });
+    }
+    data.sharedWithTeam = body.sharedWithTeam;
+  }
   if (body.personal !== undefined && typeof body.personal !== "boolean") {
     return NextResponse.json({ error: "personal 은 true/false 입니다." }, { status: 400 });
   }
@@ -107,6 +118,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     data.userId = null;
   }
   const updated = await prisma.lesson.update({ where: { id }, data });
+  // 원시 그래프 캐시는 최대 10분 낡을 수 있다 — 개인 전환·프로젝트 이동은 권한이 바뀌는 쓰기라 즉시 비운다.
+  invalidateGraphCache(guard.workspaceId);
   return NextResponse.json({ lesson: withLessonMeta(updated) });
 }
 
@@ -120,6 +133,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   await prisma.lesson.delete({ where: { id } });
+  invalidateGraphCache(guard.workspaceId);
   return NextResponse.json({ ok: true });
 }
 

@@ -198,10 +198,24 @@ describe("GET /api/search 후보 조회 순서", () => {
   });
   const row = (id: string) => ({ id, title: "인증코어 " + id, markdown: "", kind: "doc", updatedAt: new Date(), projectId: null, project: null });
 
-  it("원문이 limit 을 채우면 변형 쿼리를 하지 않는다", async () => {
-    m(prisma.page.findMany).mockResolvedValue([row("a"), row("b")]);
-    await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&limit=2"));
-    expect(prisma.page.findMany).toHaveBeenCalledTimes(1);
+  it("원문 조회와 변형 조회를 동시에 시작한다(직렬로 기다리지 않음)", async () => {
+    let releaseFirst!: (v: unknown) => void;
+    m(prisma.page.findMany)
+      .mockReturnValueOnce(new Promise((r) => { releaseFirst = r; }))
+      .mockResolvedValueOnce([row("b")]);
+    const res = GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어")));
+    await vi.waitFor(() => expect(prisma.page.findMany).toHaveBeenCalledTimes(2));
+    expect(m(prisma.page.findMany).mock.calls[0][0].where.OR).toHaveLength(2); // 원문
+    expect(m(prisma.page.findMany).mock.calls[1][0].where.OR.length).toBeGreaterThan(2); // 변형
+    releaseFirst([row("a")]);
+    const j = await (await res).json();
+    expect(j.results.map((r: { id: string }) => r.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("원문이 limit 을 채우면 변형 결과를 합치지 않는다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce([row("a"), row("b")]).mockResolvedValueOnce([row("z")]);
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&limit=2"))).json();
+    expect(j.results.map((r: { id: string }) => r.id).sort()).toEqual(["a", "b"]);
   });
 
   it("모자라면 변형 OR 로 채우고 id 중복 제거", async () => {
@@ -230,9 +244,9 @@ describe("GET /api/search 변형 폴백은 필터 후 건수로 비교", () => {
     expect(j.results.map((r: { id: string }) => r.id)).toEqual(["v1"]);
   });
 
-  it("필터 통과 건수가 limit 이상이면 변형을 조회하지 않는다", async () => {
-    m(prisma.page.findMany).mockResolvedValueOnce([row("a", "p1"), row("b", "p1")]);
-    await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&projectId=p1&limit=2"));
-    expect(m(prisma.page.findMany)).toHaveBeenCalledTimes(1);
+  it("필터 통과 건수가 limit 이상이면 변형 결과를 합치지 않는다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce([row("a", "p1"), row("b", "p1")]).mockResolvedValueOnce([row("v1", "p1", "인증 코어")]);
+    const j = await (await GET(new Request("http://t/api/search?q=" + encodeURIComponent("인증코어") + "&projectId=p1&limit=2"))).json();
+    expect(j.results.map((r: { id: string }) => r.id).sort()).toEqual(["a", "b"]);
   });
 });

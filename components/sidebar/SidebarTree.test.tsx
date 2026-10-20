@@ -112,6 +112,18 @@ describe("SidebarTree 우클릭 메뉴", () => {
     expect(menu.style.left).toBe("592px"); // 800 - 200 - 8
   });
 
+  it("Escape 로 컨텍스트 메뉴를 닫는다", () => {
+    const flat = [page("doc-a")];
+    const { container } = mount(
+      <SidebarTree groups={groupByProject(flat, projects)} collapsed={new Set()} ready toggle={() => {}} activeId={null}
+        createPage={async () => null} createBoard={noop} busy={false} loaded move={noop} rename={noop} remove={noop} toggleFavorite={noop} setDocType={noop} />,
+    );
+    fireEvent.contextMenu(container.querySelector('a[href="/p/doc-a"]')!.closest(".ws-tree-row")!, { clientX: 10, clientY: 10 });
+    expect(container.querySelector(".ws-ctx-menu")).not.toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(container.querySelector(".ws-ctx-menu")).toBeNull();
+  });
+
   describe("이름 변경 UI", () => {
     afterEach(cleanup);
     function open(rename: SidebarTreeProps["rename"]) {

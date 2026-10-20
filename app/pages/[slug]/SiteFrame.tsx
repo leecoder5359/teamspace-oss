@@ -6,9 +6,9 @@ export default function SiteFrame({ title, email, src, frameId, onSwitch }: { ti
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "var(--surface-page, #fff)" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", borderBottom: "1px solid var(--border-subtle, #eee)", fontSize: 13 }}>
         <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</strong>
-        <span style={{ color: "var(--text-muted, #666)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
+        <span style={{ color: "var(--text-muted, #666)", minWidth: 0, maxWidth: "40%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
         <form action={onSwitch}>
-          <button type="submit" style={{ fontSize: 12, padding: "4px 10px", borderRadius: 7, border: "1px solid var(--border-default, #ddd)", background: "transparent", cursor: "pointer" }}>
+          <button type="submit" style={{ fontSize: 12, padding: "4px 10px", minHeight: 36, borderRadius: 7, border: "1px solid var(--border-default, #ddd)", background: "transparent", cursor: "pointer" }}>
             로그아웃
           </button>
         </form>

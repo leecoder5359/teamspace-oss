@@ -18,6 +18,7 @@ export default function GlossarySurface() {
   const [term, setTerm] = useState("");
   const [definition, setDefinition] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const [extractOpen, setExtractOpen] = useState(false);
   // pages 는 추출 패널이 아니라 목록의 '출처' 칩(제목 표시)에 쓴다 — 패널은 스스로 문서를 읽어온다.
@@ -46,8 +47,13 @@ export default function GlossarySurface() {
   async function create() {
     if (!term.trim() || !definition.trim()) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/glossary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ term, definition }) });
+      const res = await fetch("/api/glossary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ term, definition }) });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "저장하지 못했습니다.");
+        return;
+      }
       setTerm(""); setDefinition(""); setOpen(false);
       await load();
     } finally {
@@ -56,8 +62,10 @@ export default function GlossarySurface() {
   }
   async function remove(id: string) {
     setBusy(true);
+    setErr(null);
     try {
-      await fetch(`/api/glossary/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/glossary/${id}`, { method: "DELETE" });
+      if (!res.ok) setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "삭제하지 못했습니다.");
       await load();
     } finally {
       setBusy(false);
@@ -104,6 +112,7 @@ export default function GlossarySurface() {
               </div>
             </div>
           )}
+          {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>{err}</div>}
           {extractOpen && (
             <ExtractPanel<Proposal>
               label="문서에서 용어 추출 (AI)"

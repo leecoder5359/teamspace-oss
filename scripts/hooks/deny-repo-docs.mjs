@@ -9,6 +9,11 @@
  * 등록: .claude/settings.json → hooks.PreToolUse (matcher: Write|Edit|MultiEdit|NotebookEdit)
  * 전역 사본: ~/.claude/hooks/deny-repo-docs.mjs (모든 레포에 적용)
  * 테스트: scripts/hooks/deny-repo-docs.test.ts (vitest)
+ *
+ * 개인 메모리 가드(결정 cmvexcqfq): ~/.claude/projects/<프로젝트>/memory/ 는 .claude/ 허용보다 먼저 본다.
+ * - project-*.md 는 어떤 도구로든 막는다(memory/archive/ 아래는 예외).
+ * - MEMORY.md 는 Write 의 content 가 6,000자를 넘으면 막는다. Edit·MultiEdit 는 결과 크기를
+ *   알 수 없어 그대로 둔다.
  */
 
 const ALLOWED_BASENAMES = new Set([
@@ -41,12 +46,44 @@ const DENY_PATTERNS = [
   { re: /(^|\/)plans?\/.+\.(md|mdx)$/, what: "플랜 문서" },
 ];
 
+const MEMORY_DIR = /(^|\/)\.claude\/projects\/[^/]+\/memory\/(.+)$/;
+const MEMORY_INDEX_MAX = 6000;
+
+/**
+ * 개인 메모리 경로 판정. 메모리 경로가 아니거나 문제없으면 null.
+ * @param {string} filePath
+ * @param {{toolName?: string, content?: string}} opts
+ * @returns {{deny: true, reason: string}|null}
+ */
+function decideMemory(filePath, { toolName, content }) {
+  const rel = filePath.match(MEMORY_DIR)?.[2];
+  if (!rel) return null;
+  const base = rel.split("/").pop() ?? "";
+  if (/^project-.*\.md$/.test(base) && !rel.startsWith("archive/")) {
+    return {
+      deny: true,
+      reason:
+        "프로젝트 기록은 개인 메모리가 아니라 TeamSpace 에 둔다(결정 cmvexcqfq) — 함정은 pnpm ws lesson add --project … --mode ondemand --keywords …, 상태·시작점은 프로젝트 doc(트랙 노트), 결정은 decision add.",
+    };
+  }
+  if (rel === "MEMORY.md" && toolName === "Write" && typeof content === "string" && content.length > MEMORY_INDEX_MAX) {
+    return {
+      deny: true,
+      reason: `MEMORY.md 는 한 줄 포인터만 — 6,000자 상한(지금 ${content.length}자). 메인·모든 서브에이전트에 매번 실린다. 프로젝트 기록은 TeamSpace 로.`,
+    };
+  }
+  return null;
+}
+
 /**
  * @param {string|undefined} filePath
+ * @param {{toolName?: string, content?: string}} [opts] PreToolUse 의 tool_name·tool_input.content
  * @returns {{deny: boolean, reason?: string}}
  */
-export function decide(filePath) {
+export function decide(filePath, opts = {}) {
   if (!filePath) return { deny: false };
+  const memory = decideMemory(filePath, opts);
+  if (memory) return memory;
   const base = filePath.split("/").pop() ?? "";
   if (ALLOWED_BASENAMES.has(base)) return { deny: false };
   if (ALLOW_PATTERNS.some((re) => re.test(filePath))) return { deny: false };
@@ -82,7 +119,7 @@ async function main() {
     return; // 페이로드 파싱 실패 시 간섭하지 않는다.
   }
   const filePath = input?.tool_input?.file_path ?? input?.tool_input?.notebook_path;
-  const d = decide(filePath);
+  const d = decide(filePath, { toolName: input?.tool_name, content: input?.tool_input?.content });
   if (!d.deny) return;
   process.stdout.write(
     JSON.stringify({

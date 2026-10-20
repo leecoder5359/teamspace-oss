@@ -1,7 +1,7 @@
 /* =====================================================================
    세션 컨텍스트 brief 모드(순수) — SessionStart 훅이 resume·compact 때 쓰는 요약.
 
-   새 세션(startup·clear)은 compact 컨텍스트(~9KB)를 받는다. 그런데 이어가기(resume)·
+   새 세션(startup·clear)은 compact 컨텍스트(~7KB, 2026-10-20 전엔 ~9KB)를 받는다. 그런데 이어가기(resume)·
    자동 압축(compact)마다 같은 14~17KB 가 다시 실려 대화 컨텍스트를 반복해서 먹었다.
    이어가는 세션은 이미 전체를 한 번 읽었으므로, 여기선 '지금 붙잡을 것'만 준다:
    필수·개인·프로젝트·스택 레슨 제목+id, 내 담당 + 진행 중 상위 5건, 나머지는 개수 한 줄.
@@ -58,6 +58,40 @@ function capBytes(lines: string[], budget: number, more: (n: number) => string):
   return out;
 }
 
+const mineOf = (meIds: string[]) => {
+  const me = new Set(meIds.filter(Boolean));
+  return (t: BriefTask) => !!t.assignee && me.has(t.assignee);
+};
+const isInProgress = (t: BriefTask) => !!t.status && IN_PROGRESS_RE.test(t.status);
+
+/** compact 태스크 순서 — brief 와 같은 판정: 내 담당(진행 중 먼저) → 그 밖의 진행 중 → 나머지. 묶음 안은 원래 순서, 새 배열. */
+export function sortTasksForContext<T extends BriefTask>(tasks: T[], meIds: string[]): T[] {
+  const isMine = mineOf(meIds);
+  const rank = (t: T) => (isMine(t) ? (isInProgress(t) ? 0 : 1) : isInProgress(t) ? 2 : 3);
+  return tasks.map((t, k) => ({ t, k, r: rank(t) })).sort((a, b) => a.r - b.r || a.k - b.k).map((x) => x.t);
+}
+
+/** 태스크 묶음(brief 형식): 내 담당(진행 중 먼저) + 그 밖의 진행 중 상위 5건, 나머지는 개수와 MCP 안내.
+    두 묶음은 예산을 따로 써서 한쪽이 다른 쪽을 밀어내지 않는다. brief 와 PostToolUse 델타(lib/contextProject)가 같이 쓴다. */
+export function briefTaskLines(tasks: BriefTask[], meIds: string[]): string[] {
+  const L: string[] = [];
+  const isMine = mineOf(meIds);
+  const isInProg = isInProgress;
+  const mine = tasks.filter(isMine).sort((a, b) => Number(isInProg(b)) - Number(isInProg(a)));
+  const others = tasks.filter((t) => !isMine(t) && isInProg(t));
+  const inProg = others.slice(0, IN_PROGRESS_TOP);
+  L.push(`## 열린 태스크 ${tasks.length}건 — 내 담당 ${mine.length} · 진행 중 ${others.length + mine.filter(isInProg).length}`);
+  if (mine.length + inProg.length === 0) L.push(tasks.length ? "- (내 담당·진행 중 없음)" : "- (열린 태스크 없음)");
+  const taskLine = (t: BriefTask) => {
+    const meta = [t.status, isMine(t) ? "나" : t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
+    return `- ${gistOf(t.title, 40)}${meta ? ` — ${meta}` : ""}`;
+  };
+  L.push(...capBytes(mine.map(taskLine), TASK_BYTES / 2, (n) => `- … 내 담당 외 ${n}건`));
+  L.push(...capBytes(inProg.map(taskLine), TASK_BYTES / 2, (n) => `- … 진행 중 외 ${n}건`));
+  L.push("_나머지 태스크: MCP task_list_");
+  return L;
+}
+
 export function renderBrief(i: BriefInput): string {
   const L: string[] = [];
   L.push(`# 워크스페이스: ${i.workspaceName}${i.projectName ? ` · 프로젝트: ${i.projectName}` : ""}`);
@@ -103,22 +137,7 @@ export function renderBrief(i: BriefInput): string {
   L.push(`_전역 ${globalN}건 — MCP lesson_list · 전문은 MCP lesson_get {id}_`);
   L.push("");
 
-  // 태스크: 내 담당(진행 중 먼저) + 그 밖의 진행 중 상위 5건. 두 묶음은 예산을 따로 써서 한쪽이 다른 쪽을 밀어내지 않는다.
-  const me = new Set(i.me.filter(Boolean));
-  const isMine = (t: BriefTask) => !!t.assignee && me.has(t.assignee);
-  const isInProg = (t: BriefTask) => !!t.status && IN_PROGRESS_RE.test(t.status);
-  const mine = i.tasks.filter(isMine).sort((a, b) => Number(isInProg(b)) - Number(isInProg(a)));
-  const others = i.tasks.filter((t) => !isMine(t) && isInProg(t));
-  const inProg = others.slice(0, IN_PROGRESS_TOP);
-  L.push(`## 열린 태스크 ${i.tasks.length}건 — 내 담당 ${mine.length} · 진행 중 ${others.length + mine.filter(isInProg).length}`);
-  if (mine.length + inProg.length === 0) L.push(i.tasks.length ? "- (내 담당·진행 중 없음)" : "- (열린 태스크 없음)");
-  const taskLine = (t: BriefTask) => {
-    const meta = [t.status, isMine(t) ? "나" : t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
-    return `- ${gistOf(t.title, 40)}${meta ? ` — ${meta}` : ""}`;
-  };
-  L.push(...capBytes(mine.map(taskLine), TASK_BYTES / 2, (n) => `- … 내 담당 외 ${n}건`));
-  L.push(...capBytes(inProg.map(taskLine), TASK_BYTES / 2, (n) => `- … 진행 중 외 ${n}건`));
-  L.push("_나머지 태스크: MCP task_list_");
+  L.push(...briefTaskLines(i.tasks, i.me));
   L.push("");
 
   const c = i.counts;

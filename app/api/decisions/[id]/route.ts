@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
 
@@ -49,6 +50,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       ...projectPatch,
     },
   });
+  // 원시 그래프 캐시는 최대 10분 낡을 수 있다 — 프로젝트 이동·삭제는 권한이 바뀌는 쓰기라 즉시 비운다.
+  invalidateGraphCache(workspaceId);
   return NextResponse.json({ ok: true });
 }
 
@@ -59,5 +62,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if ("err" in guard) return guard.err;
   const { workspaceId } = guard;
   await prisma.decision.deleteMany({ where: { id, workspaceId } });
+  invalidateGraphCache(workspaceId);
   return NextResponse.json({ ok: true });
 }

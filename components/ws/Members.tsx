@@ -177,15 +177,16 @@ export default function Members({
         <span style={{ color: "var(--text-sub)", display: "flex" }}>
           <Icon name="users" size={16} />
         </span>
-        <span
+        <h1
           style={{
+            margin: 0,
             fontSize: 14,
             fontWeight: 700,
             color: "var(--text-strong)",
           }}
         >
           멤버
-        </span>
+        </h1>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
           {humans.length}명
@@ -553,5 +554,4 @@ const selectStyle: CSSProperties = {
   fontSize: 12.5,
   fontFamily: "inherit",
   fontWeight: 600,
-  outline: "none",
 };

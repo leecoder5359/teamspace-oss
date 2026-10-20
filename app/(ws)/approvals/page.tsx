@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import Approvals from "@/components/ws/Approvals";
+
+export const metadata: Metadata = { title: "승인" };
 
 export default function ApprovalsPage() {
   // Approvals 가 useSearchParams(?id= 포커스)를 쓰므로 Suspense 경계가 필요하다.

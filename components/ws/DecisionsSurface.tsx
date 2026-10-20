@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { useDialogEscape } from "@/lib/useDialogEscape";
 
 /* 결정(decisions) surface — 의사결정 기록. /api/decisions.
    디자인(docs-hub/decisions.jsx) 반영: 타임라인/표/카드 3뷰 + 상태필터 + 검색 + 상세 드로어.
@@ -29,7 +30,8 @@ const REAL = (p: string) => p && p !== "__none__";
 const projColor = (c: string) => (c === "blue" ? "#2F62FF" : c);
 const fmtDate = (s: string) => new Date(s).toLocaleDateString("ko-KR");
 
-export default function DecisionsSurface({ project }: { project: string }) {
+/** selId·onSelect: 상세 드로어에 연 결정 — 허브가 URL(?id=)과 맞추려고 들고 있다. */
+export default function DecisionsSurface({ project, selId, onSelect }: { project: string; selId: string | null; onSelect: (id: string | null) => void }) {
   const [list, setList] = useState<Decision[] | null>(null);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -37,11 +39,11 @@ export default function DecisionsSurface({ project }: { project: string }) {
   const [decision, setDecision] = useState("");
   const [status, setStatus] = useState<Status>("accepted");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const [view, setView] = useState<ViewMode>("timeline");
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | Status>("all");
-  const [selId, setSelId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const qs = REAL(project) ? `?projectId=${project}` : "";
@@ -58,12 +60,17 @@ export default function DecisionsSurface({ project }: { project: string }) {
   async function create() {
     if (!title.trim()) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/decisions", {
+      const res = await fetch("/api/decisions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: title.trim(), context, decision, status, projectId: REAL(project) ? project : undefined }),
       });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "저장하지 못했습니다.");
+        return;
+      }
       setTitle(""); setContext(""); setDecision(""); setStatus("accepted"); setOpen(false);
       await load();
     } finally {
@@ -73,8 +80,10 @@ export default function DecisionsSurface({ project }: { project: string }) {
 
   async function setStat(id: string, s: Status) {
     setBusy(true);
+    setErr(null);
     try {
-      await fetch(`/api/decisions/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: s }) });
+      const res = await fetch(`/api/decisions/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: s }) });
+      if (!res.ok) setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "저장하지 못했습니다.");
       await load();
     } finally {
       setBusy(false);
@@ -82,9 +91,14 @@ export default function DecisionsSurface({ project }: { project: string }) {
   }
   async function remove(id: string) {
     setBusy(true);
+    setErr(null);
     try {
-      await fetch(`/api/decisions/${id}`, { method: "DELETE" });
-      setSelId((cur) => (cur === id ? null : cur));
+      const res = await fetch(`/api/decisions/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "삭제하지 못했습니다.");
+        return;
+      }
+      if (selId === id) onSelect(null);
       await load();
     } finally {
       setBusy(false);
@@ -102,6 +116,8 @@ export default function DecisionsSurface({ project }: { project: string }) {
 
   if (list === null) return <div style={{ padding: 40 }} />;
   const sel = list.find((d) => d.id === selId) ?? null;
+  // 지난 생성 실패 문구가 드로어에 따라오지 않게 연다
+  const openSel = (id: string) => { onSelect(id); setErr(null); };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -143,9 +159,10 @@ export default function DecisionsSurface({ project }: { project: string }) {
                   <option value="superseded">대체됨</option>
                 </select>
                 <span style={{ flex: 1 }} />
-                <button className="ws-btn-soft" onClick={() => setOpen(false)}>취소</button>
+                <button className="ws-btn-soft" onClick={() => { setOpen(false); setErr(null); }}>취소</button>
                 <button style={primary} disabled={busy || !title.trim()} onClick={create}>저장</button>
               </div>
+              {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
             </div>
           )}
 
@@ -174,21 +191,21 @@ export default function DecisionsSurface({ project }: { project: string }) {
               )}
             </div>
           ) : view === "table" ? (
-            <DecisionTable rows={rows} onOpen={setSelId} />
+            <DecisionTable rows={rows} onOpen={openSel} />
           ) : view === "cards" ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
-              {rows.map((d) => <DecisionCard key={d.id} d={d} onOpen={() => setSelId(d.id)} />)}
+              {rows.map((d) => <DecisionCard key={d.id} d={d} onOpen={() => openSel(d.id)} />)}
             </div>
           ) : (
             <div className="ws-tl">
-              {rows.map((d) => <DecisionTimelineItem key={d.id} d={d} onOpen={() => setSelId(d.id)} />)}
+              {rows.map((d) => <DecisionTimelineItem key={d.id} d={d} onOpen={() => openSel(d.id)} />)}
             </div>
           )}
         </div>
       </div>
 
       {sel && (
-        <DecisionDetail d={sel} busy={busy} onClose={() => setSelId(null)} onStat={setStat} onRemove={remove} />
+        <DecisionDetail d={sel} busy={busy} err={err} onClose={() => { onSelect(null); setErr(null); }} onStat={setStat} onRemove={remove} />
       )}
     </div>
   );
@@ -242,7 +259,7 @@ function DecisionCard({ d, onOpen }: { d: Decision; onOpen: () => void }) {
 /* ── 표 ── */
 function DecisionTable({ rows, onOpen }: { rows: Decision[]; onOpen: (id: string) => void }) {
   return (
-    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, overflow: "hidden", background: "var(--surface-card)" }}>
+    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, overflowX: "auto", background: "var(--surface-card)" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)", fontSize: 12 }}>
@@ -253,7 +270,9 @@ function DecisionTable({ rows, onOpen }: { rows: Decision[]; onOpen: (id: string
           {rows.map((d) => {
             const sup = d.status === "superseded";
             return (
-              <tr key={d.id} className="ws-listrow" onClick={() => onOpen(d.id)} style={{ cursor: "pointer", borderBottom: "1px solid var(--border-subtle)" }}>
+              <tr key={d.id} className="ws-listrow" onClick={() => onOpen(d.id)} role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(d.id); } }}
+                style={{ cursor: "pointer", borderBottom: "1px solid var(--border-subtle)" }}>
                 <td style={{ ...td, fontWeight: 600, color: "var(--text-strong)", textDecoration: sup ? "line-through" : "none", textDecorationColor: "var(--border-default)" }}>{d.title}</td>
                 <td style={td}><StatusPill status={d.status} /></td>
                 <td style={{ ...td, color: "var(--text-sub)" }}>{d.project ? <ProjTag p={d.project} /> : "—"}</td>
@@ -268,19 +287,21 @@ function DecisionTable({ rows, onOpen }: { rows: Decision[]; onOpen: (id: string
 }
 
 /* ── 상세 드로어 ── */
-function DecisionDetail({ d, busy, onClose, onStat, onRemove }: { d: Decision; busy: boolean; onClose: () => void; onStat: (id: string, s: Status) => void; onRemove: (id: string) => void }) {
+function DecisionDetail({ d, busy, err, onClose, onStat, onRemove }: { d: Decision; busy: boolean; err: string | null; onClose: () => void; onStat: (id: string, s: Status) => void; onRemove: (id: string) => void }) {
+  const titleId = useId();
+  const closeRef = useDialogEscape(true, onClose);
   return (
     <div className="ws-drawer-wrap">
       <div className="ws-scrim" onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(25,31,40,0.40)" }} />
-      <aside className="ws-drawer" role="dialog" aria-modal="true">
+      <aside className="ws-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="ws-drawer-head">
           <StatusPill status={d.status} />
           {d.project && <ProjTag p={d.project} />}
           <span className="ws-drawer-head-spacer" style={{ flex: 1 }} />
-          <button className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
+          <button ref={closeRef} className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
         </header>
         <div className="ws-drawer-body">
-          <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{d.title}</h2>
+          <h2 id={titleId} style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{d.title}</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-muted)", marginBottom: 18 }}>
             <Icon name="calendar" size={14} /> {fmtDate(d.decidedAt)}
           </div>
@@ -296,6 +317,7 @@ function DecisionDetail({ d, busy, onClose, onStat, onRemove }: { d: Decision; b
           {!d.context && !d.decision && (
             <p style={{ fontSize: 13, color: "var(--text-muted)" }}>본문이 없는 결정이에요.</p>
           )}
+          {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
         </div>
         <footer className="ws-drawer-foot">
           {d.status !== "accepted" && <button className="ws-btn-soft" disabled={busy} onClick={() => onStat(d.id, "accepted")}>승인으로</button>}

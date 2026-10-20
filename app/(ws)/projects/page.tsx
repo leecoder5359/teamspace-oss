@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getRenderContext } from "@/lib/renderContext";
 import { getProjectsWithStats } from "@/lib/projects";
 import Projects from "@/components/ws/Projects";
+
+export const metadata: Metadata = { title: "프로젝트" };
 
 // 서버 컴포넌트: 프로젝트 카드 지표 + 리드 선택용 멤버 목록을 페치해 클라이언트에 전달.
 export default async function ProjectsPage() {

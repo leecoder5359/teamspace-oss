@@ -116,7 +116,7 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
         </button>
       </div>
       {extracting && <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>{runningText}</p>}
-      {err && <p style={{ fontSize: 12.5, color: "#D14343", marginTop: 8 }}>{err}</p>}
+      {err && <p style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</p>}
 
       {proposals && proposals.length === 0 && !extracting && (
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 10 }}>{emptyText}</p>

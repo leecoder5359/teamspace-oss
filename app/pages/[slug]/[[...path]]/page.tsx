@@ -22,11 +22,20 @@ import SiteAddressSync from "../SiteAddressSync";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   title: "공유된 페이지",
   referrer: "no-referrer",
   robots: { index: false, follow: false },
 };
+
+/** 탭 제목 = 사이트 제목. 셸과 같은 판정(로그인 + 열람 가능)을 통과할 때만 — 초대받지 않은 사람에게 제목이 새지 않게. */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const [slug] = decodeAll([(await params).slug]) ?? [];
+  const email = slug ? (await auth())?.user?.email : null;
+  if (!slug || !email) return BASE_METADATA;
+  const access = await siteAccessBySlug(slug, email);
+  return access.result === "ok" && access.site ? { ...BASE_METADATA, title: access.site.title } : BASE_METADATA;
+}
 
 const FRAME_ID = "ts-site-frame";
 

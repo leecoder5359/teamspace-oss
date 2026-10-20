@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
+vi.mock("@/lib/graphLoad", () => ({ invalidateGraphCache: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { lesson: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() } } }));
 vi.mock("@/lib/projectRef", () => ({ resolveProjectRef: vi.fn(async (id: string | null) => ({ ok: true, projectId: id || null })) }));
 vi.mock("@/lib/lessonInspect/log", () => ({ recordLessonRead: vi.fn(async () => undefined) }));
 
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { prisma } from "@/lib/prisma";
 import { GET, PATCH, DELETE } from "./route";
 
@@ -105,5 +107,47 @@ describe("PATCH /api/lessons/[id] — personal·mode", () => {
     expect(m(prisma.lesson.update).mock.calls[2][0].data).toEqual({ keywords: [] });
     expect((await patch({ keywords: 3 })).status).toBe(400);
     expect((await patch({ keywords: "x" })).status).toBe(400);
+  });
+});
+
+describe("PATCH /api/lessons/[id] — sharedWithTeam", () => {
+  it("주인은 끄고 켤 수 있다", async () => {
+    m(requireCtx).mockResolvedValue(human("me"));
+    m(prisma.lesson.findUnique).mockResolvedValue(lesson({ userId: "me" }));
+    const res = await patch({ sharedWithTeam: false });
+    expect(res.status).toBe(200);
+    expect(m(prisma.lesson.update).mock.calls[0][0].data).toEqual({ sharedWithTeam: false });
+  });
+  it("admin 이라도 남의 개인 레슨은 403, 팀 레슨은 400, 불리언이 아니면 400", async () => {
+    m(requireCtx).mockResolvedValue(human("boss", "admin"));
+    m(prisma.lesson.findUnique).mockResolvedValue(lesson({ userId: "me" }));
+    expect((await patch({ sharedWithTeam: false })).status).toBe(403);
+    m(requireCtx).mockResolvedValue(human("me"));
+    m(prisma.lesson.findUnique).mockResolvedValue(lesson());
+    expect((await patch({ sharedWithTeam: false })).status).toBe(400);
+    m(prisma.lesson.findUnique).mockResolvedValue(lesson({ userId: "me" }));
+    expect((await patch({ sharedWithTeam: "no" })).status).toBe(400);
+    expect(prisma.lesson.update).not.toHaveBeenCalled();
+  });
+});
+
+/* 원시 그래프는 SWR 로 최대 10분 낡을 수 있다 — 개인 전환·프로젝트 이동·삭제는 즉시 비운다(리뷰 I-1). */
+describe("/api/lessons/[id] 쓰기는 그래프 캐시를 비운다", () => {
+  beforeEach(() => {
+    m(requireCtx).mockResolvedValue(human("me"));
+    m(prisma.lesson.findUnique).mockResolvedValue(lesson());
+  });
+
+  it("PATCH(개인 전환)·DELETE 는 비운다", async () => {
+    expect((await patch({ personal: true })).status).toBe(200);
+    expect(invalidateGraphCache).toHaveBeenCalledWith("w1");
+    m(invalidateGraphCache).mockClear();
+    expect((await del()).status).toBe(200);
+    expect(invalidateGraphCache).toHaveBeenCalledWith("w1");
+  });
+
+  it("거절된 PATCH(400)는 비우지 않는다", async () => {
+    expect((await patch({ mode: "nope" })).status).toBe(400);
+    expect(invalidateGraphCache).not.toHaveBeenCalled();
   });
 });

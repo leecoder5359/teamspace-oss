@@ -1,5 +1,5 @@
 /**
- * `/api/projects?archived=all` 요청 공유 — 사이드바와 브레드크럼이 문서를 열 때마다 같은 목록을 각자 받던 것을
+ * `/api/projects?archived=all&fields=sidebar` 요청 공유 — 사이드바와 브레드크럼이 문서를 열 때마다 같은 목록을 각자 받던 것을
  * 진행 중 요청 합치기 + 5초 캐시 + 서버 시드로 줄인다(lib/pagesClient 와 같은 규칙).
  * (ws) 레이아웃이 사이드바용으로 이미 읽은 프로젝트(보관 포함·접근 필터 동일)를 심으면 첫 로드는 네트워크 0회다.
  * 서버에서 import 돼도 안전하다 — window 가 없으면 시드·이벤트 등록을 건너뛴다.
@@ -16,7 +16,7 @@ let invalidatedAt = 0;
 function startFetch(fresh: boolean): Promise<ClientProject[] | null> {
   const p: Promise<ClientProject[] | null> = (async () => {
     try {
-      const res = await fetch("/api/projects?archived=all", { cache: "no-store" });
+      const res = await fetch("/api/projects?archived=all&fields=sidebar", { cache: "no-store" }); // 지표 없는 가벼운 경로
       if (!res.ok) return null;
       const body = (await res.json()) as { projects: { id: string; name: string; archivedAt?: string | null }[] };
       return body.projects.map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt != null }));

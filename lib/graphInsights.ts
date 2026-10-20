@@ -132,6 +132,11 @@ export function weakDocs(g: KGraph): GNode[] {
 
 const clip = (t: string, max = 40) => (t.length > max ? `${t.slice(0, max - 1)}…` : t);
 
+/** compact(세션 훅)용 지식 지도 한 줄 — 허브(연결된 문서) 수·군집 수와 MCP 안내. 목록은 필요할 때 MCP 로 본다. */
+export function knowledgeMapLine(g: KGraph): string {
+  return `## 지식 지도 — 허브 ${hubs(g, Infinity).length} · 군집 ${communities(g).length} (MCP graph_neighbors / pnpm ws graph)`;
+}
+
 export function renderKnowledgeMap(g: KGraph, opts: { hubN: number; commN: number }): string[] {
   const L = ["## 지식 지도"];
   const h = hubs(g, opts.hubN);

@@ -910,9 +910,16 @@ model Lesson {
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // 개인 레슨일 때만 의미: true(기본) = 팀원 레슨 탭에 보인다(목록에서 보일 뿐 — 주입은 여전히 주인 것만).
+  sharedWithTeam Boolean @default(true)
+  // 가져온 레슨의 원본 id(FK 없음 — 원본이 지워져도 남는다). "가져옴" 표시·중복 가져오기 방지. 복사본은 팀원 탭에 다시 나오지 않는다.
+  copiedFromId   String?
 
   @@index([workspaceId, projectId])
   @@index([workspaceId, userId])
+  // 같은 원본을 같은 사람이 두 번 가져오지 못하게(동시 요청 경쟁 포함). NULL 은 서로 다르므로 일반 레슨엔 영향 없음.
+  // 스키마에 선언해 둔다 — raw SQL 로만 만든 인덱스는 다음 migrate dev 가 지운다(레슨 cmskkzq6d).
+  @@unique([workspaceId, userId, copiedFromId])
 }
 
 // ---------- LLM Job Queue (비동기 LLM 작업) ----------

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { HygieneError, revertHygieneRun } from "@/lib/lessonHygiene/service";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ runId: string
   if ("err" in guard) return guard.err;
   try {
     const r = await revertHygieneRun(guard.workspaceId, runId);
+    invalidateGraphCache(guard.workspaceId); // 지운 레슨 재생성·범위 복원 — 그래프 캐시를 즉시 비운다
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {
     if (e instanceof HygieneError) return NextResponse.json({ error: e.message }, { status: e.status });

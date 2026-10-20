@@ -106,6 +106,12 @@ describe("NAV_COMMANDS", () => {
     }
   });
 
+  it("사이드바의 레슨·퍼블리시 화면도 팔레트로 연다(U-19)", () => {
+    const byHref = new Map(NAV_COMMANDS.map((c) => [c.href, c.title]));
+    expect(byHref.get("/lessons")).toBe("레슨");
+    expect(byHref.get("/sites")).toBe("퍼블리시(사이트)");
+  });
+
   it("id 가 겹치지 않는다", () => {
     const ids = NAV_COMMANDS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { useDialogEscape } from "@/lib/useDialogEscape";
 import ExtractPanel from "./ExtractPanel";
 
 /* QA surface — 테스트 시나리오. /api/qa.
@@ -62,6 +63,8 @@ export default function QaSurface({ project }: { project: string }) {
   async function remove(id: string) { setBusy(true); try { await fetch(`/api/qa/${id}`, { method: "DELETE" }); setSelId((c) => (c === id ? null : c)); await load(); } finally { setBusy(false); } }
 
   const rows = useMemo(() => (list ?? []).filter((q) => filter === "all" || q.status === filter), [list, filter]);
+  const titleId = useId();
+  const closeRef = useDialogEscape(selId !== null, () => setSelId(null));
   if (list === null) return <div style={{ padding: 40 }} />;
   const sel = list.find((q) => q.id === selId) ?? null;
 
@@ -171,14 +174,14 @@ export default function QaSurface({ project }: { project: string }) {
       {sel && (
         <div className="ws-drawer-wrap">
           <div className="ws-scrim" onClick={() => setSelId(null)} style={{ position: "absolute", inset: 0, background: "rgba(25,31,40,0.40)" }} />
-          <aside className="ws-drawer" role="dialog" aria-modal="true">
+          <aside className="ws-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <header className="ws-drawer-head">
               <span style={pill(ST[sel.status].color)}><span style={{ width: 6, height: 6, borderRadius: 999, background: ST[sel.status].color }} />{ST[sel.status].label}</span>
               <span className="ws-drawer-head-spacer" style={{ flex: 1 }} />
-              <button className="ws-icon-btn" onClick={() => setSelId(null)} title="닫기"><Icon name="close" size={18} /></button>
+              <button ref={closeRef} className="ws-icon-btn" onClick={() => setSelId(null)} title="닫기"><Icon name="close" size={18} /></button>
             </header>
             <div className="ws-drawer-body">
-              <h2 style={{ margin: "0 0 14px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
+              <h2 id={titleId} style={{ margin: "0 0 14px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
               {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
               <Sect label="단계">{sel.steps ? <pre style={prose}>{sel.steps}</pre> : <p style={{ ...prose, color: "var(--text-muted)" }}>단계가 없어요.</p>}</Sect>
               <Sect label="기대 결과">{sel.expected ? <pre style={prose}>{sel.expected}</pre> : <p style={{ ...prose, color: "var(--text-muted)" }}>기대 결과가 없어요.</p>}</Sect>

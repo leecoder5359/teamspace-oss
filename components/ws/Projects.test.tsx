@@ -55,3 +55,13 @@ describe("Projects — 보관", () => {
     expect(JSON.parse(String(init.body))).toEqual({ archived: true });
   });
 });
+
+describe("Projects — 화면 제목(U-29)", () => {
+  it("<h1> 은 '프로젝트' 하나", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ projects: [active] }) })));
+    const { container } = render(<Projects initialProjects={[active]} members={[]} />);
+    const h1s = container.querySelectorAll("h1");
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0].textContent).toBe("프로젝트");
+  });
+});

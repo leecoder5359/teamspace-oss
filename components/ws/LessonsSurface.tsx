@@ -20,6 +20,11 @@ type Lesson = {
   keywords?: string[];
   createdById: string | null;
   updatedAt: string;
+  /** 개인 레슨의 팀원 공개 여부(scope=mine) */
+  sharedWithTeam?: boolean;
+  copiedFromId?: string | null;
+  /** 팀원에게서 가져온 복사본의 출처(scope=mine) — 원본이 지워졌으면 deleted */
+  copiedFrom?: { id: string; authorName: string | null; deleted: boolean } | null;
 };
 
 type Proposal = {
@@ -43,14 +48,15 @@ const MODE_HINT: Record<Mode, string> = {
 };
 const MODES: Mode[] = ["required", "default", "ondemand"];
 
-export default function LessonsSurface({ project }: { project: string }) {
+/** scope: team = 팀 레슨(개인 제외) · mine = 내 개인 레슨(/lessons 의 탭) */
+export default function LessonsSurface({ project, scope = "team" }: { project: string; scope?: "team" | "mine" }) {
+  const isMine = scope === "mine";
   const [list, setList] = useState<Lesson[] | null>(null);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [scopeProject, setScopeProject] = useState(false);
-  const [personal, setPersonal] = useState(false);
   const [mode, setMode] = useState<Mode>("default");
   const [keywords, setKeywords] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
@@ -66,16 +72,18 @@ export default function LessonsSurface({ project }: { project: string }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
-    const qs = REAL(project) ? `?projectId=${project}` : "";
+    const qs = new URLSearchParams({ scope });
+    if (REAL(project)) qs.set("projectId", project);
     const [res, pRes, wRes] = await Promise.all([
-      fetch(`/api/lessons${qs}`, { cache: "no-store" }),
-      fetch("/api/proposals?status=pending", { cache: "no-store" }),
+      fetch(`/api/lessons?${qs}`, { cache: "no-store" }),
+      // 승격 대기 제안은 팀 레슨 탭에서만
+      scope === "team" ? fetch("/api/proposals?status=pending", { cache: "no-store" }) : null,
       fetch("/api/workspace", { cache: "no-store" }),
     ]);
     if (res.ok) setList(((await res.json()) as { lessons: Lesson[] }).lessons);
-    if (pRes.ok) setPending(((await pRes.json()) as { proposals: Proposal[] }).proposals);
+    if (pRes?.ok) setPending(((await pRes.json()) as { proposals: Proposal[] }).proposals);
     if (wRes.ok) setIsAdmin(((await wRes.json()) as { role: string | null }).role === "admin");
-  }, [project]);
+  }, [project, scope]);
 
   async function review(id: string, action: "approve" | "reject") {
     if (busy) return;
@@ -108,8 +116,9 @@ export default function LessonsSurface({ project }: { project: string }) {
         body: JSON.stringify({
           title: title.trim(),
           body: body.trim(),
-          projectId: !personal && scopeProject && REAL(project) ? project : undefined,
-          ...(personal ? { personal: true } : {}),
+          projectId: !isMine && scopeProject && REAL(project) ? project : undefined,
+          // 개인 레슨은 내 레슨 탭에서만 만든다
+          ...(isMine ? { personal: true } : {}),
           mode,
           ...(keywords.trim() ? { keywords } : {}),
         }),
@@ -121,7 +130,6 @@ export default function LessonsSurface({ project }: { project: string }) {
       setTitle("");
       setKeywords("");
       setBody("");
-      setPersonal(false);
       setMode("default");
       setOpen(false);
       await load();
@@ -158,6 +166,37 @@ export default function LessonsSurface({ project }: { project: string }) {
     }
   }
 
+  async function toggleShared(l: Lesson) {
+    setBusy(true);
+    try {
+      await fetch(`/api/lessons/${l.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sharedWithTeam: l.sharedWithTeam === false }),
+      });
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function promote(l: Lesson) {
+    const target = REAL(project) ? "이 프로젝트" : "전역";
+    if (!window.confirm(`"${l.title}" 을(를) ${target} 팀 레슨으로 올릴까요? 범위 안의 모든 세션에 주입됩니다.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lessons/${l.id}/promote`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: REAL(project) ? project : null }),
+      });
+      if (!res.ok) setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "올리지 못했습니다.");
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(id: string) {
     if (!window.confirm("이 규칙을 삭제할까요? 다음 세션부터 주입에서 빠집니다.")) return;
     setBusy(true);
@@ -182,7 +221,7 @@ export default function LessonsSurface({ project }: { project: string }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
         <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>
-          팀 작업규칙 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span>
+          {isMine ? "내 레슨" : "팀 작업규칙"} <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span>
         </span>
         <div className="ws-search" style={{ flex: "0 1 220px" }}>
           <span style={{ display: "flex", color: "var(--text-muted)" }}><Icon name="search" size={14} /></span>
@@ -196,10 +235,16 @@ export default function LessonsSurface({ project }: { project: string }) {
 
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px 60px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
-          <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
-            여기 등록된 규칙은 <b>모든 팀원·에이전트의 세션 시작 시 자동 주입</b>됩니다. 팀이 지켜야 할 규범·교훈을
-            승격하는 자리입니다. (CLI: <code>pnpm ws lesson add</code> · MCP: <code>lesson_add</code>)
-          </p>
+          {isMine ? (
+            <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
+              나와 내가 발급한 에이전트 토큰의 세션에만 주입됩니다. 공개된 것은 팀원이 둘러보고 가져갈 수 있습니다(주입은 안 됨).
+            </p>
+          ) : (
+            <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
+              여기 등록된 규칙은 <b>모든 팀원·에이전트의 세션 시작 시 자동 주입</b>됩니다. 팀이 지켜야 할 규범·교훈을
+              승격하는 자리입니다. (CLI: <code>pnpm ws lesson add</code> · MCP: <code>lesson_add</code>)
+            </p>
+          )}
 
           {pending.length > 0 && (
             <div style={{ ...card, borderColor: "var(--color-primary)", marginBottom: 14 }}>
@@ -243,18 +288,14 @@ export default function LessonsSurface({ project }: { project: string }) {
                 aria-label="키워드"
                 style={inp}
               />
-              {err && <div style={{ fontSize: 12.5, color: "#C0392B" }}>{err}</div>}
+              {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                {REAL(project) && (
+                {!isMine && REAL(project) && (
                   <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
-                    <input type="checkbox" checked={scopeProject && !personal} disabled={personal} onChange={(e) => setScopeProject(e.target.checked)} />
+                    <input type="checkbox" checked={scopeProject} onChange={(e) => setScopeProject(e.target.checked)} />
                     이 프로젝트에만 적용
                   </label>
                 )}
-                <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입">
-                  <input type="checkbox" checked={personal} onChange={(e) => setPersonal(e.target.checked)} />
-                  나에게만(개인)
-                </label>
                 <select className="ws-db-filter" value={mode} onChange={(e) => setMode(e.target.value as Mode)} aria-label="주입 방식" title={MODE_HINT[mode]}>
                   {MODES.map((m) => (
                     <option key={m} value={m}>주입: {MODE_LABEL[m]}</option>
@@ -305,7 +346,7 @@ export default function LessonsSurface({ project }: { project: string }) {
                       aria-label="키워드"
                       style={inp}
                     />
-                    {err && <div style={{ fontSize: 12.5, color: "#C0392B" }}>{err}</div>}
+                    {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입. 끄면 전역">
                         <input type="checkbox" checked={editPersonal} onChange={(e) => setEditPersonal(e.target.checked)} />
@@ -343,6 +384,22 @@ export default function LessonsSurface({ project }: { project: string }) {
                       ) : (
                         <span style={{ ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>전역</span>
                       )}
+                      {isMine && l.sharedWithTeam === false && (
+                        <span style={{ ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>팀원에게 숨김</span>
+                      )}
+                      {isMine && l.copiedFrom && (
+                        <span style={l.copiedFrom.deleted ? { ...badge, background: "var(--surface-sunken)", color: "var(--text-muted)" } : badge}>
+                          {l.copiedFrom.deleted ? "원본 삭제됨" : l.copiedFrom.authorName ? `${l.copiedFrom.authorName} 님에게서 가져옴` : "가져옴"}
+                        </span>
+                      )}
+                      {isMine && (
+                        <button className="ws-btn-soft" disabled={busy} onClick={() => void toggleShared(l)}>
+                          {l.sharedWithTeam === false ? "팀원에게 공개" : "팀원에게 숨기기"}
+                        </button>
+                      )}
+                      {isMine && isAdmin && (
+                        <button className="ws-btn-soft" disabled={busy} onClick={() => void promote(l)}>팀 레슨으로 올리기</button>
+                      )}
                       <button className="ws-icon-btn" title="수정" onClick={() => {
                           setEditId(l.id);
                           setEditTitle(l.title);
@@ -376,7 +433,7 @@ export default function LessonsSurface({ project }: { project: string }) {
   );
 }
 
-const card: CSSProperties = {
+export const card: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", borderRadius: 12,
   border: "1px solid var(--border-subtle)", background: "var(--surface-card)", marginBottom: 4,
 };
@@ -384,11 +441,11 @@ const inp: CSSProperties = {
   padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
   background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 13, width: "100%",
 };
-const primaryBtn: CSSProperties = {
+export const primaryBtn: CSSProperties = {
   padding: "8px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
   border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
 };
-const badge: CSSProperties = {
+export const badge: CSSProperties = {
   fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 7,
   background: "rgba(47,98,255,0.12)", color: "var(--color-primary)",
 };

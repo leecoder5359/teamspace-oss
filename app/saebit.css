@@ -492,7 +492,8 @@ body {
   opacity: 0;
   transition: opacity 0.12s;
 }
-.ws-tree-row:hover .ws-row-actions {
+.ws-tree-row:hover .ws-row-actions,
+.ws-tree-row:focus-within .ws-row-actions {
   opacity: 1;
 }
 .ws-row-act {
@@ -709,7 +710,8 @@ body {
 .ws-db-search:focus,
 .ws-db-filter:focus,
 .ws-quickadd-name:focus,
-.ws-quickadd-time:focus {
+.ws-quickadd-time:focus,
+.ws-search:focus-within {
   outline: none;
   border-color: var(--ds-primary);
   box-shadow: 0 0 0 3px var(--ds-primary-weak);
@@ -1554,7 +1556,8 @@ body {
     min-height: 34px;
   }
   /* 호버로만 드러나던 것들은 터치에서 영영 안 보인다 — 항상 보이게 */
-  .ws-row-del {
+  .ws-row-del,
+  .ws-row-actions {
     opacity: 1;
   }
 }
@@ -1573,6 +1576,12 @@ body {
   .ws-skeleton {
     animation: none;
     background: var(--border-subtle);
+  }
+  .ws-drawer {
+    animation: none;
+  }
+  .ws-sidebar {
+    transition: none;
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderLessons, renderLessonsReport, buildLessonSection, lessonMinBudget, lessonBudgetFor, CONTEXT_BUDGET, LESSON_BUDGET, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, lessonApplicability, lessonScopeOf, lessonModeOf, parseLessonMode, type LessonLite } from "./lessonInject";
+import { renderLessons, renderLessonsReport, buildLessonSection, lessonMinBudget, lessonBudgetFor, CONTEXT_BUDGET, LESSON_BUDGET, gistOf, capLines, neutralizeHeadings, lessonGist, normalizeStack, parseLessonStack, lessonApplicability, lessonScopeOf, lessonModeOf, parseLessonMode, isMainOnly, renderSubagentLessons, type LessonLite } from "./lessonInject";
 import { legacyRenderLessons, legacyLessonBudget } from "./lessonInject.legacy.fixture";
 
 const L = (id: string, title: string, body: string, projectId: string | null = null) => ({ id, title, body, projectId });
@@ -374,7 +374,7 @@ describe("compact 예산 = 레슨 섹션 전체 글자 수(2026-10-11)", () => {
   });
 
   it("lessonBudgetFor — 남는 만큼(줄바꿈 1자 몫 제외), 최소값 보장", () => {
-    expect(lessonBudgetFor(2000)).toBe(CONTEXT_BUDGET - 2001);
+    expect(lessonBudgetFor(1000)).toBe(CONTEXT_BUDGET - 1001);
     expect(lessonBudgetFor(6000)).toBe(LESSON_BUDGET);
     expect(lessonBudgetFor(6000, 6500)).toBe(6500);
   });
@@ -386,5 +386,114 @@ describe("compact 예산 = 레슨 섹션 전체 글자 수(2026-10-11)", () => {
       const sec = buildLessonSection({ lessons, projectId: null, projectName: null, projectStack: [], compact: true, restChars });
       expect(restChars + 1 + sec.report.chars).toBeLessThanOrEqual(CONTEXT_BUDGET);
     }
+  });
+});
+
+// L2(2026-10-20): compact 전체 예산 9,000 → 7,000. teamspace 실측 모양(필수 13 · 개인 4 · 전역 3, 나머지 섹션은 라우트가 최소 몫만 남기고 줄인다)에서
+// 전체가 7,000 안이고 필수 13개는 모두 요약(gist) 줄로 남아야 한다.
+describe("CONTEXT_BUDGET 7000 — teamspace 규모", () => {
+  const cid = (k: string) => `cm${k.padEnd(23, "0")}`;
+  const req = Array.from({ length: 13 }, (_, k) => ({
+    id: cid(`rq${k}`), title: `필수 팀 규칙 ${k} — 실제 제목은 이 정도 길이로 길게 적는다(괄호 포함)`, body: `처방: ${"규칙 본문을 길게 적은 문장 ".repeat(15)}`, projectId: null, stack: null, mode: "required",
+  }));
+  const personal = Array.from({ length: 4 }, (_, k) => ({ id: cid(`me${k}`), title: `개인 습관 ${k} — 답변은 한국어로`, body: "처방: ".concat("개인 습관 ".repeat(20)), projectId: null, stack: null, userId: "u1" }));
+  const global = Array.from({ length: 3 }, (_, k) => ({ id: cid(`gl${k}`), title: `전역 기본 ${k}`, body: "처방: 전역 기본 규칙", projectId: null, stack: null }));
+  const lessons: LessonLite[] = [...req, ...personal, ...global];
+  it("예산 7000, 나머지가 최소 몫만 남겼을 때 전체 ≤ 7000 이고 필수 13개는 모두 gist", () => {
+    expect(CONTEXT_BUDGET).toBe(7000);
+    const scope = { lessons, projectId: "ts", projectName: "TeamSpace", projectStack: ["next"], personId: "u1" };
+    const restChars = CONTEXT_BUDGET - 1 - lessonMinBudget(scope);
+    const sec = buildLessonSection({ ...scope, compact: true, restChars });
+    expect(restChars + 1 + sec.lines.join("\n").length).toBeLessThanOrEqual(CONTEXT_BUDGET);
+    const reqStatus = sec.report.statuses.filter((s) => s.mode === "required");
+    expect(reqStatus).toHaveLength(13);
+    expect(reqStatus.every((s) => s.status === "gist")).toBe(true);
+  });
+});
+
+// L3(2026-10-20): sections=lessons(SubagentStart) — keyword `audience:main` 레슨(메인 세션 전용 규칙)은 빼고 개수만 한 줄,
+// 요청자 본인의 개인 레슨은 제목+id 줄로 싣는다. 전체는 LESSON_BUDGET 안.
+describe("renderSubagentLessons · isMainOnly", () => {
+  const S = (id: string, o: Partial<LessonLite & { keywords: string[] }> = {}) => ({ id, title: `레슨 ${id}`, body: `처방: ${id} 본문`, projectId: null, stack: null, userId: null, mode: "default", keywords: [] as string[], ...o });
+  const base = { projectId: "p1", projectName: "앱", projectStack: ["next"], personId: "u1", budget: LESSON_BUDGET };
+
+  it("isMainOnly 는 키워드 audience:main(정확히, 소문자)만", () => {
+    expect(isMainOnly({ keywords: ["audience:main"] })).toBe(true);
+    expect(isMainOnly({ keywords: ["x", "audience:main"] })).toBe(true);
+    expect(isMainOnly({ keywords: ["Audience:Main"] })).toBe(false);
+    expect(isMainOnly({ keywords: ["audience:mainly"] })).toBe(false);
+    expect(isMainOnly({ keywords: null })).toBe(false);
+    expect(isMainOnly({})).toBe(false);
+  });
+
+  it("audience:main 필수는 빠지고 '메인 전용 N건 제외' 한 줄", () => {
+    const r = renderSubagentLessons({
+      ...base,
+      lessons: [S("req", { mode: "required" }), S("main1", { mode: "required", keywords: ["audience:main"] }), S("main2", { mode: "required", keywords: ["audience:main"] })],
+    });
+    const md = r.lines.join("\n");
+    expect(md).toContain("`req`");
+    expect(md).not.toContain("`main1`");
+    expect(md).not.toContain("`main2`");
+    expect(md).toContain("메인 전용 2건 제외");
+    expect(md).not.toContain("메인 전용 필수");
+    expect(r.mainOnly).toBe(2);
+    expect(r.report.statuses.map((s) => s.id)).not.toContain("main1");
+  });
+
+  it("필수가 아닌 audience:main(이 프로젝트 기본)도 빠지고 같은 개수에 들어간다", () => {
+    const r = renderSubagentLessons({
+      ...base,
+      lessons: [S("main1", { mode: "required", keywords: ["audience:main"] }), S("mainproj", { projectId: "p1", keywords: ["audience:main"] }), S("proj", { projectId: "p1" })],
+    });
+    const md = r.lines.join("\n");
+    expect(md).not.toContain("`mainproj`");
+    expect(md).toContain("`proj`");
+    expect(md).toContain("메인 전용 2건 제외");
+    expect(r.mainOnly).toBe(2);
+  });
+
+  it("제외할 게 없으면 안내 줄도 없다", () => {
+    const md = renderSubagentLessons({ ...base, lessons: [S("req", { mode: "required" })] }).lines.join("\n");
+    expect(md).not.toContain("메인 전용");
+  });
+
+  it("범위: 필수 + 이 프로젝트 + 내 개인(제목+id) — 전역 기본·스택·다른 사람 개인·ondemand 개인은 빠진다", () => {
+    const r = renderSubagentLessons({
+      ...base,
+      lessons: [
+        S("req", { mode: "required" }),
+        S("proj", { projectId: "p1" }),
+        S("glob"),
+        S("stk", { stack: "next" }),
+        S("mine", { userId: "u1", title: "내 습관", body: "처방: 아주 긴 본문 ".repeat(10) }),
+        S("odmine", { userId: "u1", mode: "ondemand" }),
+        S("theirs", { userId: "u2" }),
+      ],
+    });
+    const md = r.lines.join("\n");
+    for (const id of ["req", "proj", "mine"]) expect(md).toContain(`\`${id}\``);
+    for (const id of ["glob", "stk", "odmine", "theirs"]) expect(md).not.toContain(`\`${id}\``);
+    expect(md).toContain("### 개인 (1)");
+    expect(md).toContain("- **내 습관** `mine`"); // 요약 없이 제목+id
+    expect(r.report.statuses.find((s) => s.id === "mine")).toMatchObject({ scope: "personal", status: "title" });
+  });
+
+  it("개인 섹션은 꼬리 안내(전문은…) 앞에 온다", () => {
+    const lines = renderSubagentLessons({ ...base, lessons: [S("req", { mode: "required" }), S("mine", { userId: "u1" })] }).lines;
+    const personal = lines.indexOf("### 개인 (1)");
+    const footer = lines.findIndex((l) => l.startsWith("_전문은"));
+    expect(personal).toBeGreaterThan(0);
+    expect(personal).toBeLessThan(footer);
+  });
+
+  it("개인·프로젝트가 많아도 전체는 LESSON_BUDGET 안, 개인은 '외 N개'", () => {
+    const many = [
+      ...Array.from({ length: 60 }, (_, k) => S(`me${k}`, { userId: "u1", title: `${"아주 긴 개인 습관 제목 ".repeat(4)}${k}` })),
+      ...Array.from({ length: 60 }, (_, k) => S(`pj${k}`, { projectId: "p1", title: `${"긴 프로젝트 규칙 ".repeat(5)}${k}`, body: `처방: ${"길게 ".repeat(60)}` })),
+    ];
+    const md = renderSubagentLessons({ ...base, lessons: many }).lines.join("\n");
+    expect(md.length).toBeLessThanOrEqual(LESSON_BUDGET);
+    expect(md).toMatch(/### 개인 \(60\)\n(- \*\*.*\n)+- … 외 \d+개/);
   });
 });

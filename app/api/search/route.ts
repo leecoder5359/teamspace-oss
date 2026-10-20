@@ -5,7 +5,7 @@ import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { loadGraph } from "@/lib/graphLoad";
 import { neighbors as graphNeighbors } from "@/lib/graphInsights";
 import { TASK_NOTE_EXCLUDE } from "@/lib/taskNotes";
-import { queryVariants } from "@/lib/searchVariants";
+import { mergeVariantRows, queryVariants } from "@/lib/searchVariants";
 import { passesFilters, rankSearch, usesTrigramIndex, type Candidate, type SearchKind } from "@/lib/searchRank";
 import { archivedPageIds } from "@/lib/pageArchive";
 import { withReq } from "@/lib/log";
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
   const wantPages = !kinds.length || kinds.includes("doc") || kinds.includes("board");
   const wantDecisions = !kinds.length || kinds.includes("decision");
 
-  // 원문부터 조회하고, limit 에 못 미칠 때만 변형 OR 로 남은 몫을 채운다 — 변형 후보가
+  // 원문과 변형 OR 를 동시에 조회하고, 원문이 limit 에 못 미칠 때만 변형으로 남은 몫을 채운다 — 변형 후보가
   // CANDIDATE_TAKE 를 채워 원문 일치를 밀어내는 일이 없게 한다. id 로 중복 제거.
   // 보관(F2): 조상이 보관된 하위 문서도 제외해야 하므로, 보관 페이지가 하나라도 있을 때만
   // 트리를 한 번 읽어 같은 집합을 만든다(대부분의 워크스페이스는 count 한 번으로 끝).
@@ -102,12 +102,10 @@ export async function GET(request: Request) {
     run: (vs: string[]) => Promise<T[]>,
     toCandidate: (r: T) => Candidate,
   ): Promise<T[]> {
-    const first = await run([q]);
+    // 직렬로 돌면 3~12자 질의가 조회 두 번을 기다린다(감사 P-2) — 변형 결과는 필요할 때만 합친다.
+    const [first, more] = await Promise.all([run([q]), extra.length ? run(extra) : Promise.resolve([])]);
     const kept = first.filter((r) => passesFilters(toCandidate(r), filters)).length;
-    if (kept >= limit || !extra.length) return first;
-    const seen = new Set(first.map((r) => r.id));
-    const more = await run(extra);
-    return [...first, ...more.filter((r) => !seen.has(r.id))];
+    return mergeVariantRows(first, more, kept >= limit);
   }
 
   const [pages, decisions] = await Promise.all([

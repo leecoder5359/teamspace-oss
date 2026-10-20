@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveProjectRef } from "@/lib/projectRef";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
 
@@ -53,5 +54,6 @@ export async function POST(request: Request) {
       status: (ST as readonly string[]).includes(b.status ?? "") ? (b.status as "open" | "mitigated" | "closed") : "open",
     },
   });
+  invalidateGraphCache(workspaceId);
   return NextResponse.json({ id: created.id });
 }

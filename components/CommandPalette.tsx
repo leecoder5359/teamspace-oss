@@ -173,7 +173,7 @@ export default function CommandPalette() {
           </kbd>
         </div>
 
-        <div ref={listRef} style={{ maxHeight: "52vh", overflowY: "auto", padding: 6 }}>
+        <div ref={listRef} role="listbox" aria-label="이동할 곳" style={{ maxHeight: "52vh", overflowY: "auto", padding: 6 }}>
           {results.length === 0 && (
             <div style={{ padding: "20px 12px", color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
               {loaded ? "일치하는 항목이 없습니다." : "불러오는 중…"}
@@ -185,6 +185,8 @@ export default function CommandPalette() {
             return (
               <button
                 key={r.item.id}
+                role="option"
+                aria-selected={active}
                 data-active={active}
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => go(r.item)}

@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import Search from "@/components/ws/Search";
+
+export const metadata: Metadata = { title: "검색" };
 
 // ?q= 딥링크는 서버에서 읽어 초기값으로 내려준다(Next 16: searchParams 는 Promise).
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {

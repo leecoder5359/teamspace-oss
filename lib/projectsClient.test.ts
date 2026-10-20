@@ -20,7 +20,7 @@ describe("projectsClient", () => {
     fetchMock.mockResolvedValue(okRes(wire));
     const [a, b] = await Promise.all([getProjects(), getProjects()]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/projects?archived=all");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/projects?archived=all&fields=sidebar"); // 지표 없는 가벼운 경로(감사 P-11)
     expect(a).toEqual([{ id: "p1", name: "One", archived: false }, { id: "p2", name: "Old", archived: true }]);
     expect(b).toBe(a);
   });

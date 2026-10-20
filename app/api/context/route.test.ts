@@ -25,10 +25,13 @@ describe("GET /api/context — 지식 지도", () => {
     m(loadGraph).mockResolvedValue({ nodes: [d("a"), d("b"), d("c")], edges: [E("a", "b"), E("a", "c")] });
   });
 
-  it("compact 에 허브가 들어간다", async () => {
+  it("compact 지도는 개수 한 줄(허브·군집 목록 없음), full 은 허브 목록 그대로", async () => {
     const md = await (await GET(new Request("http://t/api/context?compact=1"))).text();
-    expect(md).toContain("## 지식 지도");
-    expect(md).toContain("- 문서-a (연결 2) `a`");
+    expect(md).toContain("## 지식 지도 — 허브 3 · 군집 1 (MCP graph_neighbors / pnpm ws graph)");
+    expect(md).not.toContain("- 문서-a (연결 2) `a`");
+    const full = await (await GET(new Request("http://t/api/context"))).text();
+    expect(full).toContain("## 지식 지도\n");
+    expect(full).toContain("- 문서-a (연결 2) `a`");
   });
 
   it("그래프 로드가 실패해도 컨텍스트는 나간다(섹션만 생략)", async () => {
@@ -58,15 +61,15 @@ describe("GET /api/context — 지식 지도", () => {
     }
   });
 
-  it("compact 지도는 ~1200자 안으로 자르되 제목 줄은 유지한다", async () => {
+  it("compact 지도는 문서가 많아도 한 줄", async () => {
     const nodes = Array.from({ length: 80 }, (_, i) => d(`n${i}`));
     const edges = nodes.slice(1).map((n) => E("n0", n.id));
     m(loadGraph).mockResolvedValue({ nodes, edges });
     const md = await (await GET(new Request("http://t/api/context?compact=1"))).text();
     const start = md.indexOf("## 지식 지도");
     expect(start).toBeGreaterThan(-1);
-    const end = md.indexOf("\n## ", start + 5);
-    expect(md.slice(start, end === -1 ? undefined : end).length).toBeLessThanOrEqual(1300);
+    expect(md.slice(start).split("\n")[1] ?? "").not.toMatch(/^- /);
+    expect(md).toContain("## 지식 지도 — 허브 80 · 군집 1");
   });
 });
 
@@ -158,6 +161,24 @@ describe("GET /api/context — brief 현실적 fixture", () => {
     expect(md).toContain("전역 25건");
     expect(md).toContain("`cmproj0000000000000000000`");
     expect(md).not.toContain("처방"); // 레슨 본문은 brief 에 없다
+  });
+
+  // L2(감사 doc cmvfg2ytk): compact 의 문서·용어집은 개수 한 줄, 태스크는 brief 순서(내 담당 → 진행 중 → 나머지)로 ~700자.
+  it("compact: 문서·용어집은 개수+안내 한 줄, 태스크는 내 담당 먼저·~700자, 전체 ≤ 7000", async () => {
+    const md = await (await GET(new Request("http://t/api/context?compact=1&cwd=/work/banjang"))).text();
+    expect(md.length).toBeLessThanOrEqual(7000);
+    expect(md).toContain("## 문서 (47) — 목록은 MCP `doc_list`");
+    expect(md).not.toContain("- 문서 0");
+    expect(md).toContain("## 용어집 (12) — 정의는 MCP `search`");
+    expect(md).not.toContain("용어0");
+    const start = md.indexOf("## 태스크 보드");
+    const sec = md.slice(start, md.indexOf("\n## ", start + 5));
+    const lines = sec.split("\n").filter((l) => l.startsWith("- ") && !l.startsWith("- …"));
+    expect(lines[0]).toContain("이준"); // i=0 은 진행 중·이준 — 내 담당 진행 중이 맨 앞
+    const mineN = lines.filter((l) => l.includes("이준")).length;
+    expect(lines.slice(0, mineN).every((l) => l.includes("이준"))).toBe(true);
+    expect(sec.length).toBeLessThanOrEqual(700 + 120); // 제목·'외 N건' 줄 포함
+    expect(sec).toMatch(/- … 외 \d+건 \(MCP `task_list`\)/);
   });
 
   it("format=json counts 는 전체 행 수를 담는다", async () => {

@@ -125,3 +125,28 @@ describe("Inbox — 묶어 보기 기본값은 전역 미읽음 기준", { timeo
     expect(screen.getByRole("button", { name: "묶어 보기" }).getAttribute("aria-pressed")).toBe("false");
   });
 });
+
+describe("Inbox — 링크 있는 알림은 링크(U-18)", { timeout: 15_000 }, () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("link 가 있으면 <a href> 로 그리고, 누르면 읽음 처리(PATCH)한다. link 가 없으면 버튼", async () => {
+    const rows = [
+      { id: "n1", type: "mention", title: "링크 알림", link: "/p/abc", readAt: null, createdAt: "2026-10-09T00:00:00Z" },
+      { id: "n2", type: "mention", title: "링크 없는 알림", link: null, readAt: null, createdAt: "2026-10-09T00:01:00Z" },
+    ];
+    const fetchMock2 = vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method === "PATCH" ? { ok: true, json: async () => ({}) } : { ok: true, json: async () => ({ notifications: rows, unread: 2, byType: {} }) },
+    );
+    vi.stubGlobal("fetch", fetchMock2);
+    try { localStorage.setItem("ws.inbox.group", "0"); } catch { /* noop */ }
+    render(<Inbox />);
+    const link = await screen.findByRole("link", { name: /링크 알림/ });
+    expect(link.getAttribute("href")).toBe("/p/abc");
+    expect(screen.getByRole("button", { name: /링크 없는 알림/ })).toBeTruthy();
+    fireEvent.click(link);
+    await waitFor(() => expect(fetchMock2.mock.calls.some(([u, i]) => u === "/api/notifications/n1" && i?.method === "PATCH")).toBe(true));
+  });
+});

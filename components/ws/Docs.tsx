@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
@@ -15,19 +15,26 @@ import { isTaskNote } from "@/lib/taskNotes";
 import { useIsMobile } from "@/lib/useIsMobile";
 import MarkdownPreview from "../MarkdownPreview";
 import DocToc from "../DocToc";
-import DatabaseView from "../DatabaseView";
-import DecisionsSurface from "./DecisionsSurface";
-import LessonsSurface from "./LessonsSurface";
-import GlossarySurface from "./GlossarySurface";
-import ChangelogSurface from "./ChangelogSurface";
-import RisksSurface from "./RisksSurface";
-import QaSurface from "./QaSurface";
-import DataModelSurface from "./DataModelSurface";
-import DodSurface from "./DodSurface";
-import OnboardingSurface from "./OnboardingSurface";
-import GraphSurface from "./GraphSurface";
-import LintSurface from "./LintSurface";
+import { lessonsHref } from "./lessonsHref";
 import { getPages } from "@/lib/pagesClient";
+import { docsHubHref, parseDocsHubParams } from "@/lib/docsHubUrl";
+import dynamic from "next/dynamic";
+
+// 서피스는 한 번에 하나만 보인다 — 정적 import 하면 전부가 /docs 초기 JS 에 실린다. 고른 서피스만 받는다.
+// 기본 탭(mddocs)은 서피스를 그리지 않는다. ?cat= 딥링크로 열면 서버 HTML 은 스켈레톤이고 서피스는 하이드레이션 뒤
+// 받는다 — 서피스는 데이터를 어차피 클라이언트에서 읽으므로 잃는 것은 청크 한 번 받는 시간뿐이다.
+const surfaceLoading = () => <div className="ws-skeleton" style={{ flex: 1, minHeight: 240, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />;
+const DatabaseView = dynamic(() => import("../DatabaseView"), { ssr: false, loading: surfaceLoading });
+const DecisionsSurface = dynamic(() => import("./DecisionsSurface"), { ssr: false, loading: surfaceLoading });
+const GlossarySurface = dynamic(() => import("./GlossarySurface"), { ssr: false, loading: surfaceLoading });
+const ChangelogSurface = dynamic(() => import("./ChangelogSurface"), { ssr: false, loading: surfaceLoading });
+const RisksSurface = dynamic(() => import("./RisksSurface"), { ssr: false, loading: surfaceLoading });
+const QaSurface = dynamic(() => import("./QaSurface"), { ssr: false, loading: surfaceLoading });
+const DataModelSurface = dynamic(() => import("./DataModelSurface"), { ssr: false, loading: surfaceLoading });
+const DodSurface = dynamic(() => import("./DodSurface"), { ssr: false, loading: surfaceLoading });
+const OnboardingSurface = dynamic(() => import("./OnboardingSurface"), { ssr: false, loading: surfaceLoading });
+const GraphSurface = dynamic(() => import("./GraphSurface"), { ssr: false, loading: surfaceLoading });
+const LintSurface = dynamic(() => import("./LintSurface"), { ssr: false, loading: surfaceLoading });
 
 /* 문서 허브 (design app/docs.jsx 포팅) — 카테고리 레일 + 프로젝트 전환기 + surface.
    '문서'(mddocs) 카테고리는 file-first Page 데이터로 2-pane 동작.
@@ -54,7 +61,7 @@ type Cat = { key: string; label: string; sub: string; icon: IconName; color: str
 const DOC_CATS: Cat[] = [
   { key: "mddocs", label: "문서", sub: "기획·회의록·가이드", icon: "doc", color: "#2F62FF", scope: "project" },
   { key: "decisions", label: "결정", sub: "의사결정 기록", icon: "flag", color: "#7165E3", scope: "project" },
-  { key: "lessons", label: "팀 작업규칙", sub: "레슨 — 매 세션 자동 주입", icon: "check", color: "#F5A623", scope: "project" },
+  { key: "lessons", label: "팀 작업규칙", sub: "레슨 — 사이드바 › 레슨으로 이동", icon: "check", color: "#F5A623", scope: "project" },
   { key: "qa", label: "QA", sub: "테스트 시나리오", icon: "comment", color: "#12B886", scope: "project" },
   { key: "risks", label: "리스크", sub: "위험·이슈", icon: "alert", color: "#F0494E", scope: "project" },
   { key: "datamodel", label: "데이터 모델", sub: "엔티티·관계", icon: "table", color: "#2F62FF", scope: "common" },
@@ -81,7 +88,17 @@ function fmtEditedLong(value: string): string {
 /* ---------- 문서 행 ---------- */
 function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocItem) => void; dupCount?: number }) {
   return (
-    <div className="ws-doc-row" onClick={() => onOpen(doc)} role="button" tabIndex={0}>
+    <div
+      className="ws-doc-row"
+      onClick={() => onOpen(doc)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        onOpen(doc);
+      }}
+    >
       <div className="ws-doc-ico">
         <Icon name="doc" size={19} />
       </div>
@@ -651,7 +668,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
           </h1>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 18 }}>마지막 수정 {fmtEditedLong(doc.updatedAt)}</div>
           {archiveErr && (
-            <div role="alert" style={{ fontSize: 12.5, color: "var(--danger, #c0392b)", marginBottom: 12 }}>
+            <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>
               {archiveErr}
             </div>
           )}
@@ -965,14 +982,19 @@ function BoardPanel({
 }
 
 /* ---------- 문서 허브 ---------- */
-export default function Docs() {
+// URL(?cat=) 로 열 수 있는 탭 — 레슨은 /lessons 로 보내므로 뺀다.
+const HUB_CATS = DOC_CATS.filter((c) => c.key !== "lessons").map((c) => c.key);
+
+export default function Docs({ initialParams = {} }: { initialParams?: { cat?: string | string[]; id?: string | string[] } }) {
   const router = useRouter();
+  const [initial] = useState(() => parseDocsHubParams(initialParams, HUB_CATS));
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [active, setActive] = useState("mddocs");
+  const [active, setActive] = useState(initial.cat);
   const [project, setProject] = useState("");
-  const [selected, setSelected] = useState<DocItem | null>(null);
+  // 지금 탭에서 고른 항목 id(문서 탭=문서, 결정 탭=결정). URL ?id= 와 같은 값.
+  const [itemId, setItemId] = useState<string | null>(initial.id);
   const [creating, setCreating] = useState(false);
   const [archivedView, setArchivedView] = useState<ArchivedView>("active");
   const [showBoard, setShowBoard] = useState(true);
@@ -1040,6 +1062,33 @@ export default function Docs() {
     }
   }, [router]);
 
+  const goCat = (c: Cat) => {
+    // 레슨은 사이드바 /lessons 로 올렸다(2026-10-18) — 여기서는 그 화면으로 보낸다(지금 고른 프로젝트 유지).
+    if (c.key === "lessons") return router.push(lessonsHref(project));
+    setActive(c.key);
+    setItemId(null);
+  };
+
+  // URL → 상태: 뒤로/앞으로·같은 경로 이동(사이드바 /docs 등)으로 쿼리가 바뀌면 탭·선택을 맞춘다.
+  // 아래 replaceState 로 우리가 쓴 쿼리는 이미 상태와 같다 — 같은 값이면 React 가 갱신을 건너뛰어 되먹임이 없다.
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  useEffect(() => {
+    const sp = new URLSearchParams(query);
+    const next = parseDocsHubParams({ cat: sp.get("cat") ?? undefined, id: sp.get("id") ?? undefined }, HUB_CATS);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActive((cur) => (cur === next.cat ? cur : next.cat));
+    setItemId((cur) => (cur === next.id ? cur : next.id));
+  }, [query]);
+
+  // 탭·선택을 URL 에 반영 — Search.tsx 처럼 history.replaceState(서버 왕복 없이 Next 라우터와 동기화).
+  useEffect(() => {
+    const href = docsHubHref(active, itemId);
+    if (window.location.pathname + window.location.search !== href) window.history.replaceState(null, "", href);
+  }, [active, itemId]);
+  const selected = active === "mddocs" && itemId ? docs.find((d) => d.id === itemId) ?? null : null;
+  const openDoc = useCallback((d: DocItem) => setItemId(d.id), []);
+
   const isMobile = useIsMobile();
   const activeCat = DOC_CATS.find((c) => c.key === active)!;
   const switcherDisabled = activeCat.scope === "common";
@@ -1084,7 +1133,7 @@ export default function Docs() {
           {projectSelect}
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
             {DOC_CATS.map((c) => (
-              <CatChip key={c.key} cat={c} active={active === c.key} onGo={() => { setActive(c.key); setSelected(null); }} />
+              <CatChip key={c.key} cat={c} active={active === c.key} onGo={() => goCat(c)} />
             ))}
           </div>
         </nav>
@@ -1096,11 +1145,11 @@ export default function Docs() {
           <div style={{ flex: 1, overflowY: "auto", padding: "10px 8px" }}>
             <div style={railLabel}>프로젝트 문서</div>
             {projItems.map((c) => (
-              <CatItem key={c.key} cat={c} active={active === c.key} onGo={() => { setActive(c.key); setSelected(null); }} />
+              <CatItem key={c.key} cat={c} active={active === c.key} onGo={() => goCat(c)} />
             ))}
             <div style={{ ...railLabel, marginTop: 14 }}>제품 공통</div>
             {commonItems.map((c) => (
-              <CatItem key={c.key} cat={c} active={active === c.key} onGo={() => { setActive(c.key); setSelected(null); }} />
+              <CatItem key={c.key} cat={c} active={active === c.key} onGo={() => goCat(c)} />
             ))}
           </div>
         </nav>
@@ -1119,14 +1168,12 @@ export default function Docs() {
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {active === "mddocs" ? (
           selected ? (
-            <DocReader key={selected.id} doc={selected} docs={docs} onBack={() => setSelected(null)} onOpen={setSelected} />
+            <DocReader key={selected.id} doc={selected} docs={docs} onBack={() => setItemId(null)} onOpen={openDoc} />
           ) : (
-            <DocsList docs={docs} projects={projects} loading={loading} projectId={project} onOpen={setSelected} onCreate={onCreate} creating={creating} archivedView={archivedView} onArchivedView={(v) => { setLoading(true); setArchivedView(v); }} />
+            <DocsList docs={docs} projects={projects} loading={loading} projectId={project} onOpen={openDoc} onCreate={onCreate} creating={creating} archivedView={archivedView} onArchivedView={(v) => { setLoading(true); setArchivedView(v); }} />
           )
         ) : active === "decisions" ? (
-          <DecisionsSurface project={project} />
-        ) : active === "lessons" ? (
-          <LessonsSurface project={project} />
+          <DecisionsSurface project={project} selId={itemId} onSelect={setItemId} />
         ) : active === "risks" ? (
           <RisksSurface project={project} />
         ) : active === "qa" ? (

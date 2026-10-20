@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { useDialogEscape } from "@/lib/useDialogEscape";
 import { getPages } from "@/lib/pagesClient";
 
 /* =====================================================================
@@ -19,7 +20,7 @@ type DocPage = { id: string; title: string; kind: string; updatedAt: string };
 type Schedule = { id: string; spec: string; template: { text?: string } | null };
 
 type Scope = "deadline" | "document" | "reminder";
-type CalEvent = {
+export type CalEvent = {
   id: string;
   scope: Scope;
   date: string; // YYYY-MM-DD
@@ -281,7 +282,7 @@ function DayCell({ d, inMonth, tall, events, today, onSelect }: { d: Date; inMon
 }
 
 /* ── 이벤트 상세 모달 ── */
-function EventDetail({
+export function EventDetail({
   ev,
   databaseId,
   onClose,
@@ -295,19 +296,21 @@ function EventDetail({
   onOpenDoc: () => void;
 }) {
   const sc = SCOPES[ev.scope];
+  const titleId = useId();
+  const closeRef = useDialogEscape(true, onClose);
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(25,31,40,0.40)", zIndex: 900 }} />
-      <div role="dialog" aria-modal="true" style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 901, width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 64px)", overflow: "auto", background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 18, boxShadow: "var(--ds-shadow-lg, var(--shadow-lg))", padding: 20 }}>
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 901, width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 64px)", overflow: "auto", background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 18, boxShadow: "var(--ds-shadow-lg, var(--shadow-lg))", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 22, padding: "0 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: sc.color }} />{sc.label}
           </span>
           <span style={{ flex: 1 }} />
-          <button className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
+          <button ref={closeRef} className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
         </div>
 
-        <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>
+        <h3 id={titleId} style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>
           {ev.scope === "deadline" ? `${ev.title} 마감` : ev.title}
         </h3>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 12.5, color: "var(--text-sub)" }}>

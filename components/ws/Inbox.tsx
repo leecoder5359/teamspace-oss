@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import type { CSSProperties } from "react";
+import Link from "next/link";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
@@ -53,7 +54,6 @@ export default function Inbox() {
   // 기준은 서버의 전역 unread — 종류 칩으로 목록이 줄어도, 100건 상한에 잘려도 흔들리지 않는다.
   const [pref, setPref] = useState<boolean | null>(null);
   const [open_, setOpen] = useState<Set<string>>(new Set());
-  const router = useRouter();
   const grouped = pref ?? (items !== null && unread > GROUP_AUTO_MIN);
   const groups = useMemo(() => (grouped && items ? groupNotifications(items) : []), [grouped, items]);
   const byId = useMemo(() => new Map((items ?? []).map((n) => [n.id, n])), [items]);
@@ -94,10 +94,10 @@ export default function Inbox() {
   }, [load]);
   useAutoRefresh(load);
 
+  // 읽음 처리. 링크 있는 알림은 <Link> 가 이동을 맡고, 링크 없는 알림은 목록을 새로 받아 읽음 표시를 갱신한다.
   async function open(n: Notif) {
     if (!n.readAt) await fetch(`/api/notifications/${n.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: true }) });
-    if (n.link) router.push(n.link);
-    else void load();
+    if (!n.link) void load();
   }
 
   async function readAll() {
@@ -198,16 +198,14 @@ export default function Inbox() {
 }
 
 function Row({ n, onOpen }: { n: Notif; onOpen: (n: Notif) => void | Promise<void> }) {
-  return (
-    <button
-      onClick={() => void onOpen(n)}
-      style={{
-        display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 10,
-        border: `1px solid ${n.readAt ? "var(--border-subtle)" : "var(--color-primary)"}`,
-        background: "var(--surface-card)", cursor: "pointer", textAlign: "left",
-        opacity: n.readAt ? 0.65 : 1, font: "inherit", color: "inherit", width: "100%",
-      }}
-    >
+  const style: CSSProperties = {
+    display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 10,
+    border: `1px solid ${n.readAt ? "var(--border-subtle)" : "var(--color-primary)"}`,
+    background: "var(--surface-card)", cursor: "pointer", textAlign: "left",
+    opacity: n.readAt ? 0.65 : 1, font: "inherit", color: "inherit", width: "100%", textDecoration: "none",
+  };
+  const body = (
+    <>
       <span style={{ display: "flex", color: "var(--color-primary)" }}>
         <Icon name={TYPE_ICON[n.type] ?? "bell"} />
       </span>
@@ -216,6 +214,12 @@ function Row({ n, onOpen }: { n: Notif; onOpen: (n: Notif) => void | Promise<voi
         <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{new Date(n.createdAt).toLocaleString("ko-KR")}</div>
       </div>
       {!n.readAt && <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--color-primary)", flexShrink: 0 }} />}
-    </button>
+    </>
+  );
+  // 링크 있는 알림은 진짜 링크 — 새 탭 열기(⌘클릭)·링크 복사가 된다. 읽음 처리는 클릭 때 함께.
+  return n.link ? (
+    <Link href={n.link} onClick={() => void onOpen(n)} style={style}>{body}</Link>
+  ) : (
+    <button onClick={() => void onOpen(n)} style={style}>{body}</button>
   );
 }

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getRenderContext } from "@/lib/renderContext";
 import Dashboard from "@/components/ws/Dashboard";
+
+export const metadata: Metadata = { title: "대시보드" };
 
 // 인사말의 사용자 이름만 서버(lib/workspace 컨텍스트)에서 해석하고,
 // 실제 태스크 현황 데이터는 Dashboard(클라이언트)가 DatabaseView처럼 fetch 한다.

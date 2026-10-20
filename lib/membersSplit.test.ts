@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { splitMembers, latestTokenByUser } from "./membersSplit";
 
@@ -36,5 +37,20 @@ describe("latestTokenByUser", () => {
     const map = latestTokenByUser(rows);
     expect(map.get("u1")?.id).toBe("t2");
     expect(map.get("u2")?.id).toBe("t3");
+  });
+});
+
+describe("membersSplit 는 클라이언트 번들에 node:crypto 를 끌어오지 않는다(감사 P-4)", () => {
+  const src = (f: string) => readFileSync(new URL(`./${f}`, import.meta.url), "utf8");
+  const importsOf = (code: string) => [...code.matchAll(/^import[^;]*from\s+"([^"]+)"/gm)].map((x) => x[1]);
+
+  it("membersSplit 은 agentToken(node:crypto) 대신 엣지 안전 agentTokenFormat 을 import", () => {
+    const deps = importsOf(src("membersSplit.ts"));
+    expect(deps).toContain("./agentTokenFormat");
+    expect(deps).not.toContain("./agentToken");
+  });
+
+  it("agentTokenFormat 은 node:crypto 를 import 하지 않는다", () => {
+    expect(importsOf(src("agentTokenFormat.ts"))).not.toContain("node:crypto");
   });
 });

@@ -111,7 +111,7 @@ export default function Sites() {
             <Icon name="plus" /> 퍼블리시
           </button>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: "#c0392b", marginTop: 8 }}>{err}</div>}
+        {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
       </div>
 
       {list.length === 0 ? (
@@ -154,7 +154,7 @@ export default function Sites() {
                       <Icon name="plus" /> 초대
                     </button>
                   </div>
-                  {inviteMsg?.error && <div style={{ fontSize: 12.5, color: "#c0392b", marginTop: 8 }}>{inviteMsg.error}</div>}
+                  {inviteMsg?.error && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{inviteMsg.error}</div>}
                   {inviteMsg?.share && (
                     <div style={{ marginTop: 8, fontSize: 12.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
                       <span style={{ flex: 1, wordBreak: "break-all" }}>{inviteMsg.share}</span>

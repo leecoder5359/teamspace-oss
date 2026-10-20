@@ -95,7 +95,7 @@ MCP 가 연결돼 있으면 `site_publish {path,title?,siteId?,invites?,slug?}` 
 1. `pnpm ws site ls` 에 새 행(또는 올라간 버전)이 보이는지.
 2. 비로그인 요청이 로그인으로 넘어가는지 — 게이트가 살아 있다는 확인:
    ```bash
-   curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://teamspace.example.com/pages/<slug>
+   curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://ts.leecoder-factory.co.kr/pages/<slug>
    # 307 -> .../login?callbackUrl=%2Fpages%2F<slug> 이면 정상
    # 옛 링크 /s/<slug>/… 는 308 -> /pages/<slug>/… (판정 없이 넘기기만 한다)
    ```
@@ -103,7 +103,7 @@ MCP 가 연결돼 있으면 `site_publish {path,title?,siteId?,invites?,slug?}` 
 
 ## 5. 사용자에게 안내할 것
 
-- **링크는 외부 주소로 바꿔서 준다.** CLI 는 `http://localhost:3002/pages/<slug>` 를 출력하지만(웹 서비스 plist 에 `PUBLIC_BASE_URL` 이 없음) 사람에게는 `https://teamspace.example.com/pages/<slug>` 를 준다. 이미 나간 `/s/<slug>` 링크는 계속 열린다(→ `/pages/` 308).
+- **링크는 외부 주소로 바꿔서 준다.** CLI 는 `http://localhost:3002/pages/<slug>` 를 출력하지만(웹 서비스 plist 에 `PUBLIC_BASE_URL` 이 없음) 사람에게는 `https://ts.leecoder-factory.co.kr/pages/<slug>` 를 준다. 이미 나간 `/s/<slug>` 링크는 계속 열린다(→ `/pages/` 308).
 - **초대 메일은 자동으로 가지 않는다.** 링크를 직접 전달해야 하고, 받는 사람은 **초대한 그 이메일의 Google 계정으로 로그인**해야 열린다.
 - 초대 0명이면 워크스페이스 멤버만 볼 수 있다 — 외부인에게 보여줄 거면 이메일을 받아 `site invite`.
 - 2번 표에서 막히는 기능(저장 유지·자동 복사 등)이 페이지에 있으면 어떻게 동작하는지 한 줄로 알린다.

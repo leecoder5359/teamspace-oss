@@ -135,6 +135,8 @@ export const NAV_COMMANDS: PaletteItem[] = [
   { id: "nav:calendar", kind: "command", title: "캘린더", href: "/calendar" },
   { id: "nav:reminders", kind: "command", title: "리마인더", href: "/reminders" },
   { id: "nav:approvals", kind: "command", title: "승인", href: "/approvals" },
+  { id: "nav:lessons", kind: "command", title: "레슨", href: "/lessons" },
+  { id: "nav:sites", kind: "command", title: "퍼블리시(사이트)", href: "/sites" },
   { id: "nav:slack", kind: "command", title: "슬랙", href: "/slack" },
   { id: "nav:aiconnect", kind: "command", title: "AI 연결", href: "/aiconnect" },
   { id: "nav:members", kind: "command", title: "멤버", href: "/members" },

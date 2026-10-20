@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { useDialogEscape } from "@/lib/useDialogEscape";
 
 /* 리스크(risks) surface — 위험·이슈. /api/risks.
    디자인 반영: 상태 필터 + 행 클릭 상세 드로어(설명/심각도/상태 + 완화·종료·삭제). */
@@ -31,6 +32,7 @@ export default function RisksSurface({ project }: { project: string }) {
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<Sev>("medium");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | St>("all");
   const [selId, setSelId] = useState<string | null>(null);
 
@@ -47,16 +49,46 @@ export default function RisksSurface({ project }: { project: string }) {
   async function create() {
     if (!title.trim()) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/risks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, description, severity, projectId: REAL(project) ? project : undefined }) });
+      const res = await fetch("/api/risks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, description, severity, projectId: REAL(project) ? project : undefined }) });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "저장하지 못했습니다.");
+        return;
+      }
       setTitle(""); setDescription(""); setSeverity("medium"); setOpen(false);
       await load();
     } finally { setBusy(false); }
   }
-  async function setStat(id: string, s: St) { setBusy(true); try { await fetch(`/api/risks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: s }) }); await load(); } finally { setBusy(false); } }
-  async function remove(id: string) { setBusy(true); try { await fetch(`/api/risks/${id}`, { method: "DELETE" }); setSelId((c) => (c === id ? null : c)); await load(); } finally { setBusy(false); } }
+  async function setStat(id: string, s: St) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/risks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: s }) });
+      if (!res.ok) setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "저장하지 못했습니다.");
+      await load();
+    } finally { setBusy(false); }
+  }
+  async function remove(id: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/risks/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "삭제하지 못했습니다.");
+        return;
+      }
+      setSelId((c) => (c === id ? null : c));
+      await load();
+    } finally { setBusy(false); }
+  }
 
   const rows = useMemo(() => (list ?? []).filter((r) => filter === "all" || r.status === filter), [list, filter]);
+  const closeSel = () => { setSelId(null); setErr(null); };
+  // 지난 생성 실패 문구가 드로어에 따라오지 않게 연다
+  const openSel = (id: string) => { setSelId(id); setErr(null); };
+  const titleId = useId();
+  const closeRef = useDialogEscape(selId !== null, closeSel);
   if (list === null) return <div style={{ padding: 40 }} />;
   const sel = list.find((r) => r.id === selId) ?? null;
 
@@ -87,9 +119,10 @@ export default function RisksSurface({ project }: { project: string }) {
                   <option value="low">심각도: 낮음</option>
                 </select>
                 <span style={{ flex: 1 }} />
-                <button className="ws-btn-soft" onClick={() => setOpen(false)}>취소</button>
+                <button className="ws-btn-soft" onClick={() => { setOpen(false); setErr(null); }}>취소</button>
                 <button style={primary} disabled={busy || !title.trim()} onClick={create}>저장</button>
               </div>
+              {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
             </div>
           )}
           {rows.length === 0 ? (
@@ -118,8 +151,8 @@ export default function RisksSurface({ project }: { project: string }) {
               {rows.map((r) => {
                 const sv = SEV[r.severity], st = ST[r.status];
                 return (
-                  <div key={r.id} className="ws-listrow" onClick={() => setSelId(r.id)} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter") setSelId(r.id); }}
+                  <div key={r.id} className="ws-listrow" onClick={() => openSel(r.id)} role="button" tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter") openSel(r.id); }}
                     style={{ border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", padding: 16, cursor: "pointer" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={pill(sv.color)}>{sv.label}</span>
@@ -138,22 +171,23 @@ export default function RisksSurface({ project }: { project: string }) {
 
       {sel && (
         <div className="ws-drawer-wrap">
-          <div className="ws-scrim" onClick={() => setSelId(null)} style={{ position: "absolute", inset: 0, background: "rgba(25,31,40,0.40)" }} />
-          <aside className="ws-drawer" role="dialog" aria-modal="true">
+          <div className="ws-scrim" onClick={closeSel} style={{ position: "absolute", inset: 0, background: "rgba(25,31,40,0.40)" }} />
+          <aside className="ws-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <header className="ws-drawer-head">
               <span style={pill(SEV[sel.severity].color)}>{SEV[sel.severity].label}</span>
               <span style={pill(ST[sel.status].color)}><span style={{ width: 6, height: 6, borderRadius: 999, background: ST[sel.status].color }} />{ST[sel.status].label}</span>
               <span className="ws-drawer-head-spacer" style={{ flex: 1 }} />
-              <button className="ws-icon-btn" onClick={() => setSelId(null)} title="닫기"><Icon name="close" size={18} /></button>
+              <button ref={closeRef} className="ws-icon-btn" onClick={closeSel} title="닫기"><Icon name="close" size={18} /></button>
             </header>
             <div className="ws-drawer-body">
-              <h2 style={{ margin: "0 0 14px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
+              <h2 id={titleId} style={{ margin: "0 0 14px", fontSize: 20, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
               {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
               {sel.description ? (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>설명 / 영향
                   <p style={{ margin: "8px 0 0", fontWeight: 400, fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.description}</p>
                 </div>
               ) : <p style={{ fontSize: 13, color: "var(--text-muted)" }}>설명이 없는 리스크예요.</p>}
+              {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
             </div>
             <footer className="ws-drawer-foot">
               {sel.status !== "mitigated" && <button className="ws-btn-soft" disabled={busy} onClick={() => setStat(sel.id, "mitigated")}>완화</button>}

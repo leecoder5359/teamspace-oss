@@ -6,12 +6,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # 팀 작업 4대 규칙 (플러그인 기본값보다 우선한다)
 
-이 규칙은 어떤 스킬·플러그인(superpowers, ralph, plannotator, understand-anything 등)의 기본 동작보다 우선한다. 스킬이 아래와 다른 저장 위치·승인 채널을 지시하면 **이 규칙을 따른다**.
+필수 레슨 4건이 정본(세부·사례 포함)이며, 어떤 스킬·플러그인(superpowers·ralph·plannotator·understand-anything) 기본값보다 우선한다.
 
-1. **문서는 TeamSpace doc 으로만.** 스펙·플랜·설계·리포트·PRD·온보딩 등 모든 문서는 TeamSpace 문서 API(`pnpm ws doc new` → `PUT /api/pages/<id>`)로 저장한다. 레포/디스크에 md 생성 금지(예외: README·AGENTS.md·CLAUDE.md·SKILL.md 등 저장소 메타문서, `.claude/**`). PreToolUse 훅(`scripts/hooks/deny-repo-docs.mjs`, 전역 사본 `~/.claude/hooks/`)이 위반 쓰기를 엔진 수준에서 차단한다 — **md/mdx 는 기본 차단**이고, 허용은 저장소 메타문서(README·AGENTS.md·CLAUDE.md·SKILL.md 등)·`.claude/**`·스크래치패드뿐이다. (2026-08-07 이전엔 6개 패턴 deny-list 라 `REPORT.md` 같은 건 그냥 통과했다.) superpowers brainstorming/writing-plans 의 "docs/superpowers/... 에 저장·커밋" 단계는 이 규칙으로 대체된다 — 같은 내용을 TeamSpace doc 으로 만들고 커밋 단계는 생략한다.
-2. **진행 방향을 가르는 결정은 Slack `#workspace-confirm` 컨펌.** `scripts/slack-confirm.ts`(approvals API 래퍼 — 승인/거부 **버튼 카드**로 발송, 텍스트 답글 아님)로 발송하고 `status` 필드(approved/additional/rejected)를 폴링한다. `pnpm ws approval add --channel C000WORKSPACE` 와 동일 경로다. 채팅 승인 게이트(스킬의 "user approves?" 단계)는 사용자가 채팅에 실시간 참여 중일 때만 채팅으로, 아니면 Slack 으로. 확정된 결정은 `POST /api/decisions` 에 `accepted` 로 기록한다.
-3. **작업 슬라이스마다 TeamSpace 태스크.** 각 항목 시작 시 보드에 태스크 생성(설명 포함), 완료 시 상태 변경. 스킬 내부 체크리스트·ralph beads/prd 는 보조 수단일 뿐, 진실 원천은 TeamSpace 보드다.
-4. **리뷰·대조·감사 발견사항은 보드 이슈로 자동 등록.** 채팅 나열로 끝내지 않는다.
+1. 문서는 TeamSpace doc 으로만 — 레포에 md 금지(메타문서 예외). cmr6mbdsx0002on1yoibzeo2e
+2. 방향을 가르는 결정은 Slack #workspace-confirm 버튼 카드로 컨펌. cmr6mbdti0003on1yxmpks044
+3. 작업 슬라이스마다 보드 태스크 — 보드가 진실 원천. cmr6mbdu00004on1yc2d44uer
+4. 리뷰·대조·감사 발견사항은 보드 이슈로. cmr6mbdug0005on1yeai0tsxj
+
+집행: PreToolUse 훅 `scripts/hooks/deny-repo-docs.mjs`(md/mdx 기본 차단).
 
 # 작업사항은 퍼블릭 레포(teamspace-oss)로 동기화한다
 
@@ -44,8 +46,21 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 **`app/api/**/route.ts` 를 추가/변경하거나, 워크스페이스 데이터(프로젝트·보드·문서·결정·승인·세션·멤버 등)를 다루는 기능을 추가/변경하면, 같은 커밋에서 `SKILL.md` 와 `scripts/ws.ts`(필요시 `scripts/ws.test.ts`)를 그에 맞게 갱신한다.** (엔드포인트·페이로드·레시피가 실제 라우트와 어긋나지 않도록.) 패리티 테스트가 깨지면 동기화가 빠진 것이다.
 
-# 메모리 3층 역할 (W3 일원화)
+# 메모리 3층 역할 (2026-10-20 기준)
 
-- **TeamSpace = 팀 지식의 단일 진실 원천.** 팀이 알아야 할 규칙·교훈은 레슨(`pnpm ws lesson add`)으로, 결정은 decisions 로, 문서는 doc 으로 승격한다. 세션 시작 시 SessionStart 훅이 `/api/context?cwd=` 를 자동 주입한다(cwd→프로젝트 매핑은 `pnpm ws route-rule`). 세션을 연 레포 밖의 매핑된 프로젝트 경로를 도구로 건드리면 PostToolUse 훅(`scripts/hooks/teamspace-project-context.mjs`)이 그 프로젝트 컨텍스트를 세션당 한 번 추가 주입한다 — 반장 작업을 teamspace 세션에서 해도 반장 레슨이 들어온다.
-- **agentmemory = 로컬 원시 관찰 캐시.** 캡처·recall 검색만 사용, 세션 시작 컨텍스트 주입은 끔(AGENTMEMORY_INJECT_CONTEXT=false). 팀 공유 지식을 agentmemory 에만 남기지 말 것. 레포별로 AGENTMEMORY_PROJECT_NAME 명시를 권장(스코프 오염 방지).
-- **내장 파일 메모리(~/.claude/projects/*/memory) = 개인 습관·포인터.** 팀 규범이 생기면 레슨으로 승격하고 개인 메모리에는 포인터만 남긴다.
+- 정본은 레슨 cmvfenyan00010p1yv4oluttk(레슨·메모리 등록 규칙, 집행 훅 포함).
+- 주입: SessionStart `/api/context?cwd=`(매핑 `pnpm ws route-rule`) · PostToolUse `teamspace-project-context.mjs`(매핑된 다른 프로젝트, 세션당 1회) · SubagentStart(role:* + 세션 레포 레슨).
+- agentmemory 는 2026-10-16 부터 꺼져 있다(데이터 보존). 의존하지 않는다.
+
+# 에이전트 게이트 (서브에이전트가 먼저 읽는 절)
+
+역할 에이전트(`.claude/agents/implementer·reviewer·researcher`, 전역 사본은 `bash scripts/sync-agents.sh`)가 이 레포에서 쓰는 명령과 금지 사항. 설계 doc cmvfbot82 §3.3.
+
+- **게이트 순서** (변경 파일·영역만):
+  1. `rm -f tsconfig.tsbuildinfo && pnpm exec tsc --noEmit`
+  2. `pnpm exec eslint <변경 파일>`
+  3. `pnpm exec vitest run <변경 영역 경로>`
+- **`next build` 금지** — :3002 가 `next start` 중이라 `.next` 를 덮으면 서비스가 깨진다. 빌드 검증은 배포 담당(사람)이 한다.
+- **테스트 DB는 `teamspace_test`** — 워크트리마다 분리한 DB 를 쓴다(다른 워크트리 테스트와 겹치면 서로 깨뜨린다). 개발 DB 로 테스트하지 않는다.
+- **`pnpm add` 는 메인 체크아웃에서만** — 워크트리에서 의존성을 바꾸면 lockfile 이 갈라진다. 필요하면 `BLOCKED` 로 보고.
+- **`pnpm ws` 는 teamspace cwd 전용** — `/Users/ljun/dev/ljun/teamspace` 에서 **별도 Bash 호출**로 실행한다. 다른 레포 `cd` 체인에 섞으면 조용히 실패한다.

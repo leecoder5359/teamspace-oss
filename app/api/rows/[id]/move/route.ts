@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { moveRow } from "@/lib/rowMoveService";
 import { failResponse } from "@/lib/serviceResult";
 
@@ -35,5 +36,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     expectedUpdatedAt: body.expectedUpdatedAt,
   });
   if (!result.ok) return failResponse(result);
+  // 다른 보드로 옮기면 그 행이 보이는 사람이 바뀐다(pageAccess(databasePageId)) — 그래프 캐시를 즉시 비운다.
+  if (!result.dryRun) invalidateGraphCache(guard.workspaceId);
   return NextResponse.json(result);
 }

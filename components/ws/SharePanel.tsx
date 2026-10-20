@@ -119,7 +119,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
 
       {open && (
         <div style={{ marginTop: 12, fontSize: 13 }}>
-          {err && <p style={{ color: "#D14343", fontSize: 12.5 }}>{err}</p>}
+          {err && <p style={{ color: "var(--color-danger)", fontSize: 12.5 }}>{err}</p>}
           {!data && !err && <div className="ws-empty-hint">불러오는 중…</div>}
 
           {data && (

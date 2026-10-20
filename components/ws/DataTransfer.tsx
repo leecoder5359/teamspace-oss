@@ -139,7 +139,7 @@ export default function DataTransfer() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {err && (
-        <p style={{ fontSize: 12.5, color: "#D14343", margin: 0 }}>
+        <p style={{ fontSize: 12.5, color: "var(--color-danger)", margin: 0 }}>
           <Icon name="alert" size={13} /> {err}
         </p>
       )}

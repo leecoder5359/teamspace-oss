@@ -98,3 +98,43 @@ describe("deny-repo-docs — md 는 기본 차단", () => {
     expect(r.reason).toContain("pnpm ws doc new");
   });
 });
+
+/* ───────── 결정 cmvexcqfq: 개인 메모리에 프로젝트 기록을 두지 않는다 ─────────
+   .claude/ 는 통째로 허용이라 memory/project-*.md 와 비대해진 MEMORY.md 가 그냥 통과했다. */
+
+describe("deny-repo-docs — 개인 메모리 가드", () => {
+  const MEM = "/Users/ljun/.claude/projects/-Users-ljun-dev-ljun-teamspace/memory";
+
+  it("memory/ 아래 project-*.md 는 도구와 무관하게 막는다", () => {
+    for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+      const d = decide(`${MEM}/project-banjang-foo.md`, { toolName: tool, content: "x" });
+      expect(d.deny, tool).toBe(true);
+      expect(d.reason).toContain("cmvexcqfq");
+      expect(d.reason).toContain("pnpm ws lesson add");
+    }
+  });
+
+  it("memory/archive/ 아래 project-*.md 는 허용한다", () => {
+    expect(decide(`${MEM}/archive/project-old.md`, { toolName: "Write" }).deny).toBe(false);
+  });
+
+  it("feedback-*.md·reference-*.md 는 허용한다", () => {
+    expect(decide(`${MEM}/feedback-x.md`, { toolName: "Write", content: "x" }).deny).toBe(false);
+    expect(decide(`${MEM}/reference-y.md`, { toolName: "Write", content: "x" }).deny).toBe(false);
+  });
+
+  it("6,000자 넘는 MEMORY.md Write 는 막고 지금 길이를 알려 준다", () => {
+    const d = decide(`${MEM}/MEMORY.md`, { toolName: "Write", content: "가".repeat(6001) });
+    expect(d.deny).toBe(true);
+    expect(d.reason).toContain("6,000자");
+    expect(d.reason).toContain("6001자");
+  });
+
+  it("2,000자 MEMORY.md Write 는 허용한다", () => {
+    expect(decide(`${MEM}/MEMORY.md`, { toolName: "Write", content: "가".repeat(2000) }).deny).toBe(false);
+  });
+
+  it("MEMORY.md Edit 는 결과 크기를 모르므로 허용한다", () => {
+    expect(decide(`${MEM}/MEMORY.md`, { toolName: "Edit", content: undefined }).deny).toBe(false);
+  });
+});

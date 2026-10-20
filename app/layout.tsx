@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TeamSpace",
+  // 화면별 metadata.title 이 "<화면> · TeamSpace" 로 붙는다(U-16). 제목이 없는 화면은 기본값.
+  title: { default: "TeamSpace", template: "%s · TeamSpace" },
   description: "리코더팩토리 워크스페이스",
   // PWA (격차 F1) — manifest 는 app/manifest.ts 가 만든다.
   appleWebApp: { capable: true, title: "TeamSpace", statusBarStyle: "black-translucent" },
@@ -25,7 +26,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
-    { media: "(prefers-color-scheme: dark)", color: "#0F1420" },
+    // 앱 표면색(--surface-card)과 같은 값 — 토글 후에는 AppShell 이 앱 테마 색으로 맞춘다.
+    { media: "(prefers-color-scheme: dark)", color: "#1E232B" },
   ],
   // 모바일(F2)의 출발점 — 이게 없으면 폰이 데스크톱 폭으로 렌더해 축소해 버린다.
   width: "device-width",

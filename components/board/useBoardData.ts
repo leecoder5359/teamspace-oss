@@ -264,16 +264,25 @@ export function useBoardData(
 
   const addRow = useCallback(
     async (props: Record<string, unknown> = {}) => {
-      const res = await fetch(`/api/databases/${pageId}/rows`, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ props }),
-      });
+      const fallback = "행을 추가하지 못했습니다.";
+      let res: Response;
+      try {
+        res = await fetch(`/api/databases/${pageId}/rows`, {
+          method: "POST",
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ props }),
+        });
+      } catch {
+        setError(fallback);
+        return null;
+      }
       if (res.ok) {
         const { row } = (await res.json()) as { row: DbRow };
         setRows((prev) => [...prev, row]);
         return row;
       }
+      const d = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(d.error ?? fallback);
       return null;
     },
     [pageId],

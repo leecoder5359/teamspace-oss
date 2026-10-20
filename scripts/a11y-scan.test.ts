@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scanIconButtons, scanRepo } from "./a11y-scan";
+import { scanIconButtons, scanKeyboardButtons, scanRepo } from "./a11y-scan";
 
 const scan = (src: string) => scanIconButtons(["x.tsx"], () => src);
 
@@ -71,8 +71,32 @@ describe("scanIconButtons", () => {
   });
 });
 
+describe("scanKeyboardButtons", () => {
+  const scanK = (src: string) => scanKeyboardButtons(["x.tsx"], () => src);
+
+  it.each([
+    ["role=button + onClick, no onKeyDown", `const a = <div role="button" tabIndex={0} onClick={f}>열기</div>;`],
+    ["role={'button'} self-closing", `const a = <span role={"button"} onClick={f} />;`],
+    ["tr role=button", `const a = <tr role="button" onClick={() => open(id)}><td>x</td></tr>;`],
+  ])("flags %s", (_n, src) => {
+    const r = scanK(src);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ file: "x.tsx", line: 1 });
+  });
+
+  it.each([
+    ["has onKeyDown", `const a = <div role="button" tabIndex={0} onClick={f} onKeyDown={k}>열기</div>;`],
+    ["no onClick", `const a = <div role="button" tabIndex={0}>열기</div>;`],
+    ["native button", `const a = <button onClick={f}>열기</button>;`],
+    ["onClick without role", `const a = <div onClick={f}>x</div>;`],
+    ["spread may carry onKeyDown", `const a = <div role="button" onClick={f} {...keys}>x</div>;`],
+  ])("does not flag %s", (_n, src) => {
+    expect(scanK(src)).toEqual([]);
+  });
+});
+
 describe("repo guard", () => {
-  it("has no icon-only buttons without an accessible name", () => {
+  it("has no icon-only buttons without an accessible name, nor role=button clicks without a keyboard handler", () => {
     const found = scanRepo(process.cwd());
     expect(found.map((f) => `${f.file}:${f.line}`)).toEqual([]);
   });

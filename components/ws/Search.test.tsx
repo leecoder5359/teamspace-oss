@@ -40,3 +40,24 @@ describe("Search — ?q URL 동기화", { timeout: 15_000 }, () => {
     expect(routerReplace).not.toHaveBeenCalled();
   });
 });
+
+describe("Search — 결과는 링크(U-18·U-11)", { timeout: 15_000 }, () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () =>
+      new Response(JSON.stringify({ docs: [{ id: "p1", title: "배포 문서", snippet: "" }], decisions: [{ id: "d1", title: "배포 결정", snippet: "" }] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("문서 결과는 /p/<id>, 결정 결과는 문서 허브의 결정 탭(?cat=decisions&id=)으로 가는 링크다", async () => {
+    render(<Search initialQ="배포" />);
+    const doc = await screen.findByRole("link", { name: /배포 문서/ });
+    expect(doc.getAttribute("href")).toBe("/p/p1");
+    expect(screen.getByRole("link", { name: /배포 결정/ }).getAttribute("href")).toBe("/docs?cat=decisions&id=d1");
+  });
+});

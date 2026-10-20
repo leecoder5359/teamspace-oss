@@ -241,23 +241,35 @@ server.registerTool(
   "lesson_list",
   {
     description:
-      "팀 작업규칙·레슨 목록(id·제목·범위·주입 방식만 — 전문은 lesson_get). projectId 를 주면 전역+그 프로젝트(+내 개인). q 는 제목 부분일치(대소문자 무시), mode 로 거르기(ondemand = 세션에 주입되지 않는 '필요할 때만' 레슨 — 관련 작업이면 여기서 찾는다), limit 기본 100(최대 300). 응답 {total,shown,lessons} — scope 는 personal|<projectId>|stack:<tag>|global, mode 는 required|default|ondemand, keywords 는 프롬프트 매칭 키워드(있을 때만). total 은 필터 뒤·limit 앞의 건수.",
+      "팀 작업규칙·레슨 목록(id·제목·범위·주입 방식만 — 전문은 lesson_get). projectId 를 주면 전역+그 프로젝트(+내 개인). q 는 제목 부분일치(대소문자 무시), mode 로 거르기(ondemand = 세션에 주입되지 않는 '필요할 때만' 레슨 — 관련 작업이면 여기서 찾는다), limit 기본 100(최대 300). 응답 {total,shown,lessons} — scope 는 personal|<projectId>|stack:<tag>|global, mode 는 required|default|ondemand, keywords 는 프롬프트 매칭 키워드(있을 때만). total 은 필터 뒤·limit 앞의 건수. scope: team=개인 제외 · mine=내 개인 레슨 · teammates=팀원이 공개한 개인 레슨(author·copied — 가져오기는 CLI lesson copy 또는 /lessons 화면).",
     inputSchema: {
       projectId: z.string().optional(),
       q: z.string().optional(),
       mode: z.enum(["required", "default", "ondemand"]).optional(),
       limit: z.number().int().min(1).max(300).optional(),
+      scope: z.enum(["team", "mine", "teammates"]).optional(),
     },
   },
-  async ({ projectId, q, mode, limit }) => {
+  async ({ projectId, q, mode, limit, scope }) => {
     // 본문까지 돌려주면 수십~백 KB 가 되어 도구 결과로 쓸 수 없다 — 목록은 색인만.
     const qs = new URLSearchParams();
     if (projectId) qs.set("projectId", projectId);
     if (q) qs.set("q", q);
     if (mode) qs.set("mode", mode);
+    if (scope) qs.set("scope", scope);
     qs.set("limit", String(limit ?? 100));
     const { lessons, total } = (await api("GET", `/api/lessons?${qs}`)) as {
-      lessons: { id: string; title: string; projectId: string | null; stack: string | null; personal?: boolean; mode?: string; keywords?: string[] }[];
+      lessons: {
+        id: string;
+        title: string;
+        projectId: string | null;
+        stack: string | null;
+        personal?: boolean;
+        mode?: string;
+        keywords?: string[];
+        author?: { id: string; name: string };
+        copiedId?: string | null;
+      }[];
       total: number;
     };
     return jsonResult({
@@ -269,6 +281,7 @@ server.registerTool(
         scope: l.personal ? "personal" : (l.projectId ?? (l.stack ? `stack:${l.stack}` : "global")),
         mode: l.mode ?? "default",
         ...(l.keywords?.length ? { keywords: l.keywords } : {}),
+        ...(l.author ? { author: l.author.name, copied: !!l.copiedId } : {}),
       })),
     });
   },

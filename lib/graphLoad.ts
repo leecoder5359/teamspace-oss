@@ -6,12 +6,21 @@
      프로젝트    projectAccess
      결정·레슨·리스크  projectId 가 있으면 projectAccess, 없으면 전역(보임)
      태스크      소속 보드 pageAccess
-   캐시(D3 — 내용은 최대 60초 늦어도 되지만 권한은 즉시):
+   캐시(D3 — 내용은 최대 10분 늦어도 되지만 권한은 즉시):
      1) 권한 색인은 매번 새로 계산(loadAccess, 수 ms).
-     2) 원시 DB 행은 워크스페이스별로 60초 캐시(권한과 무관한 데이터).
+     2) 원시 DB 행은 워크스페이스별로 60초 캐시(뷰어와 무관하지만 projectId·userId 처럼 권한에 쓰이는 칸이 있다).
+        60초가 지나도 10분 안이면
+        stale-while-revalidate — 옛 세대를 바로 돌려주고 백그라운드로 하나만 다시 읽는다.
+        10분을 넘기면 다시 읽기를 기다린다.
      3) 권한으로 거른 입력의 지문(워크스페이스·원시 세대·보이는 id 들의 sha1)으로
         완성 그래프를 캐시 — 권한이 바뀌면 지문이 달라져 즉시 다시 만든다.
-   새 related 간선(infer)은 invalidateGraphCache 로 즉시 반영.
+   무효화 계약: 원시 행은 SWR 때문에 최대 10분(GRAPH_CACHE_MAX_STALE_MS) 낡을 수 있다. 그래서 loadRaw 가 읽는
+   행의 **권한·노출에 영향을 주는 쓰기**(문서·보드 페이지 생성·수정·이동·보관·휴지통, 결정·리스크 생성·수정·삭제,
+   팀 레슨 생성·수정(개인 전환·프로젝트 이동)·삭제·승격·정리 되돌리기, 보드 행 생성·삭제·보드 이동·
+   제목(text)/문서 연결 변경(rowPatchTouchesGraph), 새 related 간선 infer)는 같은 요청에서
+   invalidateGraphCache(workspaceId) 를 부른다. loadRaw 에 새 테이블을 넣으면 그 쓰기 라우트에도 건다.
+   이 캐시는 프로세스 메모리라 **다른 프로세스(scripts/worker.ts — 레슨 정리 적용 등)의 쓰기는 비울 수 없다**:
+   그 쓰기는 최대 10분 낡는다.
    ===================================================================== */
 
 import { createHash } from "node:crypto";
@@ -23,11 +32,16 @@ import type { Ctx } from "@/lib/workspace";
 import { buildGraph, type GraphInput, type KGraph } from "@/lib/knowledgeGraph";
 
 export const GRAPH_CACHE_TTL_MS = 60_000;
+/** 만료된 원시 항목을 기다리지 않고 돌려줘도 되는 최대 나이 — 이보다 낡으면 다시 읽기를 기다린다. */
+export const GRAPH_CACHE_MAX_STALE_MS = 10 * 60_000;
 const BUILT_CACHE_MAX = 200;
 
 type Raw = Awaited<ReturnType<typeof loadRaw>>;
+type RawEntry = { at: number; gen: number; raw: Promise<Raw>; ready: boolean };
 // 진행 중 Promise 도 담아 동시 요청이 DB 를 한 번만 읽게 한다. gen 은 다시 읽을 때마다 바뀐다.
-const rawCache = new Map<string, { at: number; gen: number; raw: Promise<Raw> }>();
+const rawCache = new Map<string, RawEntry>();
+// 만료된 항목을 돌려주는 동안 진행 중인 백그라운드 재로드(워크스페이스당 하나). resolve 되면 rawCache 로 올라간다.
+const refreshing = new Map<string, RawEntry>();
 const builtCache = new Map<string, KGraph>(); // key = `${workspaceId}:${sha1}`
 let genSeq = 0;
 
@@ -35,15 +49,23 @@ let genSeq = 0;
 export function invalidateGraphCache(workspaceId?: string): void {
   if (workspaceId === undefined) {
     rawCache.clear();
+    refreshing.clear();
     builtCache.clear();
     return;
   }
   rawCache.delete(workspaceId);
+  refreshing.delete(workspaceId); // 무효화 전에 시작한 재로드 결과는 채택하지 않는다
   dropBuilt(workspaceId);
 }
 
 function dropBuilt(workspaceId: string): void {
   for (const k of builtCache.keys()) if (k.startsWith(`${workspaceId}:`)) builtCache.delete(k);
+}
+
+/** 행 PATCH 가 그래프에 쓰이는 칸을 바꾸는가 — text 속성(태스크 제목·본문)이나 문서 연결(contentPageId).
+ *  상태·담당자·위치 같은 잦은 쓰기마다 캐시를 비우면 SWR 이 무의미해지므로 이것만 즉시 비운다. */
+export function rowPatchTouchesGraph(patch: { props?: Record<string, unknown>; contentPageId?: unknown }, textPropIds: ReadonlySet<string>): boolean {
+  return patch.contentPageId !== undefined || Object.keys(patch.props ?? {}).some((k) => textPropIds.has(k));
 }
 
 /** 테스트 전용 — 캐시 항목 수. */
@@ -54,24 +76,51 @@ export function __graphCacheSizes(): { raw: number; built: number } {
 /** 호출자가 배열을 바꿔도 캐시가 오염되지 않게 얕은 복사로 내준다(소비자는 노드·간선 객체를 바꾸지 않는다). */
 const copy = (g: KGraph): KGraph => ({ nodes: [...g.nodes], edges: [...g.edges] });
 
-function getRaw(workspaceId: string): { gen: number; raw: Promise<Raw> } {
-  const now = Date.now();
-  const hit = rawCache.get(workspaceId);
-  if (hit && now - hit.at < GRAPH_CACHE_TTL_MS) return hit;
-  // 새 세대: 이 워크스페이스의 낡은 완성 캐시와 다른 워크스페이스의 만료된 원시 항목을 정리한다.
-  dropBuilt(workspaceId);
-  for (const [ws, e] of rawCache) {
-    if (ws !== workspaceId && now - e.at >= GRAPH_CACHE_TTL_MS) {
-      rawCache.delete(ws);
-      dropBuilt(ws);
-    }
-  }
-  const entry = { at: now, gen: ++genSeq, raw: loadRaw(workspaceId) };
+function startLoad(workspaceId: string, now: number): RawEntry {
+  const entry: RawEntry = { at: now, gen: ++genSeq, raw: loadRaw(workspaceId), ready: false };
+  entry.raw.then(() => { entry.ready = true; }, () => {});
+  return entry;
+}
+
+/** 새 세대를 현재 항목으로 올린다 — 이 워크스페이스의 낡은 완성 캐시는 버린다. */
+function adopt(workspaceId: string, entry: RawEntry): RawEntry {
+  if (refreshing.get(workspaceId) === entry) refreshing.delete(workspaceId);
   rawCache.set(workspaceId, entry);
+  dropBuilt(workspaceId);
   entry.raw.catch(() => {
     if (rawCache.get(workspaceId) === entry) rawCache.delete(workspaceId); // 실패는 캐시하지 않는다
   });
   return entry;
+}
+
+/** 옛 항목을 계속 내주는 동안 백그라운드로 하나만 다시 읽는다. 실패하면 옛 항목을 유지한다. */
+function refreshInBackground(workspaceId: string, now: number): void {
+  if (refreshing.has(workspaceId)) return;
+  const next = startLoad(workspaceId, now);
+  refreshing.set(workspaceId, next);
+  next.raw.then(
+    () => { if (refreshing.get(workspaceId) === next) adopt(workspaceId, next); },
+    () => { if (refreshing.get(workspaceId) === next) refreshing.delete(workspaceId); },
+  );
+}
+
+function getRaw(workspaceId: string): { gen: number; raw: Promise<Raw> } {
+  const now = Date.now();
+  const hit = rawCache.get(workspaceId);
+  if (hit && now - hit.at < GRAPH_CACHE_TTL_MS) return hit;
+  if (hit && hit.ready && now - hit.at < GRAPH_CACHE_MAX_STALE_MS) {
+    refreshInBackground(workspaceId, now);
+    return hit;
+  }
+  // 기다려야 하는 경우: 다른 워크스페이스의 너무 낡은 원시 항목도 정리한다.
+  for (const [ws, e] of rawCache) {
+    if (ws !== workspaceId && now - e.at >= GRAPH_CACHE_MAX_STALE_MS) {
+      rawCache.delete(ws);
+      dropBuilt(ws);
+    }
+  }
+  // 진행 중 재로드가 있으면 새로 읽지 않고 그것을 기다린다.
+  return adopt(workspaceId, refreshing.get(workspaceId) ?? startLoad(workspaceId, now));
 }
 
 async function loadRaw(workspaceId: string) {

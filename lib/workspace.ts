@@ -64,15 +64,18 @@ async function resolveSessionCtx(): Promise<Ctx | null | { err: NextResponse }> 
   });
   if (!user) return null;
 
-  // 초대 수락: invited → active (이메일 기반 자동 수락)
-  await prisma.workspaceMember
-    .updateMany({ where: { userId: user.id, status: "invited" }, data: { status: "active" } })
-    .catch(() => {});
-
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: user.id, status: "active" },
+  // 초대 수락: invited → active (이메일 기반 자동 수락). 쓰기는 invited 행이 있을 때만 — 요청마다
+  // updateMany 를 내지 않는다(감사 P-10). 수락이 실패하면 invited 멤버십은 이번 요청에 쓰지 않는다.
+  const rows = await prisma.workspaceMember.findMany({
+    where: { userId: user.id, status: { in: ["active", "invited"] } },
     orderBy: { createdAt: "asc" },
   });
+  const accepted = rows.some((r) => r.status === "invited")
+    ? await prisma.workspaceMember
+        .updateMany({ where: { userId: user.id, status: "invited" }, data: { status: "active" } })
+        .then(() => true, () => false)
+    : false;
+  const memberships = acceptInvites(rows, accepted);
 
   // 선택 쿠키는 반드시 본인 멤버십 안에서만 유효 (임의 워크스페이스 전환 차단)
   let member: (typeof memberships)[number] | null = memberships[0] ?? null;
@@ -159,6 +162,19 @@ async function cameFromSiteProxy(): Promise<boolean> {
 }
 
 
+/** 초대 수락 결과를 멤버십 목록에 반영한다(순수) — 수락했으면 invited 를 active 로, 못 했으면 뺀다. */
+export function acceptInvites<T extends { status: string }>(rows: readonly T[], accepted: boolean): T[] {
+  return accepted
+    ? rows.map((r) => (r.status === "invited" ? { ...r, status: "active" } : r))
+    : rows.filter((r) => r.status === "active");
+}
+
+/** 토큰 lastUsedAt 갱신 간격 — 훅이 매 호출 토큰을 쓰므로 요청마다 쓰지 않는다(감사 P-10). */
+export const LAST_USED_TOUCH_MS = 60_000;
+export function lastUsedIsStale(lastUsedAt: Date | null, now: Date): boolean {
+  return !lastUsedAt || now.getTime() - lastUsedAt.getTime() >= LAST_USED_TOUCH_MS;
+}
+
 /** 에이전트 토큰(wst_…) → 토큰에 박힌 워크스페이스·역할·시스템 User Ctx. */
 async function resolveAgentCtx(token: string): Promise<Ctx | { err: NextResponse }> {
   const t = await prisma.agentToken.findUnique({
@@ -166,9 +182,12 @@ async function resolveAgentCtx(token: string): Promise<Ctx | { err: NextResponse
     include: { user: { select: { id: true, name: true } } },
   });
   if (!t || t.revokedAt) return unauthorized("유효하지 않은 에이전트 토큰입니다.");
-  prisma.agentToken
-    .update({ where: { id: t.id }, data: { lastUsedAt: new Date() } })
-    .catch(() => {});
+  const now = new Date();
+  if (lastUsedIsStale(t.lastUsedAt, now)) {
+    prisma.agentToken
+      .update({ where: { id: t.id }, data: { lastUsedAt: now } })
+      .catch(() => {});
+  }
   return {
     workspaceId: t.workspaceId,
     userId: t.userId,

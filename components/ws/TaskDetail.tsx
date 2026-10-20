@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "./icons";
+import { useDialogEscape } from "@/lib/useDialogEscape";
 import {
   Avatar,
   DDay,
@@ -370,7 +371,6 @@ const taskInp: CSSProperties = {
   fontSize: 13,
   color: "var(--text-strong)",
   fontFamily: "inherit",
-  outline: "none",
 };
 
 export default function TaskDetail({ row, properties, roles, titleId, onChange, onClose }: TaskDetailProps) {
@@ -394,14 +394,8 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
     window.setTimeout(() => setToast(null), 1800);
   }, []);
 
-  // Esc 닫기
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Esc 닫기 + 닫으면 연 요소로 포커스 복귀
+  useDialogEscape(true, onClose);
 
   // 설명 본문 로드
   useEffect(() => {

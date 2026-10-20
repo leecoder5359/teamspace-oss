@@ -3,6 +3,7 @@ import { readBody, positionSchema } from "@/lib/apiBody";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache, rowPatchTouchesGraph } from "@/lib/graphLoad";
 import { requirePage, pageAccess } from "@/lib/pageGuard";
 import { validateRelationProps } from "@/lib/relationServer";
 import { wouldCycle } from "@/lib/subitems";
@@ -31,7 +32,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const body = parsedBody.data;
   const row = await prisma.dbRow.findUnique({
     where: { id },
-    include: { database: { select: { workspaceId: true, dbProperties: { select: { id: true } } } } },
+    include: { database: { select: { workspaceId: true, dbProperties: { select: { id: true, type: true } } } } },
   });
   if (!row || row.database.workspaceId !== guard.workspaceId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -164,6 +165,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     recordActivity(guard, "updated", "task", title, id);
   }
+  const textPropIds = new Set(row.database.dbProperties.filter((p) => p.type === "text").map((p) => p.id));
+  if (rowPatchTouchesGraph({ props: incoming, contentPageId: body.contentPageId }, textPropIds)) invalidateGraphCache(guard.workspaceId);
   return NextResponse.json({ row: updated });
 }
 
@@ -183,5 +186,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   const gate = await requirePage(guard, row.databasePageId, "edit");
   if ("err" in gate) return gate.err;
   await prisma.dbRow.delete({ where: { id } }).catch(() => {});
+  invalidateGraphCache(guard.workspaceId);
   return NextResponse.json({ ok: true });
 }

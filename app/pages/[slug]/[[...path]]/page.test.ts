@@ -29,7 +29,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { siteAccessBySlug, recordSiteAccess, currentSlugForAlias } from "@/lib/sites/server";
 import { resolveShellFile } from "@/lib/sites/store";
-import SharedSitePage from "./page";
+import SharedSitePage, { generateMetadata } from "./page";
 
 const m = (f: unknown) => f as Mock;
 const run = (slug: string, path?: string[]) => SharedSitePage({ params: Promise.resolve({ slug, path }) });
@@ -121,5 +121,34 @@ describe("/pages/[slug]/[[...path]] 셸", () => {
     expect(el).toBeTruthy();
     expect(resolveShellFile).not.toHaveBeenCalled();
     expect(recordSiteAccess).not.toHaveBeenCalled();
+  });
+});
+
+describe("/pages/[slug] 탭 제목(U-16)", () => {
+  const meta = (slug = "banjang-handover") => generateMetadata({ params: Promise.resolve({ slug }) });
+  const base = { referrer: "no-referrer", robots: { index: false, follow: false } };
+  beforeEach(() => vi.resetAllMocks());
+
+  it("볼 수 있는 계정이면 사이트 제목, noindex·no-referrer 는 유지", async () => {
+    m(auth).mockResolvedValue({ user: { email: "g@gmail.com" } });
+    m(siteAccessBySlug).mockResolvedValue({ result: "ok", site, inviteId: "inv1", member: false });
+    expect(await meta()).toEqual({ ...base, title: "T" });
+    expect(siteAccessBySlug).toHaveBeenCalledWith("banjang-handover", "g@gmail.com");
+  });
+
+  it("로그인 전·권한 없음·없는 사이트는 제목을 내보내지 않는다(기본 '공유된 페이지')", async () => {
+    m(auth).mockResolvedValue(null);
+    expect(await meta()).toEqual({ ...base, title: "공유된 페이지" });
+    expect(siteAccessBySlug).not.toHaveBeenCalled();
+    m(auth).mockResolvedValue({ user: { email: "x@gmail.com" } });
+    m(siteAccessBySlug).mockResolvedValue({ result: "forbidden", site, inviteId: null, member: false });
+    expect(await meta()).toEqual({ ...base, title: "공유된 페이지" });
+    m(siteAccessBySlug).mockResolvedValue({ result: "not_found", site: null, inviteId: null, member: false });
+    expect(await meta()).toEqual({ ...base, title: "공유된 페이지" });
+  });
+
+  it("잘못 인코딩된 슬러그는 기본 제목", async () => {
+    m(auth).mockResolvedValue({ user: { email: "g@gmail.com" } });
+    expect(await meta("%E0%A4%A")).toEqual({ ...base, title: "공유된 페이지" });
   });
 });

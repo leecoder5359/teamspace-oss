@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
+import { docsHubHref } from "@/lib/docsHubUrl";
 import { responseErrorMessage } from "@/lib/fetchErrorMessage";
 
 /* 전역 검색 + 물어보기(Vault Q&A). /api/search · /api/ask. */
@@ -147,7 +149,7 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
   }
 
   const total = res ? res.docs.length + res.decisions.length : 0;
-  const openSource = (s: AskSource) => (s.kind === "doc" ? router.push(`/p/${s.id}`) : router.push("/docs"));
+  const openSource = (s: AskSource) => router.push(s.kind === "doc" ? `/p/${s.id}` : docsHubHref("decisions", s.id));
 
   return (
     <div className="ws-db" style={{ maxWidth: 760 }}>
@@ -210,10 +212,10 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
       ) : (
         <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 22 }}>
           {res!.docs.length > 0 && (
-            <Group label={`문서 ${res!.docs.length}`} icon="doc" hits={res!.docs} onOpen={(id) => router.push(`/p/${id}`)} />
+            <Group label={`문서 ${res!.docs.length}`} icon="doc" hits={res!.docs} hrefFor={(id) => `/p/${id}`} />
           )}
           {res!.decisions.length > 0 && (
-            <Group label={`결정 ${res!.decisions.length}`} icon="flag" hits={res!.decisions} onOpen={() => router.push(`/docs`)} />
+            <Group label={`결정 ${res!.decisions.length}`} icon="flag" hits={res!.decisions} hrefFor={(id) => docsHubHref("decisions", id)} />
           )}
         </div>
       )}
@@ -321,7 +323,7 @@ function AskView({ loading, ask, q, onOpen }: { loading: boolean; ask: AskResult
   );
 }
 
-function Group({ label, icon, hits, onOpen }: { label: string; icon: "doc" | "flag"; hits: Hit[]; onOpen: (id: string) => void }) {
+function Group({ label, icon, hits, hrefFor }: { label: string; icon: "doc" | "flag"; hits: Hit[]; hrefFor: (id: string) => string }) {
   return (
     <section>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
@@ -329,14 +331,14 @@ function Group({ label, icon, hits, onOpen }: { label: string; icon: "doc" | "fl
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {hits.map((h) => (
-          <button
+          <Link
             key={h.id}
-            onClick={() => onOpen(h.id)}
-            style={{ textAlign: "left", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
+            href={hrefFor(h.id)}
+            style={{ display: "block", textAlign: "left", textDecoration: "none", color: "inherit", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
           >
             <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>{h.title}</div>
             {h.snippet && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.5 }}>{h.snippet}</div>}
-          </button>
+          </Link>
         ))}
       </div>
     </section>

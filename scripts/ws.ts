@@ -31,7 +31,9 @@ import { clampLimitArg } from "../lib/taskFilter";
 import { pickRouteRule, resolveDraftProject } from "../lib/cwdProject";
 import { extractRehearsalBlock } from "../lib/rehearsalRecord";
 import { formatTokens } from "../lib/opsFormat";
-import { readFileSync } from "node:fs";
+import { createReadStream, openSync, readdirSync, readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
+import { internalDomains, matchesType, memoryDirFor, parseMemoryFile, parseSelection, scanSecrets, toLesson } from "../lib/memoryImport";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { lockExtend, lockInstallHook, lockLs, lockPath, lockRelease, lockTake, sessionsLive } from "./wsLock";
@@ -121,6 +123,41 @@ async function apiRaw(method: string, path: string, body?: unknown): Promise<{ o
     data = text;
   }
   return { ok: res.ok, status: res.status, data };
+}
+
+/** Idempotency-Key 를 붙인 POST — replay = 서버가 저장된 응답을 돌려줬다(이미 올린 것). 키는 헤더용으로 URI 인코딩(비ASCII name). */
+async function apiIdem(path: string, body: unknown, key: string): Promise<{ data: unknown; replay: boolean }> {
+  const headers: Record<string, string> = { "content-type": "application/json", "Idempotency-Key": encodeURIComponent(key) };
+  if (TOKEN) headers["x-ws-token"] = TOKEN;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  } catch {
+    throw new Error(`${BASE} 에 연결할 수 없습니다. dev 서버를 먼저 띄우세요: pnpm exec next dev -p 3002`);
+  }
+  const data = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+  if (!res.ok) throw new Error(`POST ${path} → ${res.status}: ${data?.error ?? ""}`);
+  return { data, replay: res.headers.get("x-idempotent-replay") === "1" };
+}
+
+/** 대화형 질문 — stdin 이 터미널이면 stdin, 아니면 /dev/tty(파이프로 실행돼도 사람에게 묻는다). 둘 다 없으면 null. */
+function openPrompt(): { ask: (q: string) => Promise<string>; close: () => void } | null {
+  let input: NodeJS.ReadableStream = process.stdin;
+  if (!process.stdin.isTTY) {
+    try {
+      input = createReadStream("", { fd: openSync("/dev/tty", "r") });
+    } catch {
+      return null;
+    }
+  }
+  const rl = createInterface({ input, output: process.stdout });
+  return {
+    ask: (q) => rl.question(q),
+    close: () => {
+      rl.close();
+      if (input !== process.stdin) (input as ReturnType<typeof createReadStream>).destroy();
+    },
+  };
 }
 
 // ── 인자 파싱 ───────────────────────────────────────────────────────────────
@@ -1253,7 +1290,7 @@ add({
 add({
   name: "lesson ls",
   usage:
-    "lesson ls [--project <id>] [--q <제목 검색>] [--mode required|default|ondemand] [--limit n]   (팀 작업규칙·레슨 — 각 레슨에 scope(personal|project|stack|global)·mode. 개인 레슨은 내 것만(admin 은 전부). limit 생략=전체, 최대 300)",
+    "lesson ls [--project <id>] [--q <제목 검색>] [--mode required|default|ondemand] [--limit n] [--scope team|mine|teammates]   (팀 작업규칙·레슨 — 각 레슨에 scope(personal|project|stack|global)·mode. 개인 레슨은 내 것만(admin 은 전부). limit 생략=전체, 최대 300. --scope: team=개인 제외·mine=내 개인(admin 도 내 것만, copiedFrom 포함)·teammates=팀원의 공개 개인 레슨(author·copiedId 포함, 가져온 복사본 제외))",
   ep: ["lessons/route.ts"],
   run: async (a) => {
     const qs = new URLSearchParams();
@@ -1261,7 +1298,9 @@ add({
     const q = flag(a, "q");
     const limit = flag(a, "limit");
     const mode = flag(a, "mode");
+    const scope = flag(a, "scope");
     if (pid) qs.set("projectId", pid);
+    if (scope) qs.set("scope", scope);
     if (q) qs.set("q", q);
     if (mode) qs.set("mode", mode);
     if (limit) qs.set("limit", limit);
@@ -1271,7 +1310,7 @@ add({
 add({
   name: "lesson add",
   usage:
-    'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…> | --personal] [--mode required|default|ondemand] [--keywords "a,b,c"]   (범위 없으면 전역 — 모든 레포 세션에 주입. --personal = 나(토큰이면 발급자) 세션에만. mode: required 필수(예산 먼저)·default·ondemand 세션 주입 제외. --keywords: 메시지에 이 단어가 있으면 UserPromptSubmit 훅이 주입)',
+    'lesson add <title> --body "<규칙 본문>" [--project <id> | --stack <next|supabase…> | --personal] [--mode required|default|ondemand] [--keywords "a,b,c"]   (범위 없으면 전역 — 모든 레포 세션에 주입. --personal = 나(토큰이면 발급자) 세션에만. mode: required 필수(예산 먼저)·default·ondemand 세션 주입 제외. --keywords: 메시지에 이 단어가 있으면 UserPromptSubmit 훅이 주입 · "audience:main" 을 넣으면 메인 세션 전용 — 서브에이전트(SubagentStart) 주입에서 빠진다)',
   ep: ["lessons/route.ts"],
   run: async (a) =>
     out(
@@ -1303,7 +1342,7 @@ add({
 add({
   name: "lesson set",
   usage:
-    'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --personal | --global] [--mode required|default|ondemand] [--keywords "a,b,c" | --keywords ""]   (범위는 하나: 개인·프로젝트·스택·전역. --keywords 는 통째로 바꿈, "" = 비움)',
+    'lesson set <id> [--title <t>] [--body "<본문>"] [--project <id> | --stack <tag> | --personal | --global] [--mode required|default|ondemand] [--keywords "a,b,c" | --keywords ""] [--shared on|off]   (범위는 하나: 개인·프로젝트·스택·전역. --keywords 는 통째로 바꿈, "" = 비움. --shared = 내 개인 레슨을 팀원 레슨 목록에 보일지(기본 on, 주인만))',
   ep: ["lessons/[id]/route.ts"],
   run: async (a) => {
     const body: Record<string, unknown> = {};
@@ -1311,11 +1350,128 @@ add({
     if (flag(a, "body")) body.body = flag(a, "body");
     if (flag(a, "mode")) body.mode = flag(a, "mode");
     if (flag(a, "keywords") !== undefined) body.keywords = flag(a, "keywords");
+    const shared = flag(a, "shared");
+    if (shared !== undefined) {
+      if (shared !== "on" && shared !== "off") throw new Error("--shared 는 on|off 입니다.");
+      body.sharedWithTeam = shared === "on";
+    }
     if (bool(a, "global")) Object.assign(body, { projectId: null, stack: null, personal: false });
     else if (bool(a, "personal")) body.personal = true;
     else if (flag(a, "project")) body.projectId = flag(a, "project");
     else if (flag(a, "stack")) body.stack = flag(a, "stack");
     out(await api("PATCH", `/api/lessons/${a.pos[0]}`, body));
+  },
+});
+add({
+  name: "lesson copy",
+  usage: "lesson copy <id>   (팀원의 공개 개인 레슨을 내 개인 레슨으로 가져오기 — 이미 가져왔으면 기존 id 를 알려 줌. 목록: lesson ls --scope teammates)",
+  ep: ["lessons/[id]/copy/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws lesson copy <id>");
+    const r = await apiRaw("POST", `/api/lessons/${encodeURIComponent(a.pos[0])}/copy`);
+    if (r.status === 409) return out(`이미 가져온 레슨입니다: ${(r.data as { lessonId?: string }).lessonId ?? "?"}`);
+    if (!r.ok) throw new Error(`POST /api/lessons/${a.pos[0]}/copy → ${r.status}: ${(r.data as { error?: string })?.error ?? ""}`);
+    out(r.data);
+  },
+});
+add({
+  name: "lesson promote",
+  usage: "lesson promote <id> [--project <id>]   (admin — 개인 레슨을 팀 레슨으로: --project 면 그 프로젝트, 없으면 전역)",
+  ep: ["lessons/[id]/promote/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("usage: ws lesson promote <id> [--project <id>]");
+    out(await api("POST", `/api/lessons/${encodeURIComponent(a.pos[0])}/promote`, { projectId: flag(a, "project") ?? null }));
+  },
+});
+add({
+  name: "lesson import-memory",
+  usage:
+    "lesson import-memory [--dir <메모리 폴더>] [--type feedback|project|reference|any] [--dry-run] [--yes]   (이 맥의 Claude 메모리 파일을 골라 내 개인 레슨으로 올림 — 기본 폴더 = ~/.claude/projects/<현재 cwd 인코딩>/memory, 기본 type=feedback. 번호 목록에서 1,3,5-7 | a(전부) 로 고름. 제목=description, 본문=파일 본문(frontmatter 제외). MEMORY.md 와 name·description 이 없는 파일은 보고 후 제외. 메모리 name 을 Idempotency-Key 로 보내고 같은 제목의 내 개인 레슨이 있으면 건너뜀(재실행 중복 없음). 토큰·이메일·내부 주소가 보이면 경고 후 한 번 더 y/N 확인 — --yes 면 경고 없는 파일만 올리고 경고 파일은 건너뜀. --dry-run = 서버 호출 없이 목록·경고만. 메모리 파일은 수정하지 않는다)",
+  ep: ["lessons/route.ts"],
+  run: async (a) => {
+    const dir = (flag(a, "dir") ?? memoryDirFor(process.cwd(), homedir())).replace(/^~(?=\/|$)/, homedir());
+    const want = flag(a, "type") ?? "feedback";
+    const yes = bool(a, "yes");
+    const dry = bool(a, "dry-run");
+    let files: string[];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").sort();
+    } catch {
+      throw new Error(`메모리 폴더를 읽을 수 없습니다: ${dir} (--dir 로 지정)`);
+    }
+    const domains = internalDomains([BASE, process.env.PUBLIC_BASE_URL, process.env.TEAMSPACE_INTERNAL_HOSTS]);
+    const parsed = files.map((f) => ({ f, e: parseMemoryFile(readFileSync(`${dir}/${f}`, "utf8"), f) }));
+    const noFront = parsed.filter((p) => !p.e).map((p) => p.f);
+    const all = parsed.flatMap((p) => (p.e ? [p.e] : []));
+    const untyped = all.filter((e) => !e.type).length;
+    const typed = all.filter((e) => matchesType(e, want));
+    const incomplete: string[] = [];
+    const entries = typed.flatMap((e) => {
+      const l = toLesson(e);
+      if (!l.ok) {
+        incomplete.push(`${e.file} (${l.missing.join("·")} 없음)`);
+        return [];
+      }
+      return [{ e, title: l.title, body: l.body, hits: scanSecrets(e.body, domains) }];
+    });
+    // 이미 있는 내 개인 레슨 제목 — 다른 토큰·다른 맥에서 올린 것도 건너뛰게(Idempotency-Key 는 요청자별이라 못 잡는다)
+    const have = new Set<string>();
+    if (!dry && entries.length) {
+      const mine = (await api("GET", "/api/lessons?scope=mine")) as { lessons: { title: string }[] };
+      for (const l of mine.lessons) have.add(l.title.trim());
+    }
+    entries.forEach((x, i) => {
+      const tag = have.has(x.title) ? "[이미 있음] " : x.hits.length ? `[⚠ ${[...new Set(x.hits.map((h) => h.kind))].join("·")}] ` : "";
+      out(`${String(i + 1).padStart(3)}) ${tag}${x.title}   (${x.e.file})`);
+      if (dry) for (const h of x.hits) out(`       ${h.line}행 [${h.kind}] ${h.excerpt}`);
+    });
+    if (noFront.length) out(`frontmatter 없음 — 제외 ${noFront.length}개: ${noFront.join(", ")}`);
+    if (incomplete.length) out(`필수 칸 없음 — 제외 ${incomplete.length}개: ${incomplete.join(", ")}`);
+    if (untyped && want !== "any") out(`(type 이 없는 파일 ${untyped}개는 빠졌습니다 — --type any 로 포함)`);
+    const warned = entries.filter((x) => x.hits.length).length;
+    const summary = `파일 ${files.length} · type=${want} ${typed.length} · 올릴 수 있음 ${entries.length} · 경고 ${warned}`;
+    if (dry) return out(`■ 드라이런 — ${summary}. 서버 호출·파일 수정 없음.`);
+    if (!entries.length) return out(`올릴 메모리가 없습니다(${dir}, ${summary}).`);
+    const usable = (i: number) => !have.has(entries[i].title);
+    let picked: number[];
+    if (yes) {
+      picked = entries.map((_, i) => i).filter((i) => usable(i) && !entries[i].hits.length);
+      const flagged = entries.filter((x, i) => usable(i) && x.hits.length).length;
+      if (flagged) out(`--yes: 가리기 경고가 있는 ${flagged}개는 건너뜁니다(대화형으로 다시 실행해 확인).`);
+    } else {
+      const p = openPrompt();
+      if (!p) throw new Error("대화형 터미널이 없습니다 — --yes(경고 없는 것만) 또는 --dry-run 으로 실행하세요.");
+      try {
+        const sel = parseSelection(await p.ask("올릴 번호 (예: 1,3,5-7 | a=전부 | 빈칸=취소): "), entries.length);
+        if (sel === null) throw new Error("번호를 읽지 못했습니다.");
+        picked = [];
+        for (const n of sel) {
+          const i = n - 1;
+          if (!usable(i)) continue;
+          const x = entries[i];
+          if (x.hits.length) {
+            out(`⚠ ${x.e.file} — 팀원에게 공개되는 개인 레슨입니다:`);
+            for (const h of x.hits) out(`    ${h.line}행 [${h.kind}] ${h.excerpt}`);
+            if (!/^y(es)?$/i.test((await p.ask("  그래도 올릴까요? (y/N) ")).trim())) continue;
+          }
+          picked.push(i);
+        }
+      } finally {
+        p.close();
+      }
+    }
+    let created = 0;
+    let replayed = 0;
+    for (const i of picked) {
+      const x = entries[i];
+      const r = await apiIdem("/api/lessons", { title: x.title, body: x.body, personal: true }, x.e.name);
+      const id = (r.data as { lesson?: { id: string } } | undefined)?.lesson?.id ?? "?";
+      if (r.replay) replayed++;
+      else created++;
+      out(`${r.replay ? "· 건너뜀(이미 올림)" : "✓ 등록"} ${id}  ${x.title}`);
+    }
+    const already = entries.filter((_, i) => !usable(i)).length;
+    out(`■ 등록 ${created} · 건너뜀 ${replayed + already}(이미 있음) · 고른 것 ${picked.length}/${entries.length}. 메모리 파일은 그대로 둡니다.`);
   },
 });
 add({
@@ -2423,9 +2579,16 @@ add({
 });
 add({
   name: "context",
-  usage: "context   (워크스페이스를 Claude가 읽는 Markdown 스냅샷으로 출력)",
+  usage: "context [--sections lessons|project] [--cwd <path>]   (워크스페이스를 Claude가 읽는 Markdown 스냅샷으로 출력 · --sections lessons = SubagentStart 훅이 받는 레슨 섹션만 · --sections project = PostToolUse 훅이 받는 프로젝트 델타)",
   ep: ["context/route.ts"],
-  run: async () => out(await api("GET", "/api/context?format=md")),
+  run: async (a) => {
+    const q = new URLSearchParams({ format: "md" });
+    const sections = flag(a, "sections");
+    const cwd = flag(a, "cwd");
+    if (sections) q.set("sections", sections);
+    if (cwd) q.set("cwd", cwd);
+    out(await api("GET", `/api/context?${q}`));
+  },
 });
 add({
   name: "slack log",

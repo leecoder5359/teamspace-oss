@@ -138,8 +138,8 @@ export default function Slack() {
             padding: "10px 14px",
             borderRadius: 10,
             fontSize: 13,
-            background: msg.tone === "ok" ? "var(--color-primary-weak)" : "#fde8e8",
-            color: msg.tone === "ok" ? "var(--color-primary)" : "#c0392b",
+            background: msg.tone === "ok" ? "var(--color-primary-weak)" : "var(--color-danger-weak)",
+            color: msg.tone === "ok" ? "var(--color-primary)" : "var(--color-danger)",
           }}
         >
           {msg.text}

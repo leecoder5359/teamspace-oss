@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderBrief, BRIEF_BYTE_TARGET } from "./contextBrief";
+import { renderBrief, BRIEF_BYTE_TARGET, sortTasksForContext } from "./contextBrief";
 
 const bytes = (s: string) => Buffer.byteLength(s, "utf8");
 
@@ -105,5 +105,19 @@ describe("renderBrief — 범위·주입 방식", () => {
     const md = renderBrief({ ...base, lessons: [...lessons, ...extra] });
     expect(md).not.toContain("cmmine");
     expect(md).not.toContain("개인 ");
+  });
+});
+
+// compact 태스크 섹션도 brief 와 같은 순서 — 내 담당(진행 중 먼저) → 그 밖의 진행 중 → 나머지(원래 순서).
+describe("sortTasksForContext", () => {
+  const t = (title: string, status: string | null, assignee: string | null) => ({ title, status, due: null, assignee });
+  it("내 담당 → 진행 중 → 나머지, 각 묶음 안은 원래 순서(내 담당은 진행 중 먼저)", () => {
+    const list = [t("a", "시작 전", "남"), t("b", "진행 중", "남"), t("c", "시작 전", "이준"), t("d", "진행 중", "u1"), t("e", null, null), t("f", "In Progress", null)];
+    expect(sortTasksForContext(list, ["이준", "u1"]).map((x) => x.title)).toEqual(["d", "c", "b", "f", "a", "e"]);
+  });
+  it("인자를 바꾸지 않는다", () => {
+    const list = [t("a", "시작 전", null), t("b", "진행 중", null)];
+    sortTasksForContext(list, []);
+    expect(list.map((x) => x.title)).toEqual(["a", "b"]);
   });
 });

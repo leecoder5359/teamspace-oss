@@ -81,3 +81,13 @@ describe("doc_list 보관 파라미터 (GET /api/pages 패리티)", () => {
     expect(readFileSync(resolve(API_ROOT, "pages", "route.ts"), "utf8")).toContain('a === "1" ? "only" : a === "all" ? "all" : "active"');
   });
 });
+
+describe("lesson_list scope (GET /api/lessons 패리티)", () => {
+  it("scope: team|mine|teammates 를 받아 ?scope= 로 전달한다", () => {
+    const block = SRC.slice(SRC.indexOf('"lesson_list"'), SRC.indexOf('"lesson_get"'));
+    expect(block).toMatch(/scope: z\.enum\(\["team", "mine", "teammates"\]\)/);
+    expect(block).toContain('qs.set("scope", scope)');
+    const route = readFileSync(resolve(API_ROOT, "lessons", "route.ts"), "utf8");
+    expect(route).toContain('sp.get("scope")');
+  });
+});

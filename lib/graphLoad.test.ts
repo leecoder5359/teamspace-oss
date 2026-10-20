@@ -19,7 +19,7 @@ vi.mock("@/lib/prisma", () => ({
 import { prisma } from "@/lib/prisma";
 import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { pageAccess, projectAccess } from "@/lib/pageAccess";
-import { loadGraph, invalidateGraphCache, GRAPH_CACHE_TTL_MS, __graphCacheSizes } from "./graphLoad";
+import { loadGraph, invalidateGraphCache, rowPatchTouchesGraph, GRAPH_CACHE_TTL_MS, GRAPH_CACHE_MAX_STALE_MS, __graphCacheSizes } from "./graphLoad";
 
 const m = (f: unknown) => f as Mock;
 const ctx = { workspaceId: "w1", userId: "u1", role: "member" } as never;
@@ -222,10 +222,103 @@ describe("loadGraph — 뷰어별 TTL 캐시", () => {
     await loadGraph(ctx);
     await loadGraph(other);
     expect(__graphCacheSizes()).toEqual({ raw: 2, built: 2 });
-    vi.advanceTimersByTime(GRAPH_CACHE_TTL_MS + 1);
+    vi.advanceTimersByTime(GRAPH_CACHE_MAX_STALE_MS + 1);
     await loadGraph(ctx);
     expect(__graphCacheSizes()).toEqual({ raw: 1, built: 1 });
     vi.useRealTimers();
+  });
+});
+
+describe("loadGraph — stale-while-revalidate", () => {
+  const page = (title: string) => [{ id: ID("a"), title, markdown: "", parentId: null, projectId: null }];
+  const titles = (g: { nodes: { label?: string; title?: string }[] }) => JSON.stringify(g.nodes);
+  const flush = () => new Promise<void>((r) => setImmediate(r));
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((a, b) => { resolve = a; reject = b; });
+    return { promise, resolve, reject };
+  };
+
+  beforeEach(() => {
+    invalidateGraphCache();
+    vi.resetAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    m(loadAccess).mockResolvedValue({});
+    m(visibleOnly).mockImplementation((_i: unknown, rows: unknown[]) => rows);
+    m(pageAccess).mockReturnValue("view");
+    m(projectAccess).mockReturnValue("view");
+    for (const f of [prisma.project, prisma.decision, prisma.lesson, prisma.risk, prisma.dbRow, prisma.dbProperty, prisma.graphEdge]) {
+      m(f.findMany).mockResolvedValue([]);
+    }
+  });
+
+  it("만료됐지만 resolve 된 항목은 즉시 돌려주고 백그라운드로 한 번만 다시 읽는다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce(page("옛 제목"));
+    await loadGraph(ctx);
+    const next = deferred<unknown>();
+    m(prisma.page.findMany).mockReturnValueOnce(next.promise);
+    vi.advanceTimersByTime(GRAPH_CACHE_TTL_MS + 1);
+    const [a, b, c] = await Promise.all([loadGraph(ctx), loadGraph(ctx), loadGraph(ctx)]);
+    for (const g of [a, b, c]) expect(titles(g)).toContain("옛 제목");
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2); // 진행 중 재로드는 하나
+    next.resolve(page("새 제목"));
+    await flush();
+    const d = await loadGraph(ctx);
+    expect(titles(d)).toContain("새 제목");
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2); // 새 세대는 다시 신선
+  });
+
+  it("상한(10분)을 넘긴 항목은 돌려주지 않고 다시 읽기를 기다린다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce(page("옛 제목")).mockResolvedValueOnce(page("새 제목"));
+    await loadGraph(ctx);
+    vi.advanceTimersByTime(GRAPH_CACHE_MAX_STALE_MS + 1);
+    const g = await loadGraph(ctx);
+    expect(titles(g)).toContain("새 제목");
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("상한을 넘겼을 때 진행 중 재로드가 있으면 새로 읽지 않고 그것을 기다린다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce(page("옛 제목"));
+    await loadGraph(ctx);
+    const next = deferred<unknown>();
+    m(prisma.page.findMany).mockReturnValueOnce(next.promise);
+    vi.advanceTimersByTime(GRAPH_CACHE_TTL_MS + 1);
+    await loadGraph(ctx); // 백그라운드 재로드 시작
+    vi.advanceTimersByTime(GRAPH_CACHE_MAX_STALE_MS);
+    const pending = loadGraph(ctx);
+    next.resolve(page("새 제목"));
+    expect(titles(await pending)).toContain("새 제목");
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("백그라운드 재로드가 실패하면 옛 항목을 유지하고 다음 호출이 다시 시도한다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce(page("옛 제목"));
+    await loadGraph(ctx);
+    m(prisma.page.findMany).mockRejectedValueOnce(new Error("db down")).mockResolvedValueOnce(page("새 제목"));
+    vi.advanceTimersByTime(GRAPH_CACHE_TTL_MS + 1);
+    expect(titles(await loadGraph(ctx))).toContain("옛 제목");
+    await flush();
+    expect(titles(await loadGraph(ctx))).toContain("옛 제목"); // 실패 뒤에도 옛 값, 재시도 시작
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(3);
+    await flush();
+    expect(titles(await loadGraph(ctx))).toContain("새 제목");
+  });
+
+  it("재로드 중 invalidateGraphCache 가 오면 그 결과를 채택하지 않고 즉시 비운다", async () => {
+    m(prisma.page.findMany).mockResolvedValueOnce(page("옛 제목"));
+    await loadGraph(ctx);
+    const next = deferred<unknown>();
+    m(prisma.page.findMany).mockReturnValueOnce(next.promise).mockResolvedValueOnce(page("무효화 뒤"));
+    vi.advanceTimersByTime(GRAPH_CACHE_TTL_MS + 1);
+    await loadGraph(ctx);
+    invalidateGraphCache("w1");
+    expect(__graphCacheSizes().raw).toBe(0);
+    const g = await loadGraph(ctx);
+    expect(titles(g)).toContain("무효화 뒤");
+    next.resolve(page("낡은 재로드"));
+    await flush();
+    expect(titles(await loadGraph(ctx))).toContain("무효화 뒤");
   });
 });
 
@@ -279,5 +372,18 @@ describe("loadGraph — 보관(F2)", () => {
     expect(ids.has(ID("live"))).toBe(true);
     expect(ids.has(ID("body2"))).toBe(true);
     expect(ids.has(ID("r2"))).toBe(true);
+  });
+});
+
+describe("rowPatchTouchesGraph", () => {
+  const text = new Set(["title", "note"]);
+  it("text 속성(그래프 제목·본문)이나 문서 연결을 바꾸면 true", () => {
+    expect(rowPatchTouchesGraph({ props: { title: "x" } }, text)).toBe(true);
+    expect(rowPatchTouchesGraph({ contentPageId: null }, text)).toBe(true);
+    expect(rowPatchTouchesGraph({ contentPageId: "p1", props: { status: "s" } }, text)).toBe(true);
+  });
+  it("text 가 아닌 속성·위치·부모만 바꾸면 false", () => {
+    expect(rowPatchTouchesGraph({ props: { status: "s" } }, text)).toBe(false);
+    expect(rowPatchTouchesGraph({}, text)).toBe(false);
   });
 });

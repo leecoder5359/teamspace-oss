@@ -87,3 +87,71 @@ describe("Approvals ?id= 포커스", { timeout: 15_000 }, () => {
     await waitFor(() => expect(screen.getByText("해당 승인을 찾을 수 없어요")).toBeTruthy(), T);
   });
 });
+
+describe("Approvals — 화면 제목(U-29)", () => {
+  it("<h1> 은 '승인 대기 인박스' 하나", async () => {
+    search = "";
+    fetchMock.mockImplementation(async () => json({ approvals: [mk("n1", "최신 건")] }));
+    const { container } = render(<Approvals />);
+    await waitFor(() => expect(screen.getByText("최신 건")).toBeTruthy(), T);
+    const h1s = container.querySelectorAll("h1");
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0].textContent).toBe("승인 대기 인박스");
+  });
+});
+
+describe("Approvals 로딩·오류·변경 실패(U-2·U-3)", () => {
+  it("목록을 받기 전에는 불러오는 중을 보인다", async () => {
+    search = "";
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    render(<Approvals />);
+    expect(screen.getByText("불러오는 중…")).toBeTruthy();
+  });
+
+  it("목록 조회가 실패하면 안내와 다시 시도를 보이고, 다시 시도로 회복한다", async () => {
+    search = "";
+    let fail = true;
+    fetchMock.mockImplementation(async () => (fail ? json({ error: "x" }, 500) : json({ approvals: [mk("n1", "최신 건")] })));
+    render(<Approvals />);
+    expect(await screen.findByText("승인 목록을 불러오지 못했어요.")).toBeTruthy();
+    fail = false;
+    fireEvent.click(screen.getByText("다시 시도"));
+    expect(await screen.findByText("최신 건")).toBeTruthy();
+  });
+
+  it("목록 fetch 가 거부돼도 안내를 보인다", async () => {
+    search = "";
+    fetchMock.mockImplementation(async () => {
+      throw new TypeError("network");
+    });
+    render(<Approvals />);
+    expect(await screen.findByText("승인 목록을 불러오지 못했어요.")).toBeTruthy();
+  });
+
+  it("요청 생성이 실패하면 '생성됨' 대신 오류를 보이고 입력을 유지한다", async () => {
+    search = "";
+    fetchMock.mockImplementation(async (u: string, init?: RequestInit) => {
+      if (u === "/api/approvals" && init?.method === "POST") return json({ error: "승인 생성에 실패했습니다." }, 500);
+      return json({ approvals: [] });
+    });
+    render(<Approvals />);
+    const input = (await screen.findByPlaceholderText("승인 요청 제목")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "배포" } });
+    fireEvent.click(screen.getByText("슬랙으로 승인 요청 보내기"));
+    expect((await screen.findByRole("alert")).textContent).toBe("승인 생성에 실패했습니다.");
+    expect(screen.queryByText(/생성됨/)).toBeNull();
+    expect((screen.getByPlaceholderText("승인 요청 제목") as HTMLInputElement).value).toBe("배포");
+  });
+
+  it("결정(승인)이 실패하면 오류를 보인다", async () => {
+    search = "";
+    fetchMock.mockImplementation(async (u: string, init?: RequestInit) => {
+      if (u === "/api/approvals/n1" && init?.method === "PATCH") return json({ error: "이미 처리됨" }, 409);
+      return json({ approvals: [mk("n1", "최신 건")] });
+    });
+    render(<Approvals />);
+    await screen.findByText("최신 건");
+    fireEvent.click(screen.getByText("승인"));
+    expect((await screen.findByRole("alert")).textContent).toBe("이미 처리됨");
+  });
+});

@@ -35,3 +35,11 @@ describe("agent token", () => {
     expect(isAgentEmail(undefined)).toBe(false);
   });
 });
+
+describe("agentTokenFormat 의 에이전트 이메일 판별(엣지 안전 사본)", () => {
+  it("agentToken 의 재노출과 같은 함수", async () => {
+    const fmt = await import("./agentTokenFormat");
+    expect(fmt.isAgentEmail).toBe(isAgentEmail);
+    expect(agentEmail("x").endsWith(fmt.AGENT_EMAIL_SUFFIX)).toBe(true);
+  });
+});

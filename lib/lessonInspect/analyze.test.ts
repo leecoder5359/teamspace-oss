@@ -151,10 +151,11 @@ describe("injectionStats", () => {
 });
 
 describe("log 헬퍼", () => {
-  it("via 는 훅 세 종류만, 나머지는 unknown", () => {
+  it("via 는 훅 네 종류만, 나머지는 unknown", () => {
     expect(normalizeVia("SessionStart")).toBe("SessionStart");
     expect(normalizeVia("PostToolUse")).toBe("PostToolUse");
     expect(normalizeVia("UserPromptSubmit")).toBe("UserPromptSubmit");
+    expect(normalizeVia("SubagentStart")).toBe("SubagentStart");
     expect(normalizeVia("evil")).toBe("unknown");
     expect(normalizeVia(null)).toBe("unknown");
   });
@@ -193,5 +194,17 @@ describe("log 헬퍼", () => {
     ];
     const md = renderBrief({ workspaceName: "W", projectId: "p", projectName: "P", projectStack: [], lessons, personId: "me", tasks: [], me: [], counts: { docs: 0, decisions: 0, risks: 0, glossary: 0 } });
     expect(briefInjectionIds(md, lessons, "p", [], "me")).toEqual({ gistIds: [], titleIds: ["m1"], omittedIds: ["g1"] });
+  });
+});
+
+// sections=project(PostToolUse 델타)는 프로젝트 범위만 싣는다 — '세션 시작에서 늘 잘림' 판단에 섞지 않는다.
+describe("injectionStats — project(델타) 기록", () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+  const lessons = [{ id: "a", title: "A", projectId: "p", stack: null, createdAt: now }];
+  it("project 모드 기록만 있으면 '늘 잘림' 후보가 없고, 레슨 횟수에는 센다", () => {
+    const r: InjectionRow = { id: "1", createdAt: now, actorName: null, cwd: "/x", projectId: "p", via: "PostToolUse", mode: "project", gistIds: [], titleIds: ["a"], omittedIds: [], chars: 2000 };
+    const s = injectionStats({ rows: [r], reads: [], lessons, projects: [], days: 30, now });
+    expect(s.cleanup.alwaysTruncated).toEqual([]);
+    expect(s.lessons[0]).toMatchObject({ titleOnly: 1 });
   });
 });

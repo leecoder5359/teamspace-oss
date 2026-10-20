@@ -94,7 +94,7 @@ export default function Reminders() {
             <Icon name="plus" /> 등록
           </button>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: "#c0392b", marginTop: 8 }}>{err}</div>}
+        {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
       </div>
 
       {/* 목록 */}

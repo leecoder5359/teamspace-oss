@@ -8,10 +8,11 @@ import { TASK_NOTE_EXCLUDE } from "@/lib/taskNotes";
 import { resolveRouteByCwd } from "@/lib/ingest";
 
 import { loadGraph } from "@/lib/graphLoad";
-import { subgraph, renderKnowledgeMap } from "@/lib/graphInsights";
-import { buildLessonSection, capLines, CONTEXT_BUDGET, gistOf, lessonMinBudget } from "@/lib/lessonInject";
+import { subgraph, renderKnowledgeMap, knowledgeMapLine } from "@/lib/graphInsights";
+import { buildLessonSection, capLines, CONTEXT_BUDGET, gistOf, LESSON_BUDGET, lessonMinBudget, renderSubagentLessons } from "@/lib/lessonInject";
 import { recordLessonInjection, injectionIds, briefInjectionIds } from "@/lib/lessonInspect/log";
-import { renderBrief } from "@/lib/contextBrief";
+import { renderBrief, sortTasksForContext } from "@/lib/contextBrief";
+import { renderProjectDelta } from "@/lib/contextProject";
 import { viewerPersonId } from "@/lib/viewerPerson";
 import { accountSection, buildAccountLines } from "@/lib/envVault/sessionAccounts";
 import { archivedPageIds } from "@/lib/pageArchive";
@@ -26,10 +27,18 @@ type Opt = { id: string; name: string };
    워크스페이스를 Claude 세션이 읽을 수 있는 Markdown 컨텍스트로 내보낸다.
    (팀 레슨 · 보드 열린 태스크 · 문서 목록 · 승인된 결정 · 열린 리스크 · 용어집)
    cwd 를 주면 WorkspaceRouteRule 로 프로젝트를 해석해 해당 프로젝트 우선으로 필터한다(W3).
-   compact=1 → 세션 훅 주입용. 전체를 ~9KB 안으로 줄인다(레슨은 제목·요약·id, 나머지는 상위 N건+'외 N건').
+   compact=1 → 세션 훅 주입용. 전체를 ~7KB(CONTEXT_BUDGET) 안으로 줄인다(레슨은 제목·요약·id, 태스크는 내 담당 → 진행 중 순 ~700자,
+   결정은 상위 N건+'외 N건', 지식 지도·문서·용어집은 개수 + MCP 안내 한 줄 — 목록은 필요할 때 MCP 로).
    Claude Code 는 큰 훅 출력을 파일로 빼고 앞 2KB 만 넣기 때문에, 크기 자체가 전달 여부를 가른다.
    brief=1 → resume·compact 훅용 ~2.5KB 요약(프로젝트·스택 레슨 제목+id, 내 담당 + 진행 중 상위 5건, 나머지는 개수 한 줄).
    compact=1 과 같이 오면 brief 가 우선. 렌더는 lib/contextBrief(순수).
+   sections=lessons → SubagentStart 훅용 레슨 섹션만(필수 + cwd 프로젝트 범위 + 요청자 본인의 개인 레슨 제목+id, 예산 LESSON_BUDGET).
+   keywords 에 `audience:main`(정확히, 소문자)이 있는 레슨은 메인 세션 전용이라 빼고 '메인 전용 N건 제외' 한 줄로만 센다(필수·기본 모두).
+   보드·문서·결정·지식 지도는 읽지 않는다. 렌더는 lib/lessonInject.renderSubagentLessons(순수).
+   sections=project → PostToolUse 훅용 프로젝트 델타(~3KB): 그 프로젝트·스택 범위 레슨(필수 먼저) + 계정 줄 + 내 담당·진행 중 태스크 +
+   개수 한 줄. 세션 시작에 이미 들어간 전역·개인·필수(전역) 레슨과 지식 지도·용어집·문서 목록·결정은 싣지 않는다. 렌더는 lib/contextProject(순수).
+   주입 기록 mode=project.
+   다른 sections 값은 400. 없으면 기존 동작 그대로.
    format=json → { markdown, counts }, 기본 → text/markdown. */
 export async function GET(request: Request) {
   const guard = await requireCtx();
@@ -41,6 +50,9 @@ export async function GET(request: Request) {
   const compact = url.searchParams.get("compact") === "1";
   const includeTaskNotes = url.searchParams.get("includeTaskNotes") === "1";
   const brief = url.searchParams.get("brief") === "1";
+  const sections = url.searchParams.get("sections");
+  if (sections !== null && sections !== "lessons" && sections !== "project")
+    return NextResponse.json({ error: "sections 는 lessons|project 만 지원합니다." }, { status: 400 });
 
   // 보관(F2 문서·F10 프로젝트)은 주입하지 않는다 — 사이드바·검색과 같은 규칙(lib/pagesList·search).
   // 문서 보관은 조상 기반이라 보관 페이지가 하나라도 있을 때만 트리를 읽는다(대부분 count 한 번).
@@ -77,6 +89,35 @@ export async function GET(request: Request) {
       projectStack = p?.stack ?? [];
       if (!p) projectId = null;
     }
+  }
+
+  // 레슨: 전역 + (cwd 매핑 시) 해당 프로젝트 — 팀 작업규칙은 항상 주입된다 (W3 mem-9)
+  // 개인 레슨은 이 요청의 사람(사람 = 본인, 에이전트 토큰 = 발급자) 것만 — 다른 사람 것은 admin 이어도 읽지 않는다.
+  // ondemand·스택 불일치 등 세부 판정은 lib/lessonInject.lessonApplicability 가 한다(개수도 그 판정 뒤 숫자로).
+  const personId = viewerPersonId(guard);
+  const lessonWhere = {
+    workspaceId,
+    ...(projectId ? { OR: [{ projectId: null }, { projectId }] } : {}),
+    AND: [{ OR: [{ userId: null }, ...(personId ? [{ userId: personId }] : [])] }],
+  };
+
+  // sections=lessons: 서브에이전트(SubagentStart 훅)에 세션 레포 레슨만 — 필수 + 이 프로젝트 범위 + 요청자 개인 레슨(제목+id).
+  // 개인 습관은 MEMORY.md 에서 레슨으로 옮겨 가는 중이라 여기서 싣는다(2026-10-20). 전역 기본·스택은 에이전트 정의·role 레슨이 맡는다.
+  if (sections === "lessons") {
+    const all = await prisma.lesson.findMany({
+      where: lessonWhere,
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, title: true, body: true, projectId: true, stack: true, userId: true, mode: true, keywords: true },
+      take: 500,
+    });
+    const r = renderSubagentLessons({ lessons: all, projectId, projectName, projectStack, personId, budget: LESSON_BUDGET });
+    const markdown = r.lines.join("\n");
+    if (url.searchParams.get("inspect") !== "1") {
+      void recordLessonInjection({ workspaceId, actorName: guard.actor?.name, cwd, projectId, via: url.searchParams.get("via"), mode: "compact", ids: injectionIds(r.report), chars: markdown.length });
+    }
+    return fmt === "json"
+      ? NextResponse.json({ markdown, counts: { lessons: r.count } })
+      : new NextResponse(markdown, { headers: { "content-type": "text/markdown; charset=utf-8" } });
   }
 
   const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
@@ -135,24 +176,65 @@ export async function GET(request: Request) {
   const docWhere = { kind: "doc" as const, workspaceId, deletedAt: null, ...projFilter, ...notArchivedPage, ...(includeTaskNotes ? {} : TASK_NOTE_EXCLUDE) };
   const decisionWhere = { workspaceId, status: "accepted" as const, ...projFilter, ...notArchivedProject };
   const riskWhere = { workspaceId, status: "open" as const, ...projFilter, ...notArchivedProject };
-  // 레슨: 전역 + (cwd 매핑 시) 해당 프로젝트 — 팀 작업규칙은 항상 주입된다 (W3 mem-9)
-  // 개인 레슨은 이 요청의 사람(사람 = 본인, 에이전트 토큰 = 발급자) 것만 — 다른 사람 것은 admin 이어도 읽지 않는다.
-  // ondemand·스택 불일치 등 세부 판정은 lib/lessonInject.lessonApplicability 가 한다(개수도 그 판정 뒤 숫자로).
-  const personId = viewerPersonId(guard);
-  const lessonWhere = {
-    workspaceId,
-    ...(projectId ? { OR: [{ projectId: null }, { projectId }] } : {}),
-    AND: [{ OR: [{ userId: null }, ...(personId ? [{ userId: personId }] : [])] }],
-  };
   // 개수는 count 로 — 목록 take(50/30/100/500)에 묶이지 않고, brief 는 목록을 아예 읽지 않는다.
   // 문서 개수는 볼 수 없는 페이지를 where 로 밀어 넣어 visibleOnly 와 같은 결과를 낸다.
   const hiddenDocIds = [...archivedIds, ...hiddenPageIds(access)];
   const docCountWhere = { ...docWhere, ...(hiddenDocIds.length ? { id: { notIn: hiddenDocIds } } : {}) };
+  // 계정 줄(P3c) — 이 프로젝트의 env 금고 반영 대상이 기대하는 계정(계정 착각 방지). 훅 주입(compact·brief·project)에만.
+  // 프로젝트를 볼 수 없으면(제한 프로젝트) 넣지 않는다. 조회 실패는 섹션만 생략.
+  const loadAccountTargets = async (want: boolean): Promise<{ kind: string; config: unknown; account: unknown }[]> => {
+    if (!projectId || !want || projectAccess(access, projectId) === "none") return [];
+    try {
+      return await prisma.envTarget.findMany({
+        where: { workspaceId, projectId },
+        orderBy: [{ kind: "asc" }, { env: "asc" }, { createdAt: "asc" }],
+        select: { kind: true, config: true, account: true },
+      });
+    } catch (e) {
+      // 오류 본문은 남기지 않는다(계정·설정 값이 섞일 수 있다) — 이름만
+      withReq(request).warn("context.account_lines_skipped", { msg: "계정 줄 생략", errName: e instanceof Error ? e.name : typeof e });
+      return [];
+    }
+  };
+
+  // sections=project: PostToolUse 델타 — 레슨(프로젝트·스택)·계정·태스크·개수만. 목록·지식 지도는 읽지 않는다.
+  if (sections === "project") {
+    const [lessons, nDocs, nDecisions, targets] = await Promise.all([
+      prisma.lesson.findMany({
+        where: lessonWhere,
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, title: true, body: true, projectId: true, stack: true, userId: true, mode: true },
+        take: 500,
+      }),
+      prisma.page.count({ where: docCountWhere }),
+      prisma.decision.count({ where: decisionWhere }),
+      loadAccountTargets(true),
+    ]);
+    const r = renderProjectDelta({
+      workspaceName: ws?.name ?? "TeamSpace",
+      projectId,
+      projectName,
+      projectStack,
+      lessons,
+      personId,
+      tasks,
+      me: [guard.actor?.name ?? "", guard.userId],
+      counts: { tasks: tasks.length, docs: nDocs, decisions: nDecisions },
+      accountLines: buildAccountLines(targets, { home: homedir() }),
+    });
+    if (url.searchParams.get("inspect") !== "1") {
+      void recordLessonInjection({ workspaceId, actorName: guard.actor?.name, cwd, projectId, via: url.searchParams.get("via"), mode: "project", ids: r.ids, chars: r.markdown.length });
+    }
+    return fmt === "json"
+      ? NextResponse.json({ markdown: r.markdown, counts: { lessons: r.ids.gistIds.length + r.ids.titleIds.length + r.ids.omittedIds.length, tasks: tasks.length, docs: nDocs, decisions: nDecisions } })
+      : new NextResponse(r.markdown, { headers: { "content-type": "text/markdown; charset=utf-8" } });
+  }
+
   const [docs, decisions, risks, glossary, lessons, nDocs, nDecisions, nRisks, nGlossary, nLessons] = await Promise.all([
-    brief ? [] : prisma.page.findMany({ where: docWhere, orderBy: { updatedAt: "desc" }, select: { id: true, title: true, updatedAt: true }, take: 50 }),
+    brief || compact ? [] : prisma.page.findMany({ where: docWhere, orderBy: { updatedAt: "desc" }, select: { id: true, title: true, updatedAt: true }, take: 50 }),
     brief ? [] : prisma.decision.findMany({ where: decisionWhere, orderBy: { decidedAt: "desc" }, select: { title: true, decision: true }, take: 30 }),
     brief ? [] : prisma.risk.findMany({ where: riskWhere, orderBy: { createdAt: "desc" }, select: { title: true, severity: true }, take: 30 }),
-    brief ? [] : prisma.glossaryTerm.findMany({ where: { workspaceId }, orderBy: { term: "asc" }, select: { term: true, definition: true }, take: 100 }),
+    brief || compact ? [] : prisma.glossaryTerm.findMany({ where: { workspaceId }, orderBy: { term: "asc" }, select: { term: true, definition: true }, take: 100 }),
     // 섹션(전역/프로젝트) 나누기와 예산은 lib/lessonInject 가 한다 — 여기서 개수로 자르지 않는다.
     prisma.lesson.findMany({
       where: lessonWhere,
@@ -167,24 +249,11 @@ export async function GET(request: Request) {
     prisma.lesson.count({ where: lessonWhere }),
   ]);
 
-  // 계정 줄(P3c) — 이 프로젝트의 env 금고 반영 대상이 기대하는 계정(계정 착각 방지). 훅 주입(compact·brief)에만.
-  // 프로젝트를 볼 수 없으면(제한 프로젝트) 넣지 않는다. 조회 실패는 섹션만 생략.
-  let accountTargets: { kind: string; config: unknown; account: unknown }[] = [];
-  if (projectId && (compact || brief) && projectAccess(access, projectId) !== "none") {
-    try {
-      accountTargets = await prisma.envTarget.findMany({
-        where: { workspaceId, projectId },
-        orderBy: [{ kind: "asc" }, { env: "asc" }, { createdAt: "asc" }],
-        select: { kind: true, config: true, account: true },
-      });
-    } catch (e) {
-      // 오류 본문은 남기지 않는다(계정·설정 값이 섞일 수 있다) — 이름만
-      withReq(request).warn("context.account_lines_skipped", { msg: "계정 줄 생략", errName: e instanceof Error ? e.name : typeof e });
-    }
-  }
+  const accountTargets = await loadAccountTargets(compact || brief);
   const home = homedir();
 
   const visibleDocs = visibleOnly(access, docs);
+  const me = [guard.actor?.name ?? "", guard.userId];
   const counts = { lessons: nLessons, tasks: tasks.length, docs: nDocs, decisions: nDecisions, risks: nRisks, glossary: nGlossary };
   const respond = (markdown: string, extra?: object) =>
     fmt === "json"
@@ -209,7 +278,7 @@ export async function GET(request: Request) {
       lessons,
       personId,
       tasks,
-      me: [guard.actor?.name ?? "", guard.userId],
+      me,
       counts,
       accountLines: buildAccountLines(accountTargets, { home, maxLines: 1, maxChars: 120 }),
     });
@@ -231,7 +300,7 @@ export async function GET(request: Request) {
   // cwd→프로젝트면 그 프로젝트 문서만. 그래프 실패가 세션 컨텍스트 전체를 막으면 안 된다 → 섹션만 생략.
   // SessionStart 훅은 3초에 끊긴다 → 그래프 로드는 800ms 안에 못 끝나면 섹션만 버린다.
   // 지도는 한 번만 그리고, compact 예산을 맞추느라 나머지 섹션을 다시 그릴 때는 자르기만 다시 한다.
-  let mapLines: string[] | null = null;
+  let mapLines: string[] | null = null; // compact 는 개수 한 줄(knowledgeMapLine), full 은 허브·군집 목록
   let graphTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
@@ -243,7 +312,7 @@ export async function GET(request: Request) {
       g = subgraph(g, (n) => !hidden.has(n.id) && !(n.projectId && hidden.has(n.projectId)));
     }
     if (projectId) g = subgraph(g, (n) => n.type === "doc" && n.projectId === projectId);
-    mapLines = renderKnowledgeMap(g, compact ? { hubN: 8, commN: 5 } : { hubN: 20, commN: 10 });
+    mapLines = compact ? [knowledgeMapLine(g), ""] : renderKnowledgeMap(g, { hubN: 20, commN: 10 });
   } catch (e) {
     withReq(request).warn("context.knowledge_map_skipped", { msg: "지식 지도 생략", err: e });
   } finally {
@@ -266,16 +335,18 @@ export async function GET(request: Request) {
 
     section(
       `## 태스크 보드 — 열린 ${tasks.length}건`,
-      tasks.map((t) => {
+      (compact ? sortTasksForContext(tasks, me) : tasks).map((t) => {
         const meta = [t.status, t.assignee, t.due ? `마감 ${t.due}` : null].filter(Boolean).join(" · ");
         return `- ${t.title}${meta ? ` — ${meta}` : ""}`;
       }),
       "- (열린 태스크 없음)",
-      1400,
+      700,
       "MCP `task_list`",
     );
 
-    section(`## 문서 (${counts.docs})`, visibleDocs.map((d) => `- ${d.title}`), "- (없음)", 700, "MCP `doc_list`");
+    // compact: 문서 목록은 한 줄 — id 없는 제목은 바로 열 수 없어 쓸모가 적다(MCP doc_list 가 id 를 준다).
+    if (compact) R.push(`## 문서 (${counts.docs}) — 목록은 MCP \`doc_list\``, "");
+    else section(`## 문서 (${counts.docs})`, visibleDocs.map((d) => `- ${d.title}`), "- (없음)", 0, "");
 
     section(
       `## 결정 — 승인됨 (${counts.decisions})`,
@@ -287,22 +358,10 @@ export async function GET(request: Request) {
 
     section(`## 리스크 — 열림 (${counts.risks})`, risks.map((r) => `- [${r.severity}] ${r.title}`), "- (없음)", 400, "MCP `search`");
 
-    if (mapLines) {
-      if (compact) {
-        // 레슨 예산을 잠식하지 않게 ~1200자로 자른다(제목 줄은 유지)
-        const body = capLines(mapLines.slice(1), cap(1200));
-        R.push(mapLines[0], ...body.lines);
-        if (body.omitted) R.push("");
-      } else {
-        R.push(...mapLines);
-      }
-    }
+    if (mapLines) R.push(...mapLines);
 
     if (compact) {
-      R.push(`## 용어집 (${counts.glossary})`);
-      const terms = capLines(glossary.map((g) => g.term), cap(500));
-      R.push(terms.lines.length ? `${terms.lines.join(", ")}${terms.omitted ? ` 외 ${terms.omitted}개` : ""} — 정의는 MCP \`search\`` : "- (없음)");
-      R.push("");
+      R.push(`## 용어집 (${counts.glossary}) — 정의는 MCP \`search\``, "");
     } else {
       section(`## 용어집 (${counts.glossary})`, glossary.map((g) => `- **${g.term}**: ${g.definition ?? ""}`), "- (없음)", 0, "");
     }

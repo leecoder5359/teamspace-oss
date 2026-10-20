@@ -20,7 +20,7 @@ import { loadAccess, pageAccess } from "@/lib/pageGuard";
 import { getPageContent } from "@/lib/pageService";
 import PageView from "@/components/PageView";
 import DatabaseView from "@/components/DatabaseView";
-import PagePage from "./page";
+import PagePage, { generateMetadata } from "./page";
 
 const m = (f: unknown) => f as Mock;
 const run = () => PagePage({ params: Promise.resolve({ id: "p1" }) });
@@ -91,5 +91,37 @@ describe("/p/[id] 페이지", () => {
     const el = (await run()) as { type: unknown; props: { initial: unknown } };
     expect(el.type).toBe(PageView);
     expect(el.props.initial).toBeNull();
+  });
+});
+
+describe("/p/[id] 탭 제목(U-16)", () => {
+  const meta = () => generateMetadata({ params: Promise.resolve({ id: "p1" }) });
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(getPageContext).mockResolvedValue({ workspaceId: "w1" });
+    m(loadAccess).mockResolvedValue({});
+  });
+
+  it("볼 수 있는 문서는 문서 제목이 탭 제목", async () => {
+    m(pageAccess).mockReturnValue("view");
+    m(prisma.page.findUnique).mockResolvedValue({ title: "배포 가이드", deletedAt: null, workspaceId: "w1" });
+    expect(await meta()).toEqual({ title: "배포 가이드" });
+  });
+
+  it("권한 없음·휴지통·다른 워크스페이스는 제목을 내보내지 않는다", async () => {
+    m(pageAccess).mockReturnValue("none");
+    expect(await meta()).toEqual({});
+    expect(prisma.page.findUnique).not.toHaveBeenCalled();
+    m(pageAccess).mockReturnValue("edit");
+    m(prisma.page.findUnique).mockResolvedValue({ title: "비밀", deletedAt: new Date(), workspaceId: "w1" });
+    expect(await meta()).toEqual({});
+    m(prisma.page.findUnique).mockResolvedValue({ title: "비밀", deletedAt: null, workspaceId: "w2" });
+    expect(await meta()).toEqual({});
+  });
+
+  it("제목이 비면 '제목 없음'", async () => {
+    m(pageAccess).mockReturnValue("view");
+    m(prisma.page.findUnique).mockResolvedValue({ title: "", deletedAt: null, workspaceId: "w1" });
+    expect(await meta()).toEqual({ title: "제목 없음" });
   });
 });

@@ -425,7 +425,7 @@ export default function DatabaseView({
       {!embedded && <Breadcrumb pageId={pageId} />}
       {!embedded && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-          <h1 className="ws-db-title" style={{ margin: 0 }}>{data.page.title || "Untitled"}</h1>
+          <h1 className="ws-db-title" style={{ margin: 0 }}>{data.page.title || "제목 없음"}</h1>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--border-subtle)", borderRadius: 999, padding: "3px 8px 3px 10px" }} title="이 보드가 속한 프로젝트">
             <span style={{ width: 8, height: 8, borderRadius: 2, background: data.page.project ? colorFor(data.page.project.color) : "var(--text-disabled)", flex: "0 0 auto" }} />
             <select
@@ -801,6 +801,12 @@ export function TableView({
     if (!next || !tr?.contains(next)) setFocusRowId(null);
   };
   const colCount = properties.length + meta.length + 1;
+  const titleId = useMemo(() => [...roles].find(([, r]) => r === "title")?.[0] ?? null, [roles]);
+  const confirmDeleteRow = (row: DbRow) => {
+    const t = titleId ? row.props[titleId] : undefined;
+    const name = typeof t === "string" && t.trim() ? t : "제목 없음";
+    if (window.confirm(`"${name}" 행을 삭제할까요?`)) onDeleteRow(row.id);
+  };
 
   const toggleSort = (id: string) => {
     // asc → desc → 해제 순환. 해제가 없으면 "정렬을 끄고 원래 순서로" 가 불가능하다.
@@ -886,7 +892,7 @@ export function TableView({
         </td>
       ))}
       <td className="ws-table-actions">
-        <button className="ws-row-del" title="행 삭제" onClick={() => onDeleteRow(row.id)}>
+        <button className="ws-row-del" title="행 삭제" onClick={() => confirmDeleteRow(row)}>
           <Icon name="close" size={14} />
         </button>
       </td>
@@ -1341,8 +1347,15 @@ function KanbanView({
                     setDragId(null);
                     setDropCol(null);
                   }}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     if (!dragId) onOpenRow(row.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+                    e.preventDefault();
+                    onOpenRow(row.id);
                   }}
                 >
                   <div className="ws-card-top">
@@ -1354,7 +1367,7 @@ function KanbanView({
                   </div>
 
                   <div className="ws-card-title">
-                    {typeof title === "string" && title ? title : "Untitled"}
+                    {typeof title === "string" && title ? title : "제목 없음"}
                   </div>
 
                   {showSecondary && labels.length > 0 && (

@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getRenderContext } from "@/lib/renderContext";
 import Members from "@/components/ws/Members";
 import { loadAgentTokenSummaries } from "@/lib/membersAgents";
 import { isAgentEmail } from "@/lib/agentToken";
 import type { MemberItem, TeamItem } from "@/components/ws/Members";
+
+export const metadata: Metadata = { title: "멤버" };
 
 // 서버 컴포넌트: 현재 워크스페이스 멤버·팀을 Prisma로 페치한 뒤 클라이언트 컴포넌트에 전달.
 export default async function MembersPage() {

@@ -32,8 +32,9 @@ export type LessonLite = {
 };
 
 export const LESSON_BUDGET = 5000;
-/** 세션 훅 주입 전체 목표(문자). Claude Code 는 큰 훅 출력을 파일로 빼고 앞 2KB 만 넣는다 — 53KB 에서 실측, 9KB 는 본문으로 들어감을 확인(2026-09-15). */
-export const CONTEXT_BUDGET = 9000;
+/** 세션 훅 주입 전체 목표(문자). Claude Code 는 큰 훅 출력을 파일로 빼고 앞 2KB 만 넣는다 — 53KB 에서 실측, 9KB 는 본문으로 들어감을 확인(2026-09-15).
+    2026-10-20 7,000 으로 낮췄다 — 지식 지도·용어집·문서 목록을 개수 한 줄로 접어 남는 몫이 줄었다(감사 doc cmvfg2ytk). */
+export const CONTEXT_BUDGET = 7000;
 
 export function neutralizeHeadings(body: string): string {
   return body.replace(/^#{1,6}\s+/gm, "▸ ");
@@ -88,8 +89,9 @@ function fillSection(list: LessonLite[], budget: number): { lines: string[]; use
     ① 제목 단계: 앞 섹션부터 제목 줄을 담는다. 뒤 섹션이 최악의 경우에도 '외 N개' 한 줄은 낼 수 있게 그 몫은 남겨 둔다
        (조용히 버리지 않는다 — 개수는 항상 드러낸다).
     ② 요약 단계: 남은 예산으로 앞 섹션부터, 섹션 안에서는 최근 것부터 요약 줄로 올린다.
-    커버리지(모든 규칙의 이름)를 먼저 지키고, 그 위에서 좁은 범위가 요약을 먼저 가져간다. */
-function fillOrdered(lists: LessonLite[][], budget: number): { lines: string[]; used: number; gist: number; shown: number }[] {
+    커버리지(모든 규칙의 이름)를 먼저 지키고, 그 위에서 좁은 범위가 요약을 먼저 가져간다.
+    PostToolUse 델타(lib/contextProject)도 같은 규칙으로 [필수, 기본] 을 채운다. */
+export function fillOrdered(lists: LessonLite[][], budget: number): { lines: string[]; used: number; gist: number; shown: number }[] {
   const res = lists.map((list) => ({ lines: list.map(titleLine), used: 0, gist: 0, shown: list.length }));
   let left = budget;
   lists.forEach((list, s) => {
@@ -367,6 +369,65 @@ export function buildLessonSection(i: {
     budget: i.compact ? lessonBudgetFor(i.restChars, lessonMinBudget(scope)) : undefined,
   });
   return { lines: r.lines, report: { ...r.report, restChars: i.restChars } };
+}
+
+/* ── 서브에이전트 레슨(sections=lessons, SubagentStart 훅) ─────────────────── */
+
+/** 메인 세션 전용 규칙 표시 — keywords 에 이 값(정확히, 소문자)이 있으면 서브에이전트 주입에서 뺀다. */
+export const AUDIENCE_MAIN = "audience:main";
+
+export function isMainOnly(l: { keywords?: string[] | null }): boolean {
+  return (l.keywords ?? []).includes(AUDIENCE_MAIN);
+}
+
+/** 개인 섹션(제목+id 줄) 상한(문자, 섹션 제목 줄 제외). */
+const SUBAGENT_PERSONAL_BUDGET = 800;
+
+/** sections=lessons 출력: 필수 + 이 프로젝트 범위(renderLessonsReport compact) + 요청자 본인의 개인 레슨(제목+id, 필수·ondemand 제외).
+    keyword audience:main 레슨은 (필수·기본·개인 가리지 않고) 빼고 '메인 전용 N건 제외' 한 줄로 센다. 전체(개인 섹션 포함)는 budget 안 — 개인 몫을 먼저 떼고 나머지를 렌더에 준다. */
+export function renderSubagentLessons(i: {
+  lessons: (LessonLite & { keywords?: string[] | null })[];
+  projectId: string | null;
+  projectName: string | null;
+  projectStack: string[];
+  personId?: string | null;
+  budget: number;
+}): { lines: string[]; report: LessonRenderReport; mainOnly: number; count: number } {
+  const personId = i.personId ?? null;
+  const inScope = (l: LessonLite) => {
+    if (lessonModeOf(l) === "required") return true;
+    if (lessonScopeOf(l) === "project") return !!i.projectId && l.projectId === i.projectId;
+    return lessonScopeOf(l) === "personal" && !!personId && l.userId === personId && lessonModeOf(l) !== "ondemand";
+  };
+  const candidates = i.lessons.filter(inScope);
+  const kept = candidates.filter((l) => !isMainOnly(l));
+  const mainOnly = candidates.length - kept.length;
+  const personal = kept.filter((l) => lessonScopeOf(l) === "personal" && lessonModeOf(l) !== "required");
+  const scoped = kept.filter((l) => !personal.includes(l));
+
+  const pTitles = personal.map(titleLine);
+  let pr = capLines(pTitles, SUBAGENT_PERSONAL_BUDGET);
+  if (pr.omitted) pr = capLines(pTitles, SUBAGENT_PERSONAL_BUDGET - moreCost(pr.omitted + 1));
+  const personalLines = personal.length ? [`### 개인 (${personal.length})`, ...pr.lines, ...(pr.omitted ? [moreLine(pr.omitted)] : [])] : [];
+  const note = mainOnly ? [`_메인 전용 ${mainOnly}건 제외 — keyword \`${AUDIENCE_MAIN}\` 레슨은 메인 세션에만 넣는다._`] : [];
+  const extra = size([...personalLines, ...note]);
+
+  const r = renderLessonsReport({
+    lessons: scoped,
+    projectId: i.projectId,
+    projectName: i.projectName,
+    projectStack: i.projectStack,
+    personId,
+    mode: "compact",
+    budget: Math.max(0, i.budget - extra),
+  });
+  const lines = [...r.lines];
+  const footer = lines.indexOf(FOOTER);
+  lines.splice(footer === -1 ? lines.length : footer, 0, ...personalLines);
+  lines.splice(lines.length - 1, 0, ...note); // 끝 빈 줄 앞
+  const personalStatuses: LessonStatusEntry[] = personal.map((l, k) => ({ id: l.id, scope: "personal", mode: lessonModeOf(l), status: k < pr.lines.length ? "title" : "omitted" }));
+  const statuses = [...r.report.statuses, ...personalStatuses];
+  return { lines, report: { ...r.report, chars: lines.join("\n").length, statuses }, mainOnly, count: kept.length };
 }
 
 /** 레슨 스택은 태그 하나(null/빈 문자열 = 해제). */

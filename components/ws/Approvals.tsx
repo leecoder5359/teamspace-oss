@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
+import { LoadErrorNotice } from "./AiConnect";
 
 /* =====================================================================
    승인 대기 인박스 (design app/approvals.jsx 포팅) — 에이전트/앱이 만든
@@ -50,6 +51,9 @@ export default function Approvals() {
   const [autoLow, setAutoLow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  // 첫 목록 조회 실패 — 빈 화면에 멈추지 않고 안내+다시 시도(Dashboard SessionCard 패턴)
+  const [loadErr, setLoadErr] = useState(false);
   // 알림 링크(/approvals?id=)로 들어오면 해당 카드로 스크롤하고 잠시 강조한다.
   const focusId = useSearchParams().get("id");
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -58,8 +62,15 @@ export default function Approvals() {
   const widenedAppended = useRef(false);
 
   async function load() {
-    const res = await fetch("/api/approvals", { cache: "no-store" });
-    const data = (await res.json()) as { approvals: Approval[] };
+    let data: { approvals: Approval[] };
+    try {
+      const res = await fetch("/api/approvals", { cache: "no-store" });
+      if (!res.ok) return setLoadErr(true);
+      data = (await res.json()) as { approvals: Approval[] };
+    } catch {
+      return setLoadErr(true);
+    }
+    setLoadErr(false);
     setList(data.approvals);
     // 단건 조회로 붙였던 카드는 이 응답에 없으면 사라진다 — 다시 조회할 수 있게 표식을 풀면
     // (inList true→false 로 효과가 재실행돼) 최신 상태로 다시 붙이거나, 이제 없으면 안내를 보인다.
@@ -129,13 +140,18 @@ export default function Approvals() {
     if (!title.trim()) return;
     setBusy(true);
     setMsg(null);
+    setErr(null);
     try {
       const res = await fetch("/api/approvals", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim(), kind, highRisk }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr((data as { error?: string }).error ?? "승인 요청을 만들지 못했습니다.");
+        return;
+      }
       setMsg(data.sent ? "슬랙으로 승인 요청을 보냈습니다." : `생성됨(슬랙 미발송: ${data.error})`);
       setTitle("");
       setBody("");
@@ -149,19 +165,31 @@ export default function Approvals() {
 
   async function decide(id: string, status: Status, responseText?: string) {
     setBusy(true);
+    setErr(null);
     try {
-      await fetch(`/api/approvals/${id}`, {
+      const res = await fetch(`/api/approvals/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status, responseText }),
       });
+      if (!res.ok) setErr(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "처리하지 못했습니다.");
       await load();
     } finally {
       setBusy(false);
     }
   }
 
-  if (list === null) return <div className="ws-db" style={{ padding: 40 }} />;
+  if (list === null) {
+    return (
+      <div className="ws-db" style={{ maxWidth: 820 }}>
+        {loadErr ? (
+          <LoadErrorNotice message="승인 목록을 불러오지 못했어요." onRetry={() => void load()} />
+        ) : (
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", padding: "20px 4px" }}>불러오는 중…</div>
+        )}
+      </div>
+    );
+  }
 
   const pending = list.filter((a) => a.status === "pending");
   const done = list.filter((a) => a.status !== "pending");
@@ -173,7 +201,7 @@ export default function Approvals() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "1px solid var(--border-subtle)", borderRadius: 12, background: "var(--surface-card)", marginBottom: 16, flexWrap: "wrap" }}>
         <div style={aiBadge}>AI</div>
         <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>승인 대기 인박스</div>
+          <h1 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>승인 대기 인박스</h1>
           <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2 }}>
             중요한 건만 컨펌하면 돼요. 승인/거부/추가요청은 슬랙(#workspace-confirm)에서도 가능합니다.
           </div>
@@ -205,6 +233,8 @@ export default function Approvals() {
         </div>
         {msg && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 8 }}>{msg}</div>}
       </div>
+
+      {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>{err}</div>}
 
       {focusId && missingId === focusId && !inList && (
         <div role="status" style={{ fontSize: 12.5, color: "var(--text-sub)", padding: "10px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-sunken)", marginBottom: 12 }}>

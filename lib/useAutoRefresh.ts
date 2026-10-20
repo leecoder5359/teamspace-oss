@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { createEventHub, type EventHub } from "./eventHub";
 
 /**
  * 화면 자동 갱신 훅 (W6 폴링 → W8 SSE 업그레이드).
@@ -8,7 +9,21 @@ import { useEffect, useRef } from "react";
  *    안전망으로 5분 간격 폴링만 유지.
  * 2) SSE 실패/미지원: 기존 30초 폴링 폴백.
  * 창 포커스/가시성 복귀 시엔 항상 refetch. 호출부 시그니처는 W6 그대로.
+ * SSE 연결은 탭 전체가 하나를 나눠 쓰고 숨은 탭에선 닫는다(lib/eventHub, 감사 P-6).
  */
+let hub: EventHub | null = null;
+function sharedHub(): EventHub {
+  hub ??= createEventHub({
+    open: () => new EventSource("/api/events"),
+    isHidden: () => document.hidden,
+    watchVisibility: (onChange) => {
+      document.addEventListener("visibilitychange", onChange);
+      return () => document.removeEventListener("visibilitychange", onChange);
+    },
+  });
+  return hub;
+}
+
 export function useAutoRefresh(refetch: () => void, intervalMs = 30_000): void {
   const fnRef = useRef(refetch);
   useEffect(() => {
@@ -19,35 +34,28 @@ export function useAutoRefresh(refetch: () => void, intervalMs = 30_000): void {
     let pollMs = intervalMs;
     let iv: ReturnType<typeof setInterval> | null = null;
     let debounce: ReturnType<typeof setTimeout> | null = null;
-    let es: EventSource | null = null;
 
     const startPolling = () => {
       if (iv) clearInterval(iv);
       iv = setInterval(() => fnRef.current(), pollMs);
     };
 
-    const onEvent = () => {
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => fnRef.current(), 500);
-    };
-
-    try {
-      es = new EventSource("/api/events");
-      es.addEventListener("hello", () => {
+    startPolling();
+    const unsubscribe = sharedHub().subscribe({
+      onHello: () => {
         pollMs = 300_000; // SSE 활성 → 폴링은 5분 안전망으로 완화
         startPolling();
-      });
-      es.addEventListener("activity", onEvent);
-      es.addEventListener("notification", onEvent);
-      es.onerror = () => {
+      },
+      onEvent: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => fnRef.current(), 500);
+      },
+      onError: () => {
         // 연결 실패/끊김 → 30초 폴링 폴백 (EventSource 가 자동 재연결도 시도)
         pollMs = intervalMs;
         startPolling();
-      };
-    } catch {
-      /* EventSource 미지원 */
-    }
-    startPolling();
+      },
+    });
 
     const onFocus = () => fnRef.current();
     const onVisible = () => {
@@ -58,7 +66,7 @@ export function useAutoRefresh(refetch: () => void, intervalMs = 30_000): void {
     return () => {
       if (iv) clearInterval(iv);
       if (debounce) clearTimeout(debounce);
-      if (es) es.close();
+      unsubscribe();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };

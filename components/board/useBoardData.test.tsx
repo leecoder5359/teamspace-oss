@@ -85,6 +85,36 @@ describe("useBoardData", () => {
     expect(result.current.rows[0].props.p1).toBe("첫 행");
   });
 
+  it("addRow 가 실패하면 null 을 돌려주고 error 를 세팅한다(무음 실패 금지 — U-17)", async () => {
+    mockFetch((url, init) =>
+      url === "/api/databases/db1/rows" && init?.method === "POST" ? json({ error: "권한이 없습니다." }, 403) : undefined,
+    );
+    const { result } = renderHook(() => useBoardData("db1"));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    let out: unknown;
+    await act(async () => {
+      out = await result.current.addRow({ p1: "새 행" });
+    });
+    expect(out).toBeNull();
+    expect(result.current.error).toBe("권한이 없습니다.");
+    expect(result.current.rows).toHaveLength(1);
+  });
+
+  it("addRow 의 fetch 가 거부돼도 던지지 않고 fallback 을 알린다", async () => {
+    mockFetch((url, init) => {
+      if (url === "/api/databases/db1/rows" && init?.method === "POST") throw new TypeError("network");
+      return undefined;
+    });
+    const { result } = renderHook(() => useBoardData("db1"));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    let out: unknown;
+    await act(async () => {
+      out = await result.current.addRow();
+    });
+    expect(out).toBeNull();
+    expect(result.current.error).toBe("행을 추가하지 못했습니다.");
+  });
+
   describe("saveViewConfig", () => {
     const VIEW_URL = "/api/databases/db1/views/v1";
     /** 뷰 PATCH 응답을 테스트가 직접 풀어 주도록 붙잡아 둔다 — 응답 전 화면 상태를 보기 위해 */

@@ -228,7 +228,7 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
         {provOpen && (
           <div style={{ marginTop: 12 }}>
             {provLoading && <div className="ws-empty-hint">문서 주장을 분석하는 중입니다(수십 초)…</div>}
-            {provErr && <p style={{ fontSize: 12.5, color: "#D14343" }}>{provErr}</p>}
+            {provErr && <p style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{provErr}</p>}
             {provCounts && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                 {(Object.keys(TAG_COLOR) as ProvTag[]).map((t) => (

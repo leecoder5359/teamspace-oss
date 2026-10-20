@@ -148,7 +148,7 @@ export default function Projects({
         <span style={{ color: "var(--text-sub)", display: "flex" }}>
           <Icon name="folder" size={16} />
         </span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>프로젝트</span>
+        <h1 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-strong)" }}>프로젝트</h1>
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{showArchived ? `활성 ${projects.filter((p) => !p.archivedAt).length} · 보관 ${projects.filter((p) => p.archivedAt).length}` : `${projects.length}개`}</span>
         <span style={{ flex: 1 }} />
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -665,5 +665,4 @@ const selectStyle: CSSProperties = {
   fontSize: 12.5,
   fontFamily: "inherit",
   fontWeight: 600,
-  outline: "none",
 };

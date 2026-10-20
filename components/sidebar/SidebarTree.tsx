@@ -49,15 +49,20 @@ export function SidebarTree({
     el.style.left = `${Math.max(8, Math.min(menu.x - 180, window.innerWidth - r.width - 8))}px`;
   }, [menu]);
 
-  // 컨텍스트 메뉴: 바깥 클릭/리사이즈 시 닫기
+  // 컨텍스트 메뉴: 바깥 클릭/리사이즈/Escape 시 닫기
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
     window.addEventListener("click", close);
     window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("click", close);
       window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
     };
   }, [menu]);
 

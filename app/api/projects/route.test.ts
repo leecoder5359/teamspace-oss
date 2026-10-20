@@ -4,13 +4,13 @@ import type { Mock } from "vitest";
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { project: { findUnique: vi.fn(), update: vi.fn() } } }));
 vi.mock("@/lib/pageGuard", () => ({ loadAccess: vi.fn(), projectAccess: vi.fn(), requireProject: vi.fn() }));
-vi.mock("@/lib/projects", () => ({ getProjectsWithStats: vi.fn() }));
+vi.mock("@/lib/projects", () => ({ getProjectsWithStats: vi.fn(), listProjectsLite: vi.fn() }));
 vi.mock("@/lib/projectRef", () => ({ resolveMemberRef: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { loadAccess, projectAccess, requireProject } from "@/lib/pageGuard";
-import { getProjectsWithStats } from "@/lib/projects";
+import { getProjectsWithStats, listProjectsLite } from "@/lib/projects";
 import { GET } from "./route";
 import { PATCH } from "./[id]/route";
 
@@ -44,6 +44,34 @@ describe("GET /api/projects ?archived=", () => {
     const res = await GET(new Request("http://t/api/projects?archived=all"));
     const body = (await res.json()) as { projects: { id: string }[] };
     expect(body.projects.map((p) => p.id)).toEqual(["p1"]);
+  });
+});
+
+describe("GET /api/projects ?fields=sidebar (감사 P-11)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m(requireCtx).mockResolvedValue(ctx);
+    m(loadAccess).mockResolvedValue({});
+    m(projectAccess).mockImplementation((_i: unknown, id: string) => (id === "locked" ? "none" : "view"));
+    m(listProjectsLite).mockResolvedValue([
+      { id: "p1", name: "One", short: "O", color: "blue", archivedAt: null },
+      { id: "locked", name: "Secret", short: "S", color: "red", archivedAt: null },
+    ]);
+  });
+
+  it("지표 없이 가벼운 목록을 읽고(모드 그대로), 잠긴 프로젝트는 뺀다", async () => {
+    const res = await GET(new Request("http://t/api/projects?archived=all&fields=sidebar"));
+    expect(m(listProjectsLite)).toHaveBeenCalledWith("w1", "all");
+    expect(m(getProjectsWithStats)).not.toHaveBeenCalled();
+    const body = (await res.json()) as { projects: unknown[] };
+    expect(body.projects).toEqual([{ id: "p1", name: "One", short: "O", color: "blue", archivedAt: null }]);
+  });
+
+  it("fields 가 없거나 모르는 값이면 기존 지표 응답", async () => {
+    m(getProjectsWithStats).mockResolvedValue([]);
+    await GET(new Request("http://t/api/projects?fields=junk"));
+    expect(m(getProjectsWithStats)).toHaveBeenCalledWith("w1", "active");
+    expect(m(listProjectsLite)).not.toHaveBeenCalled();
   });
 });
 

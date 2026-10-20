@@ -2,6 +2,7 @@
 // 대상: <button>, role="button" 요소, <a>/<Link>, 래퍼 컴포넌트(이름이 Button/Btn 으로 끝남 — FilterBtn·ApproveButton 등),
 // trigger 속성으로 버튼 내용을 받는 컴포넌트(TaskDetail 의 Menu 등).
 // 오탐은 허용하지 않는다: 알 수 없는 표현식 자식은 "텍스트 있음"으로 간주한다.
+// 두 번째 규칙(scanKeyboardButtons): role="button" 에 onClick 이 있는데 onKeyDown 이 없으면 키보드로 열 수 없다.
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
@@ -149,6 +150,31 @@ export function scanIconButtons(
   return out;
 }
 
+// role="button" + onClick 인데 onKeyDown 이 없는 요소. `{...props}` 는 onKeyDown 을 실어 올 수 있다 → 있음으로 본다.
+export function scanKeyboardButtons(
+  files: readonly string[],
+  read: (f: string) => string,
+): Finding[] {
+  const out: Finding[] = [];
+  const has = (el: ts.JsxOpeningLikeElement, name: string) => attrInit(el, name) !== null;
+  for (const file of files) {
+    const sf = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const check = (open: ts.JsxOpeningLikeElement) => {
+      if (!hasRoleButton(open) || !has(open, "onClick") || has(open, "onKeyDown")) return;
+      if (open.attributes.properties.some(ts.isJsxSpreadAttribute)) return;
+      const line = sf.getLineAndCharacterOfPosition(open.getStart(sf)).line + 1;
+      out.push({ file, line, snippet: open.getText(sf).split("\n")[0].trim().slice(0, 100) });
+    };
+    const visit = (n: ts.Node) => {
+      if (ts.isJsxElement(n)) check(n.openingElement);
+      else if (ts.isJsxSelfClosingElement(n)) check(n);
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+  }
+  return out;
+}
+
 function walk(dir: string, acc: string[]) {
   if (!fs.existsSync(dir)) return;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -165,7 +191,8 @@ export function scanRepo(root: string): Finding[] {
   walk(path.join(root, "components"), files);
   walk(path.join(root, "app"), files);
   files.sort();
-  const found = scanIconButtons(files, (f) => fs.readFileSync(f, "utf8"));
+  const read = (f: string) => fs.readFileSync(f, "utf8");
+  const found = [...scanIconButtons(files, read), ...scanKeyboardButtons(files, read)];
   return found.map((f) => ({ ...f, file: path.relative(root, f.file) }));
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchPromptLessons, mentionedProjects, normalizeTerms, termIn, PROMPT_BUDGET, type PromptLesson, type PromptProject } from "./lessonPromptMatch";
+import { matchPromptLessons, mentionedProjects, keywordScore, KEYWORD_MIN_SCORE, LESSON_ROLES, normalizeTerms, termIn, PROMPT_BUDGET, type PromptLesson, type PromptProject } from "./lessonPromptMatch";
 
 const projects: PromptProject[] = [
   { id: "bj", name: "반장 — 인테리어 창업 MVP", aliases: ["반장", "banjang"], stack: ["next", "supabase"] },
@@ -27,6 +27,12 @@ describe("termIn — 단어 매칭", () => {
     expect(termIn("(loyo) 결제", "loyo")).toBe(true);
     expect(termIn("deploy loyo", "loyo")).toBe(true);
     expect(termIn("next.js 16", "next.js")).toBe(true);
+  });
+  it("role:* 태그는 ASCII 단어로 앞뒤 경계까지 맞춘다(SubagentStart 훅의 role 레슨)", () => {
+    expect(termIn("role:implementer", "role:implementer")).toBe(true);
+    expect(termIn("role:implementers", "role:implementer")).toBe(false);
+    expect(termIn("xrole:implementer", "role:implementer")).toBe(false);
+    expect(termIn("role:reviewer", "role:implementer")).toBe(false);
   });
   it("비ASCII 는 부분 문자열", () => {
     expect(termIn("반장에서 도면", "반장")).toBe(true);
@@ -131,6 +137,22 @@ describe("matchPromptLessons", () => {
         const r = g(`<${tag} from="x">반장 prisma schema 배포 카나리 정리했어</${tag}>`);
         expect(r).toMatchObject({ markdown: "", lessonIds: [], mentionedProjectIds: [] });
       }
+    });
+
+    it("role:* 태그는 하나만 맞아도 들어간다 — SubagentStart 훅이 prompt \"role:<agent>\" 로 부른다", () => {
+      const roles = [les({ id: "r-impl", keywords: ["role:implementer"] }), les({ id: "r-rev", keywords: ["role:reviewer"] })];
+      const r = matchPromptLessons({ prompt: "role:implementer", lessons: roles, projects, cwdProjectId: "ts", personId: "me" });
+      expect(r.lessonIds).toEqual(["r-impl"]);
+    });
+
+    it("role: 가산점은 역할 3개만 — role:x 하나로는 문턱을 못 넘고 role:reviewer 하나는 넘는다", () => {
+      const roles = [les({ id: "r-x", keywords: ["role:x"] }), les({ id: "r-rev", keywords: ["role:reviewer"] })];
+      const m = (prompt: string) => matchPromptLessons({ prompt: `${prompt} 작업 시작`, lessons: roles, projects, cwdProjectId: "ts", personId: "me" }).lessonIds;
+      expect(m("role:x")).toEqual([]);
+      expect(m("role:reviewer")).toEqual(["r-rev"]);
+      expect(keywordScore(["role:x"])).toBe(1);
+      expect(keywordScore(["role:reviewer"])).toBe(KEYWORD_MIN_SCORE);
+      expect(LESSON_ROLES).toEqual(["implementer", "reviewer", "researcher"]);
     });
 
     it("전역 레슨 — 구체어 하나만 맞으면(점수 1) 빠진다", () => {

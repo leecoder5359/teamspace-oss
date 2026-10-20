@@ -88,13 +88,25 @@ function isDoneName(name: string): boolean {
   return /완료|done|close|닫|해결|resolved/i.test(name);
 }
 
+/** 보관 모드 → archivedAt 조건 (F10). */
+const archivedWhere = (archived: ArchivedMode) =>
+  archived === "active" ? { archivedAt: null } : archived === "only" ? { archivedAt: { not: null } } : {};
+
+export type ProjectLite = { id: string; name: string; short: string | null; color: string; archivedAt: Date | null };
+
+/** 사이드바·브레드크럼용 가벼운 목록 — 카드 지표(페이지·보드 행 전체 읽기) 없이 같은 순서·같은 보관 모드(감사 P-11). */
+export function listProjectsLite(workspaceId: string, archived: ArchivedMode = "active"): Promise<ProjectLite[]> {
+  return prisma.project.findMany({
+    where: { workspaceId, ...archivedWhere(archived) },
+    orderBy: { position: "asc" },
+    select: { id: true, name: true, short: true, color: true, archivedAt: true },
+  });
+}
+
 /** archived: active(기본)=보관 제외 · only=보관함 · all=둘 다 (F10) */
 export async function getProjectsWithStats(workspaceId: string, archived: ArchivedMode = "active"): Promise<ProjectStat[]> {
   const projects = await prisma.project.findMany({
-    where: {
-      workspaceId,
-      ...(archived === "active" ? { archivedAt: null } : archived === "only" ? { archivedAt: { not: null } } : {}),
-    },
+    where: { workspaceId, ...archivedWhere(archived) },
     orderBy: { position: "asc" },
     include: {
       lead: { select: { id: true, name: true, image: true } },

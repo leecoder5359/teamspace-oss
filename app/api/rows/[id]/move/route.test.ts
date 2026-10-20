@@ -10,6 +10,7 @@ vi.mock("@/lib/pageGuard", () => ({
 }));
 vi.mock("@/lib/relationServer", () => ({ validateRelationProps: vi.fn() }));
 vi.mock("@/lib/activity", () => ({ recordActivity: vi.fn() }));
+vi.mock("@/lib/graphLoad", () => ({ invalidateGraphCache: vi.fn() }));
 vi.mock("@/lib/prisma", () => {
   const tx = {
     dbProperty: { findUnique: vi.fn(), update: vi.fn() },
@@ -30,6 +31,7 @@ import { requireCtx } from "@/lib/workspace";
 import { requirePage, gatePage } from "@/lib/pageGuard";
 import { validateRelationProps } from "@/lib/relationServer";
 import { recordActivity } from "@/lib/activity";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { prisma } from "@/lib/prisma";
 import { POST } from "./route";
 
@@ -179,6 +181,7 @@ describe("POST /api/rows/[id]/move", () => {
     expect(body.row).toBeUndefined();
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(recordActivity).not.toHaveBeenCalled();
+    expect(invalidateGraphCache).not.toHaveBeenCalled();
   });
 
   it("성공: 보드·props·position·parentRowId 를 CAS 로 갱신하고 활동을 남긴다", async () => {
@@ -197,6 +200,7 @@ describe("POST /api/rows/[id]/move", () => {
     });
     expect(recordActivity).toHaveBeenCalledWith(expect.anything(), "moved", "task", "작업 → B 보드", "row1");
     expect(tx.dbProperty.update).not.toHaveBeenCalled();
+    expect(invalidateGraphCache).toHaveBeenCalledWith("w1"); // 보드가 바뀌면 보이는 사람이 바뀐다(그래프 SWR 10분)
   });
 
   it("createMissingOptions: 대상 속성에 옵션을 추가하고 그 id 로 저장한다", async () => {
@@ -233,6 +237,7 @@ describe("POST /api/rows/[id]/move", () => {
     const res = await POST(req({ targetDatabaseId: "boardB" }), params);
     expect(res.status).toBe(409);
     expect(recordActivity).not.toHaveBeenCalled();
+    expect(invalidateGraphCache).not.toHaveBeenCalled();
   });
 
   it("다른 행이 이 행을 relation 으로 가리키면 referencedBy 로 센다", async () => {

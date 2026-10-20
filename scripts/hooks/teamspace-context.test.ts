@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
-import { contextModeFor, contextUrl, gitInfo, ingestPayload, repoInfoFromRevParse } from "./teamspace-context.mjs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { contextModeFor, contextUrl, extractLessonIds, gitInfo, ingestPayload, promptStateFile, repoInfoFromRevParse, seedPromptState } from "./teamspace-context.mjs";
+import { promptStateFile as promptHookStateFile, readState } from "./teamspace-prompt-lessons.mjs";
 
 // SessionStart 훅: 새 세션(startup·clear)엔 전체, 이어가기(resume·compact)엔 요약만 주입한다.
 describe("contextModeFor", () => {
@@ -38,5 +41,60 @@ describe("gitInfo · ingestPayload", () => {
   it("저장소 정보는 있을 때만 붙는다", () => {
     expect(ingestPayload("s1", "/c")).toEqual({ sessionId: "s1", cwd: "/c", status: "active" });
     expect(ingestPayload("s1", "/c", { branch: "main", repo: "r" })).toEqual({ sessionId: "s1", cwd: "/c", status: "active", branch: "main", repo: "r" });
+  });
+});
+
+// L4: 세션 시작에 넣은 레슨 id 를 UserPromptSubmit 상태 파일에 미리 적어, 메시지마다 같은 레슨이 다시 실리지 않게 한다.
+describe("extractLessonIds", () => {
+  const A = "cmaaaaaaaaaaaaaaaaaaaaaaa1";
+  const B = "cmbbbbbbbbbbbbbbbbbbbbbbb2";
+  const md = [
+    "# 워크스페이스: 팀",
+    "",
+    "## 팀 작업규칙·레슨 — 반드시 따른다 (필수 2 · 전역 0)",
+    "### 필수 (2)",
+    `- **규칙 A** — 요약 \`${A}\``,
+    `- **규칙 B** \`${B}\``,
+    "- … 외 3개 (전체 제목: MCP `lesson_list`)",
+    `_전문은 MCP \`lesson_get {id}\` \`cmzzzzzzzzzzzzzzzzzzzzzzz9\`_`,
+    "",
+    "## 지식 지도 — 허브 1 · 군집 0",
+    `- **허브 문서** \`cmdddddddddddddddddddddddd\``,
+  ].join("\n");
+  it("레슨 섹션의 요약(gist) 줄 id 만 — 제목만 줄(B)은 규칙을 전하지 않으므로 넣지 않는다", () => expect(extractLessonIds(md)).toEqual([A]));
+  it("요약 줄 여러 개는 중복 없이 순서대로", () => {
+    const two = `## 팀 작업규칙·레슨\n- **a** — 요약 \`${A}\`\n- **b** — 요약 \`${B}\`\n- **a** — 다시 \`${A}\``;
+    expect(extractLessonIds(two)).toEqual([A, B]);
+  });
+  it("짧은 id·대문자·다른 섹션은 무시", () => {
+    expect(extractLessonIds("## 팀 작업규칙·레슨\n- **x** — 요약 `cshort`\n- **y** — 요약 `cmAAAAAAAAAAAAAAAAAAAAAAA`")).toEqual([]);
+    expect(extractLessonIds("## 결정\n- **x** — 요약 `cmaaaaaaaaaaaaaaaaaaaaaaa1`")).toEqual([]);
+  });
+  it("레슨 섹션이 없거나 입력이 문자열이 아니면 빈 배열", () => {
+    expect(extractLessonIds("# 제목만")).toEqual([]);
+    expect(extractLessonIds(undefined)).toEqual([]);
+  });
+});
+
+describe("seedPromptState", () => {
+  it("상태 파일 경로는 UserPromptSubmit 훅과 같다(메인 세션)", () => {
+    expect(promptStateFile("s/1", undefined, "/d")).toBe(promptHookStateFile("s/1", undefined, "/d"));
+  });
+  it("기존 injected 와 합친다(중복 없이) — prompt 훅이 그대로 읽는다", () => {
+    const dir = mkdtempSync(join(tmpdir(), "seed-"));
+    const f = promptStateFile("s1", undefined, dir);
+    writeFileSync(f, JSON.stringify({ injected: ["old", "a"] }));
+    seedPromptState("s1", ["a", "b"], dir);
+    expect(readState(f).injected).toEqual(["old", "a", "b"]);
+  });
+  it("파일이 없으면 새로 만든다, id 가 없으면 쓰지 않는다", () => {
+    const dir = mkdtempSync(join(tmpdir(), "seed-"));
+    seedPromptState("s2", [], dir);
+    expect(() => readFileSync(promptStateFile("s2", undefined, dir))).toThrow();
+    seedPromptState("s2", ["x"], dir);
+    expect(readState(promptStateFile("s2", undefined, dir)).injected).toEqual(["x"]);
+  });
+  it("쓰기 실패는 무해(throw 하지 않는다)", () => {
+    expect(() => seedPromptState("s3", ["x"], join(tmpdir(), "no-such-dir-xyz", "deeper"))).not.toThrow();
   });
 });

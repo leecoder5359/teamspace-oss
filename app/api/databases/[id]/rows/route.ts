@@ -3,6 +3,7 @@ import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { requirePage } from "@/lib/pageGuard";
 import { validateRelationProps } from "@/lib/relationServer";
 import { notifyTaskCreated } from "@/lib/notify";
@@ -43,6 +44,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   void notifyTaskCreated(id, (body.props ?? {}) as Record<string, unknown>);
   const firstText = Object.values((body.props ?? {}) as Record<string, unknown>).find((v) => typeof v === "string" && v);
   recordActivity(guard, "created", "task", (firstText as string) ?? "(제목 없음)", row.id);
+  invalidateGraphCache(guard.workspaceId);
   return NextResponse.json({ row });
   });
 }

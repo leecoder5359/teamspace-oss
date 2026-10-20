@@ -2,9 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({ prisma: { lesson: { findMany: vi.fn(), count: vi.fn(), create: vi.fn() }, project: { findUnique: vi.fn() } } }));
+vi.mock("@/lib/graphLoad", () => ({ invalidateGraphCache: vi.fn() }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    lesson: { findMany: vi.fn(), count: vi.fn(), create: vi.fn() },
+    project: { findUnique: vi.fn() },
+    workspaceMember: { findMany: vi.fn() },
+    user: { findMany: vi.fn() },
+    idempotencyRecord: { findUnique: vi.fn(), create: vi.fn() },
+  },
+}));
 
 import { requireCtx } from "@/lib/workspace";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { prisma } from "@/lib/prisma";
 import { GET, POST } from "./route";
 
@@ -113,6 +123,14 @@ describe("POST /api/lessons — personal·mode", () => {
     expect((await res.json()).lesson).toMatchObject({ scope: "personal", personal: true, mode: "required" });
   });
 
+  it("팀 레슨 생성은 그래프 캐시를 비우고, 개인 레슨(그래프에 없음)은 비우지 않는다(리뷰 I-1)", async () => {
+    expect((await post(base)).status).toBe(200);
+    expect(invalidateGraphCache).toHaveBeenCalledWith("w1");
+    m(invalidateGraphCache).mockClear();
+    expect((await post({ ...base, personal: true })).status).toBe(200);
+    expect(invalidateGraphCache).not.toHaveBeenCalled();
+  });
+
   it("personal 을 projectId·stack 과 함께 주면 400", async () => {
     expect((await post({ ...base, personal: true, projectId: "p1" })).status).toBe(400);
     expect((await post({ ...base, personal: true, stack: "next" })).status).toBe(400);
@@ -142,5 +160,89 @@ describe("POST /api/lessons — personal·mode", () => {
     await post(base);
     expect(m(prisma.lesson.create).mock.calls[2][0].data).not.toHaveProperty("keywords");
     expect((await post({ ...base, keywords: "a" })).status).toBe(400);
+  });
+});
+
+describe("GET /api/lessons?scope=", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(prisma.lesson.count).mockResolvedValue(0);
+  });
+
+  it("모르는 scope 는 400", async () => {
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "editor", personId: "u1" });
+    expect((await get("?scope=all")).status).toBe(400);
+  });
+
+  it("teammates 는 editor 이상을 요구한다", async () => {
+    m(requireCtx).mockResolvedValue({ err: new Response(null, { status: 403 }) });
+    expect((await get("?scope=teammates")).status).toBe(403);
+    expect(m(requireCtx).mock.calls[0][0]).toBe("editor");
+  });
+
+  it("teammates = 활성 멤버 중 나를 뺀 사람의 공개 개인 레슨(복사본 제외) + 작성자·copiedId", async () => {
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "me", role: "admin", personId: "me" });
+    m(prisma.workspaceMember.findMany).mockResolvedValue([
+      { userId: "me", user: { name: "나", email: "me@x" } },
+      { userId: "b", user: { name: null, email: "bee@x" } },
+    ]);
+    m(prisma.lesson.findMany)
+      .mockResolvedValueOnce([{ id: "T1", userId: "b", projectId: null, stack: null, mode: "default", title: "t", body: "b" }])
+      .mockResolvedValueOnce([{ id: "C1", copiedFromId: "T1" }]);
+    const j = await (await get("?scope=teammates")).json();
+    expect(m(prisma.workspaceMember.findMany).mock.calls[0][0].where).toEqual({ workspaceId: "w1", status: "active" });
+    expect(m(prisma.lesson.findMany).mock.calls[0][0].where).toEqual({
+      workspaceId: "w1",
+      AND: [{ userId: { in: ["b"] }, sharedWithTeam: true, copiedFromId: null }],
+    });
+    expect(j.lessons[0]).toMatchObject({ id: "T1", author: { id: "b", name: "bee" }, copiedId: "C1", personal: true });
+  });
+
+  it("teammates — 사람을 모르는 토큰은 빈 목록", async () => {
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "agentU", role: "editor", actor: { type: "agent", id: "agentU", name: "a" }, personId: null });
+    m(prisma.workspaceMember.findMany).mockResolvedValue([]);
+    expect(await (await get("?scope=teammates")).json()).toEqual({ lessons: [], total: 0 });
+    expect(prisma.lesson.findMany).not.toHaveBeenCalled();
+  });
+
+  it("mine = admin 이어도 내 것만 + copiedFrom(원본 삭제됨)", async () => {
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "boss", role: "admin", personId: "boss" });
+    m(prisma.lesson.findMany)
+      .mockResolvedValueOnce([{ id: "L1", userId: "boss", projectId: null, copiedFromId: "GONE" }])
+      .mockResolvedValueOnce([]); // 원본 조회 — 없음
+    const j = await (await get("?scope=mine")).json();
+    expect(m(prisma.lesson.findMany).mock.calls[0][0].where).toEqual({ workspaceId: "w1", AND: [{ userId: "boss" }] });
+    expect(j.lessons[0].copiedFrom).toEqual({ id: "GONE", authorName: null, deleted: true });
+  });
+
+  it("team = 개인 레슨 제외(admin 이라도)", async () => {
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "boss", role: "admin", personId: "boss" });
+    m(prisma.lesson.findMany).mockResolvedValue([]);
+    await get("?scope=team");
+    expect(m(prisma.lesson.findMany).mock.calls[0][0].where).toEqual({ workspaceId: "w1", AND: [{ userId: null }] });
+  });
+});
+
+describe("POST /api/lessons — Idempotency-Key", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m(requireCtx).mockResolvedValue({ workspaceId: "w1", userId: "u1", role: "editor", actor: { type: "user", id: "u1", name: "u1" }, personId: "u1" });
+    m(prisma.lesson.create).mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: "N1", projectId: null, ...data }));
+  });
+  const post = (body: unknown, key?: string) =>
+    POST(new Request("http://t/api/lessons", { method: "POST", body: JSON.stringify(body), headers: key ? { "idempotency-key": key } : {} }));
+
+  it("같은 키의 재요청은 저장된 응답을 돌려주고 새로 만들지 않는다", async () => {
+    m(prisma.idempotencyRecord.findUnique).mockResolvedValue({ response: { lesson: { id: "OLD" } } });
+    const res = await post({ title: "t", body: "b", personal: true }, "feedback-reply-in-korean");
+    expect(res.headers.get("x-idempotent-replay")).toBe("1");
+    expect((await res.json()).lesson.id).toBe("OLD");
+    expect(prisma.lesson.create).not.toHaveBeenCalled();
+  });
+
+  it("키가 없으면 종전처럼 바로 만든다", async () => {
+    const res = await post({ title: "t", body: "b" });
+    expect(res.status).toBe(200);
+    expect(prisma.idempotencyRecord.findUnique).not.toHaveBeenCalled();
   });
 });

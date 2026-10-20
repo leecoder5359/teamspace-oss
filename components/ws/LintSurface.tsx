@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Icon } from "./icons";
 
 /* wiki-lint surface — 깨진 위키링크 + 고아 문서 점검. /api/lint. */
@@ -13,7 +13,6 @@ type Lint = {
 };
 
 export default function LintSurface() {
-  const router = useRouter();
   const [data, setData] = useState<Lint | null>(null);
 
   useEffect(() => {
@@ -54,7 +53,7 @@ export default function LintSurface() {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {data.broken.map((b, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: "1px solid var(--border-subtle)", borderRadius: 9, background: "var(--surface-card)", fontSize: 13 }}>
-                    <button onClick={() => router.push(`/p/${b.sourceId}`)} style={{ border: "none", background: "transparent", color: "var(--color-primary)", fontWeight: 600, cursor: "pointer", padding: 0, font: "inherit" }}>{b.sourceTitle}</button>
+                    <Link href={`/p/${b.sourceId}`} style={{ border: "none", background: "transparent", color: "var(--color-primary)", fontWeight: 600, cursor: "pointer", padding: 0, font: "inherit", textDecoration: "none" }}>{b.sourceTitle}</Link>
                     <span style={{ color: "var(--text-muted)" }}>→</span>
                     <span style={{ color: "var(--text-strong)" }}>[[{b.target}]]</span>
                     <span style={{ marginLeft: "auto", fontSize: 11.5, color: "#c0392b" }}>대상 문서 없음</span>
@@ -74,9 +73,9 @@ export default function LintSurface() {
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {data.orphans.map((o) => (
-                  <button key={o.id} onClick={() => router.push(`/p/${o.id}`)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  <Link key={o.id} href={`/p/${o.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>
                     <Icon name="doc" size={13} /> {o.title}
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}
@@ -92,9 +91,9 @@ export default function LintSurface() {
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {data.rootDocs.map((o) => (
-                  <button key={o.id} onClick={() => router.push(`/p/${o.id}`)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  <Link key={o.id} href={`/p/${o.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>
                     <Icon name="doc" size={13} /> {o.title}
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}

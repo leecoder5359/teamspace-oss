@@ -8,7 +8,8 @@ import { join } from "node:path";
    반영 대상이 없는 프로젝트의 compact·brief 출력이 그것과 바이트 단위로 같아야 한다.
    (다시 만들 일은 없어야 한다 — 만들 땐 이전 라우트로 CONTEXT_GOLDEN_WRITE=1)
    2026-10-10 레슨 예산 개편(필수 먼저·좁은 범위 먼저)으로 레슨 요약 줄 배분만 바뀌어 다시 만들었다 — 계정 줄과 무관.
-   2026-10-11 전체 예산 정합(레슨 예산이 고정 줄까지 포함·여유 400 → 1)으로 요약 줄 3개가 늘어 다시 만들었다 — 계정 줄과 무관. */
+   2026-10-11 전체 예산 정합(레슨 예산이 고정 줄까지 포함·여유 400 → 1)으로 요약 줄 3개가 늘어 다시 만들었다 — 계정 줄과 무관.
+   2026-10-20 compact 슬림화(문서·용어집·지식 지도 한 줄, 예산 9000 → 7000)로 다시 만들었다 — 계정 줄과 무관. */
 
 vi.mock("@/lib/workspace", () => ({ requireCtx: vi.fn() }));
 vi.mock("@/lib/pageGuard", () => ({
@@ -171,7 +172,7 @@ describe("GET /api/context — 전체 예산(CONTEXT_BUDGET) 정합", () => {
     for (let i = 0; i < 13; i++) expect(md).toMatch(new RegExp(`- \\*\\*필수 규칙 ${i} — 반드시 지킨다\\*\\* — .+\`rq${i}\``));
     expect(md).toContain("## 문서 (12)"); // 섹션 제목·개수는 남는다
     expect(md).toContain("## 태스크 보드 — 열린 60건");
-    expect(md).toMatch(/- … 외 \d+건 \(MCP `doc_list`\)/); // 넘친 건 '외 N건' 으로
+    expect(md).toMatch(/- … 외 \d+건 \(MCP `task_list`\)/); // 넘친 건 '외 N건' 으로
   });
 
   it("inspect 보고서의 totalChars 도 같은 정합(시뮬레이터 = 실제 주입)", async () => {

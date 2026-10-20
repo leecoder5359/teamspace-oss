@@ -19,6 +19,7 @@ export default function Sidebar({
   onToggleRail,
   onToggleTheme,
   onNavigate,
+  inert = false,
   sessionUser = null,
   initialSidebar = null,
 }: {
@@ -27,6 +28,8 @@ export default function Sidebar({
   onToggleRail: () => void;
   onToggleTheme: () => void;
   onNavigate?: () => void;
+  /** 모바일에서 닫힌 드로어일 때 true — 사이드바 전체를 탭 순서·접근성 트리에서 뺀다. */
+  inert?: boolean;
   sessionUser?: SessionUser;
   initialSidebar?: InitialSidebar;
 }) {
@@ -163,15 +166,16 @@ export default function Sidebar({
   );
 
   const collapseTitle = rail ? "사이드바 펼치기" : "사이드바 접기";
-  const userName = sessionUser ? sessionUser.name ?? sessionUser.email ?? "사용자" : "이호준";
-  const userEmail = sessionUser ? sessionUser.email ?? "" : "you@example.com";
+  const userName = sessionUser?.name ?? sessionUser?.email ?? "사용자";
+  const userEmail = sessionUser?.email ?? "";
   const userInitials = userName.slice(0, 2);
 
   return (
-    <aside className="ws-sidebar" aria-label="사이드바">
+    <aside className="ws-sidebar" aria-label="사이드바" inert={inert}>
       {/* 회사 전환기 */}
       <div className="ws-side-top">
-        <button className="ws-company" title="워크스페이스 전환">
+        {/* 워크스페이스 전환은 아직 없다 — 눌러도 아무 일 없는 버튼 대신 표시만(모양은 같게, 커서만 기본) */}
+        <div className="ws-company" style={{ cursor: "default" }}>
           <span className="ws-company-logo">
             <Icon name="logo" size={18} />
           </span>
@@ -182,7 +186,7 @@ export default function Sidebar({
           <span className="ws-company-caret">
             <Icon name="chevronDown" size={14} />
           </span>
-        </button>
+        </div>
         <button
           className="ws-icon-btn ws-head-actions"
           onClick={onToggleRail}
@@ -263,6 +267,10 @@ export default function Sidebar({
             <span className="ws-nav-ico"><Icon name="inbox" /></span>
             <span className="ws-nav-label">승인</span>
           </Link>
+          <Link href="/lessons" className={`ws-nav-item${pathname.startsWith("/lessons") ? " active" : ""}`} onClick={onNavigate} title="레슨">
+            <span className="ws-nav-ico"><Icon name="flag" /></span>
+            <span className="ws-nav-label">레슨</span>
+          </Link>
           <Link href="/aiconnect" className={`ws-nav-item${pathname === "/aiconnect" ? " active" : ""}`} onClick={onNavigate} title="AI 연결">
             <span className="ws-nav-ico"><Icon name="logo" /></span>
             <span className="ws-nav-label">AI 연결</span>
@@ -286,7 +294,7 @@ export default function Sidebar({
       {/* 하단 사용자 카드 + 테마 토글 */}
       <div className="ws-side-foot">
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button className="ws-user-card" title="계정">
+          <Link href="/settings" className="ws-user-card" title="계정 설정" onClick={onNavigate} style={{ textDecoration: "none" }}>
             {sessionUser?.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img className="ds-avatar" src={sessionUser.image} alt={userName} style={{ width: 30, height: 30, objectFit: "cover" }} />
@@ -299,7 +307,7 @@ export default function Sidebar({
               <span className="ws-user-name">{userName}</span>
               <span className="ws-user-sub">{userEmail}</span>
             </span>
-          </button>
+          </Link>
           {sessionUser && (
             <button className="ws-icon-btn" onClick={() => void signOut({ redirectTo: "/login" })} title="로그아웃" aria-label="로그아웃">
               <Icon name="logout" size={18} />

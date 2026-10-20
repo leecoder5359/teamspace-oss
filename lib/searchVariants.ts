@@ -17,3 +17,10 @@ export function queryVariants(q: string): string[] {
   }
   return out;
 }
+
+/** 원문 조회 결과와 변형 조회 결과를 합친다 — 원문이 충분하면 원문만, 아니면 원문 먼저 + 변형(id 중복 제거). */
+export function mergeVariantRows<T extends { id: string }>(first: T[], more: T[], firstSuffices: boolean): T[] {
+  if (firstSuffices) return [...first];
+  const seen = new Set(first.map((r) => r.id));
+  return [...first, ...more.filter((r) => !seen.has(r.id))];
+}

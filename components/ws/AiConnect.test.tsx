@@ -51,3 +51,10 @@ describe("AiConnect — 컨텍스트 실패", { timeout: 15_000 }, () => {
     expect(screen.queryByText("컨텍스트를 불러오지 못했어요.")).toBeNull();
   });
 });
+
+describe("AiConnect — 화면 제목(U-29)", () => {
+  it("목록 화면의 <h1> 은 'AI 연결' 하나(상세 화면 제목과는 다른 분기)", () => {
+    const html = renderToStaticMarkup(<AiConnect />);
+    expect(html.match(/<h1[ >]/g)).toHaveLength(1);
+  });
+});

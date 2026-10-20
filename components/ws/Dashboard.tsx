@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { Icon } from "./icons";
@@ -97,7 +98,6 @@ function ActivityFeed() {
 }
 
 function SessionCard() {
-  const router = useRouter();
   // null = 로딩, "error" = 실패
   const [sum, setSum] = useState<SessionSummary | "error" | null>(null);
   const load = useCallback(async () => {
@@ -121,9 +121,9 @@ function SessionCard() {
     <DashPanel
       title="에이전트 세션"
       action={
-        <button className="ws-link" onClick={() => router.push("/settings")}>
+        <Link className="ws-link" href="/settings" style={{ textDecoration: "none" }}>
           라이브 세션 관리
-        </button>
+        </Link>
       }
     >
       {sum === null ? (
@@ -369,8 +369,9 @@ export default function Dashboard({ userName }: { userName: string }) {
     };
   }, [data]);
 
+  const taskHref = `/p/${taskDbId}?view=table`;
   const openTask = () => {
-    if (taskDbId) router.push(`/p/${taskDbId}?view=table`);
+    if (taskDbId) router.push(taskHref);
   };
 
   if (loading && !data) {
@@ -380,7 +381,7 @@ export default function Dashboard({ userName }: { userName: string }) {
   if (!taskDbId || !model) {
     return (
       <div style={wrap}>
-        <h2 style={greetingStyle}>안녕하세요, {userName}님</h2>
+        <h1 style={greetingStyle}>안녕하세요, {userName}님</h1>
         <div
           style={{
             marginTop: 28,
@@ -471,7 +472,7 @@ export default function Dashboard({ userName }: { userName: string }) {
   return (
     <div style={wrap}>
       {/* 인사 */}
-      <h2 style={greetingStyle}>안녕하세요, {userName}님</h2>
+      <h1 style={greetingStyle}>안녕하세요, {userName}님</h1>
       <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-sub)" }}>{greetingSub}</p>
 
       {/* 메트릭 그리드 */}
@@ -588,9 +589,9 @@ export default function Dashboard({ userName }: { userName: string }) {
         <DashPanel
           title="마감 임박"
           action={
-            <button className="ws-link" onClick={openTask}>
+            <Link className="ws-link" href={taskHref} style={{ textDecoration: "none" }}>
               전체 보기
-            </button>
+            </Link>
           }
           style={{ flex: "1 1 320px" }}
         >
@@ -599,16 +600,18 @@ export default function Dashboard({ userName }: { userName: string }) {
               const title = model.titleProp ? row.props[model.titleProp.id] : "";
               const assignee = personProp ? personNames(row.props[personProp.id])[0] ?? "" : "";
               return (
-                <div
+                <Link
                   key={row.id}
+                  href={taskHref}
                   className="ws-listrow"
-                  onClick={openTask}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 10,
                     padding: "7px 6px",
                     cursor: "pointer",
+                    textDecoration: "none",
+                    color: "inherit",
                   }}
                 >
                   <Avatar name={assignee} size={24} />
@@ -631,7 +634,7 @@ export default function Dashboard({ userName }: { userName: string }) {
                     </span>
                   </span>
                   {dateProp && <DDay value={row.props[dateProp.id]} />}
-                </div>
+                </Link>
               );
             })
           ) : (
@@ -655,9 +658,9 @@ export default function Dashboard({ userName }: { userName: string }) {
         <DashPanel
           title="오늘 보낸 알림"
           action={
-            <button className="ws-link" onClick={() => router.push("/slack")}>
+            <Link className="ws-link" href="/slack" style={{ textDecoration: "none" }}>
               발송 이력
-            </button>
+            </Link>
           }
         >
           {!notif || notif.logs.length === 0 ? (

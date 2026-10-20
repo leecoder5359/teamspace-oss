@@ -132,7 +132,9 @@ export default function LessonHygiene({ isAdmin }: { isAdmin: boolean }) {
               const st = STATUS[r.status] ?? { label: r.status, color: "#9AA0A6" };
               const c = r.counts;
               return (
-                <tr key={r.id} style={{ ...rowStyle, cursor: "pointer", background: sel === r.id ? "color-mix(in srgb, var(--color-primary) 6%, transparent)" : undefined }} onClick={() => setSel(r.id)}>
+                <tr key={r.id} style={{ ...rowStyle, cursor: "pointer", background: sel === r.id ? "color-mix(in srgb, var(--color-primary) 6%, transparent)" : undefined }} onClick={() => setSel(r.id)}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setSel(r.id); } }}>
                   <td style={{ ...td, fontWeight: 600, color: "var(--text-strong)", whiteSpace: "nowrap" }}>{r.weekKey}</td>
                   <td style={td}>
                     <Pill color={st.color} label={st.label} />

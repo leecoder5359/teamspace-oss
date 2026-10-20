@@ -91,11 +91,17 @@ export const GENERIC_TERMS = new Set([
   "prod", "운영", "dev", "db", "api", "ui", "에러", "오류", "error", "빌드", "build", "브랜치", "branch",
   "버그", "bug", "수정", "fix", "로그", "log", "env", "설정", "화면",
 ]);
-/** 키워드 점수: 구체어 1 · 일반어 0.5. 레슨은 점수 2 이상이거나, 그 레슨의 프로젝트가 메시지에 언급됐을 때만 들어간다. */
-export function keywordScore(hits: string[]): number {
-  return hits.reduce((n, h) => n + (GENERIC_TERMS.has(h) ? 0.5 : 1), 0);
-}
 export const KEYWORD_MIN_SCORE = 2;
+/** 역할 에이전트 — role:<이것> 태그만 하나로 문턱을 넘는다. SubagentStart 훅의 ROLE_AGENTS 가 사본이다
+    (전역 사본으로도 돌아 lib 를 import 못 함 — 두 목록이 같은지는 그 훅 테스트가 묶는다). */
+export const LESSON_ROLES = ["implementer", "reviewer", "researcher"];
+const ROLE_TAGS = new Set(LESSON_ROLES.map((r) => `role:${r}`));
+/** 키워드 점수: 구체어 1 · 일반어 0.5 · 역할 태그(role:implementer 등 LESSON_ROLES 만) 문턱 그대로. 레슨은 점수 2 이상이거나, 그 레슨의 프로젝트가 메시지에 언급됐을 때만 들어간다.
+    역할 태그는 SubagentStart 훅(scripts/hooks/teamspace-subagent-start.mjs)이 prompt "role:<agent>" 로 부르는 명시 태그라 하나로 충분하다.
+    그 밖의 role:x 는 일반 구체어(1)다 — 아무 레슨이나 role: 키워드로 문턱을 우회하지 못하게. */
+export function keywordScore(hits: string[]): number {
+  return hits.reduce((n, h) => n + (ROLE_TAGS.has(h) ? KEYWORD_MIN_SCORE : GENERIC_TERMS.has(h) ? 0.5 : 1), 0);
+}
 
 export function normalizePrompt(prompt: string): string {
   return String(prompt ?? "").slice(0, SCAN_MAX).toLowerCase();

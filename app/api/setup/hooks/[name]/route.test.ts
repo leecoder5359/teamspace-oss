@@ -17,4 +17,9 @@ describe("GET /api/setup/hooks/[name]", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type") ?? "").toContain("javascript");
   });
+  it("SubagentStart 훅도 서빙한다(setup.sh 가 내려받는다)", async () => {
+    const res = await GET(new Request("http://t"), ctx("teamspace-subagent-start.mjs"));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("SubagentStart");
+  });
 });

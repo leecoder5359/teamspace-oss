@@ -211,10 +211,11 @@ export default function LoginPage() {
               팀 이름과 도메인을 입력하세요
             </p>
 
-            <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--text-body)", marginBottom: 6 }}>
+            <label htmlFor="ws-register-name" style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--text-body)", marginBottom: 6 }}>
               워크스페이스 이름
             </label>
             <input
+              id="ws-register-name"
               type="text"
               placeholder="예: 리코더팩토리"
               style={{
@@ -228,14 +229,14 @@ export default function LoginPage() {
                 color: "var(--text-strong)",
                 fontSize: 14,
                 fontFamily: "inherit",
-                outline: "none",
               }}
             />
 
-            <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--text-body)", marginBottom: 6 }}>
+            <label htmlFor="ws-register-domain" style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--text-body)", marginBottom: 6 }}>
               도메인 <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(선택)</span>
             </label>
             <input
+              id="ws-register-domain"
               type="text"
               placeholder="example.com"
               style={{
@@ -249,7 +250,6 @@ export default function LoginPage() {
                 color: "var(--text-strong)",
                 fontSize: 14,
                 fontFamily: "inherit",
-                outline: "none",
               }}
             />
 

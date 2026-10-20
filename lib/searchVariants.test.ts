@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { queryVariants } from "./searchVariants";
+import { mergeVariantRows, queryVariants } from "./searchVariants";
 
 describe("queryVariants", () => {
   it("공백 없는 3~12자 질의는 원문 + 한 칸 삽입 변형", () => {
@@ -22,5 +22,26 @@ describe("queryVariants", () => {
   });
   it("빈 질의는 빈 배열", () => {
     expect(queryVariants("  ")).toEqual([]);
+  });
+});
+
+describe("mergeVariantRows", () => {
+  const r = (id: string, tag = "") => ({ id, tag });
+
+  it("원문이 충분하면 원문만 돌려준다", () => {
+    expect(mergeVariantRows([r("a")], [r("b")], true)).toEqual([r("a")]);
+  });
+
+  it("모자라면 원문 먼저, 변형은 id 중복을 뺀 뒤 순서대로", () => {
+    expect(mergeVariantRows([r("a", "orig"), r("b")], [r("c"), r("a", "variant"), r("d")], false))
+      .toEqual([r("a", "orig"), r("b"), r("c"), r("d")]);
+  });
+
+  it("입력 배열을 바꾸지 않는다", () => {
+    const first = [r("a")];
+    const more = [r("b")];
+    mergeVariantRows(first, more, false);
+    expect(first).toEqual([r("a")]);
+    expect(more).toEqual([r("b")]);
   });
 });
