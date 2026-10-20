@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { JS_TRIM_CLASS, REDERIVE_TASK_COLUMNS_SQL } from "./taskColumnsSql";
+import { JS_TRIM_CLASS, REDERIVE_BOARD_TASK_COLUMNS_SQL, REDERIVE_TASK_COLUMNS_SQL } from "./taskColumnsSql";
 import { deriveTaskColumns } from "./taskColumns";
 
 /* SQL 백필의 담당자 다듬기는 JS String.prototype.trim(= deriveTaskColumns)과 정확히 같아야 한다 —
@@ -45,5 +45,17 @@ describe("REDERIVE_TASK_COLUMNS_SQL", () => {
     expect(REDERIVE_TASK_COLUMNS_SQL).toMatch(/IS DISTINCT FROM d\."statusOptionId"/);
     expect(REDERIVE_TASK_COLUMNS_SQL).toMatch(/IS DISTINCT FROM d\."assigneeText"/);
     expect(REDERIVE_TASK_COLUMNS_SQL).toMatch(/IS DISTINCT FROM d\."taskColsKey"/);
+  });
+});
+
+describe("REDERIVE_BOARD_TASK_COLUMNS_SQL", () => {
+  it("속성·행 둘 다 한 보드($1)의 지정 행($2)으로 좁힌다 — 다른 보드 속성을 읽거나 다른 행을 쓰지 않게", () => {
+    expect(REDERIVE_BOARD_TASK_COLUMNS_SQL.match(/AND "databasePageId" = \$1/g)).toHaveLength(2);
+    expect(REDERIVE_BOARD_TASK_COLUMNS_SQL).toContain(`WHERE r."databasePageId" = $1 AND r."id" = ANY($2::text[])`);
+  });
+
+  it("범위만 다르고 계산은 전체 재계산과 같다", () => {
+    const strip = (q: string) => q.replace(/ AND "databasePageId" = \$1/g, "").replace(/\n  WHERE r\."databasePageId" = \$1 AND r\."id" = ANY\(\$2::text\[\]\)/, "");
+    expect(strip(REDERIVE_BOARD_TASK_COLUMNS_SQL)).toBe(REDERIVE_TASK_COLUMNS_SQL);
   });
 });

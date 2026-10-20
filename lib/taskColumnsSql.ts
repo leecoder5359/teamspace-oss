@@ -13,15 +13,20 @@
 // 일반 문자열 + 이중 백슬래시로 적는다 — 소스·SQL 파일이 ASCII 로만 남아 보이지 않는 공백 문자가 섞이지 않는다.
 export const JS_TRIM_CLASS = "[\\t\\n\\u000b\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]";
 
-export const REDERIVE_TASK_COLUMNS_SQL = `WITH status_prop AS (
+/** 재계산 SQL. board 를 주면 그 보드의 지정 행만($1 = databasePageId, $2 = 행 id 배열) — 속성 변경 뒤(lib/taskRows.rederiveBoardTaskColumns).
+ *  board 없이 만든 문자열이 마이그레이션에 그대로 들어 있다(lib/taskColumnsSql.test) — 조각을 바꾸면 그 테스트가 깨진다. */
+function rederiveSql(board: boolean): string {
+  const prop = board ? ` AND "databasePageId" = $1` : "";
+  const rows = board ? `\n  WHERE r."databasePageId" = $1 AND r."id" = ANY($2::text[])` : "";
+  return `WITH status_prop AS (
   SELECT DISTINCT ON ("databasePageId") "databasePageId", "id"
   FROM "DbProperty"
-  WHERE "type" = 'select'
+  WHERE "type" = 'select'${prop}
   ORDER BY "databasePageId", ("name" ~* '(status|상태)') DESC, "position" ASC, "id" ASC
 ), assignee_prop AS (
   SELECT DISTINCT ON ("databasePageId") "databasePageId", "id"
   FROM "DbProperty"
-  WHERE "type" IN ('text', 'person') AND "name" ~* '(담당|assignee|owner)'
+  WHERE "type" IN ('text', 'person') AND "name" ~* '(담당|assignee|owner)'${prop}
   ORDER BY "databasePageId", "position" ASC, "id" ASC
 ), derived AS (
   SELECT r."id",
@@ -31,7 +36,7 @@ export const REDERIVE_TASK_COLUMNS_SQL = `WITH status_prop AS (
          COALESCE(sp."id", '') || '|' || COALESCE(ap."id", '') AS "taskColsKey"
   FROM "DbRow" r
   LEFT JOIN status_prop sp ON sp."databasePageId" = r."databasePageId"
-  LEFT JOIN assignee_prop ap ON ap."databasePageId" = r."databasePageId"
+  LEFT JOIN assignee_prop ap ON ap."databasePageId" = r."databasePageId"${rows}
 )
 UPDATE "DbRow" AS t
 SET "statusOptionId" = d."statusOptionId",
@@ -42,3 +47,8 @@ WHERE t."id" = d."id"
   AND (t."statusOptionId" IS DISTINCT FROM d."statusOptionId"
     OR t."assigneeText" IS DISTINCT FROM d."assigneeText"
     OR t."taskColsKey" IS DISTINCT FROM d."taskColsKey")`;
+}
+
+export const REDERIVE_TASK_COLUMNS_SQL = rederiveSql(false);
+/** 한 보드의 지정 행만 — $1 = databasePageId, $2 = 행 id 배열(text[]). */
+export const REDERIVE_BOARD_TASK_COLUMNS_SQL = rederiveSql(true);

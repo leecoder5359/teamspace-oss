@@ -96,7 +96,7 @@ export default function RisksSurface({ project }: { project: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>리스크 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span></span>
+        <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>리스크 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span></span>
         <select value={filter} onChange={(e) => setFilter(e.target.value as "all" | St)} style={{ ...inp, width: "auto" }} aria-label="상태 필터">
           <option value="all">전체 상태</option>
           <option value="open">열림</option>
@@ -123,7 +123,7 @@ export default function RisksSurface({ project }: { project: string }) {
                 <button className="ws-btn-soft" onClick={() => { setOpen(false); setErr(null); }}>취소</button>
                 <button style={primary} disabled={busy || !title.trim()} onClick={create}>저장</button>
               </div>
-              {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
+              {err && <div role="alert" style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
             </div>
           )}
           {rows.length === 0 ? (
@@ -131,7 +131,7 @@ export default function RisksSurface({ project }: { project: string }) {
               <span style={{ color: "var(--text-muted)" }}><Icon name="alert" size={32} /></span>
               {list.length > 0 ? (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 리스크가 없어요</div>
+                  <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 리스크가 없어요</div>
                   <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>기록된 리스크 {list.length}건은 다른 상태에 있습니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button className="ws-btn-soft" onClick={() => setFilter("all")}>전체 상태 보기</button>
@@ -139,7 +139,7 @@ export default function RisksSurface({ project }: { project: string }) {
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>리스크가 없어요</div>
+                  <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>리스크가 없어요</div>
                   <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>걱정되는 것을 적어 두면 잊히지 않고 상태(열림·완화·종료)로 추적됩니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button style={primary} onClick={() => setOpen(true)}>첫 리스크 추가</button>
@@ -160,7 +160,7 @@ export default function RisksSurface({ project }: { project: string }) {
                       <span style={pill(st.color)}><span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: st.color }} />{st.label}</span>
                       {r.project && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)" }}><span style={{ width: 7, height: 7, borderRadius: 2, background: projColor(r.project.color) }} />{r.project.name}</span>}
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 10 }}>{r.title}</div>
+                    <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 10 }}>{r.title}</div>
                     {r.description && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6, margin: "8px 0 0", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.description}</p>}
                   </div>
                 );
@@ -182,13 +182,13 @@ export default function RisksSurface({ project }: { project: string }) {
             </header>
             <div className="ws-drawer-body">
               <h2 id={titleId} style={{ margin: "0 0 14px", fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
-              {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
+              {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
               {sel.description ? (
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>설명 / 영향
-                  <p style={{ margin: "8px 0 0", fontWeight: 400, fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.description}</p>
+                <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>설명 / 영향
+                  <p style={{ margin: "8px 0 0", fontWeight: 400, fontSize: "var(--ds-fs-base)", color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{sel.description}</p>
                 </div>
               ) : <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>설명이 없는 리스크예요.</p>}
-              {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
+              {err && <div role="alert" style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)" }}>{err}</div>}
             </div>
             <footer className="ws-drawer-foot">
               {sel.status !== "mitigated" && <button className="ws-btn-soft" disabled={busy} onClick={() => setStat(sel.id, "mitigated")}>완화</button>}
@@ -203,4 +203,4 @@ export default function RisksSurface({ project }: { project: string }) {
   );
 }
 
-const pill = (color: string): CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` });
+const pill = (color: string): CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` });

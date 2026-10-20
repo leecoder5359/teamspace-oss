@@ -19,8 +19,8 @@ export type ProposalStatus = "new" | "duplicate" | "conflict";
 
 const STATUS_BADGE: Record<ProposalStatus, { label: string; color: string }> = {
   new: { label: "신규", color: "var(--color-primary)" },
-  conflict: { label: "모순", color: "#E0900F" },
-  duplicate: { label: "중복", color: "var(--text-disabled)" },
+  conflict: { label: "모순", color: "var(--color-warning-text)" },
+  duplicate: { label: "중복", color: "var(--text-muted)" },
 };
 
 type Page = { id: string; title: string; kind: string };
@@ -104,7 +104,7 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
 
   return (
     <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, marginBottom: 16 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>{label}</div>
       <div style={{ display: "flex", gap: 8 }}>
         <select value={pageId} onChange={(e) => setPageId(e.target.value)} aria-label="추출할 문서" style={{ ...inp, flex: 1, cursor: "pointer" }}>
           <option value="">문서 선택…</option>
@@ -117,10 +117,10 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
         </button>
       </div>
       {extracting && <p style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 8 }}>{runningText}</p>}
-      {err && <p style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</p>}
+      {err && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginTop: 8 }}>{err}</p>}
 
       {proposals && proposals.length === 0 && !extracting && (
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 10 }}>{emptyText}</p>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 10 }}>{emptyText}</p>
       )}
       {proposals && proposals.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
@@ -128,11 +128,11 @@ export default function ExtractPanel<P extends { status: ProposalStatus }>({
             const badge = STATUS_BADGE[p.status];
             const done = accepted.has(keyOf(p));
             return (
-              <div key={`${keyOf(p)}-${i}`} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", border: "1px solid var(--border-subtle)", borderRadius: 9 }}>
-                <span style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--ds-r-pill)", padding: "1px 7px", marginTop: 2 }}>{badge.label}</span>
+              <div key={`${keyOf(p)}-${i}`} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)" }}>
+                <span style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--ds-r-pill)", padding: "1px 7px", marginTop: 2 }}>{badge.label}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>{renderProposal(p)}</div>
                 {p.status === "duplicate" ? (
-                  <span style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)", alignSelf: "center" }}>있음</span>
+                  <span style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", alignSelf: "center" }}>있음</span>
                 ) : done ? (
                   <span style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-sm)", color: "var(--color-primary)", fontWeight: 600, alignSelf: "center" }}>반영됨</span>
                 ) : (

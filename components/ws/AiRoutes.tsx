@@ -154,7 +154,7 @@ export default function AiRoutes() {
                   <tr key={f.feature} style={rowStyle}>
                     <td style={td}>
                       <span style={{ fontWeight: 600, color: "var(--text-strong)" }}>{FEATURE_LABEL[f.feature] ?? f.feature}</span>
-                      <span style={{ marginLeft: 6, fontSize: 11.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{f.feature}</span>
+                      <span style={{ marginLeft: 6, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{f.feature}</span>
                     </td>
                     <td style={tdNum}>{n(f.calls)}</td>
                     <td style={tdNum}>{n(f.cacheHits)}</td>
@@ -353,11 +353,11 @@ function watchdogView(w: RelayStatus["watchdog"]): View {
 
 function StatusCard({ title, color, label, detail, title2, mono }: View & { title: string; title2?: string; mono?: boolean }) {
   return (
-    <div style={{ padding: "10px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 }} title={title2}>
-      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 }}>{title}</div>
+    <div style={{ padding: "10px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 }} title={title2}>
+      <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 6 }}>{title}</div>
       <Pill color={color} label={label} />
       {detail && (
-        <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: mono ? "var(--font-mono)" : undefined }}>
+        <div style={{ marginTop: 6, fontSize: "var(--ds-fs-sm)", color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: mono ? "var(--font-mono)" : undefined }}>
           {detail}
         </div>
       )}
@@ -368,7 +368,7 @@ function StatusCard({ title, color, label, detail, title2, mono }: View & { titl
 /* 결정 화면(DecisionsSurface)의 상태 알약과 같은 모양 */
 export function Pill({ color, label }: { color: string; label: string }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` }}>
       <span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: color }} />
       {label}
     </span>
@@ -379,7 +379,7 @@ export function Pill({ color, label }: { color: string; label: string }) {
 export function Table({ head, numericFrom, children }: { head: string[]; numericFrom: number; children: React.ReactNode }) {
   return (
     <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", overflowX: "auto", background: "var(--surface-card)" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--ds-fs-md)" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)" }}>
             {head.map((h, i) => (
@@ -398,15 +398,15 @@ export function Table({ head, numericFrom, children }: { head: string[]; numeric
 export function Sub({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>{label}</div>
       {children}
     </div>
   );
 }
 
-const costBox: CSSProperties = { padding: "10px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 };
-const costLabel: CSSProperties = { fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 };
-const costValue: CSSProperties = { fontSize: 15, fontWeight: 700, color: "var(--text-strong)", fontVariantNumeric: "tabular-nums" };
+const costBox: CSSProperties = { padding: "10px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 };
+const costLabel: CSSProperties = { fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 6 };
+const costValue: CSSProperties = { fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", fontVariantNumeric: "tabular-nums" };
 
 export const th: CSSProperties = { padding: "8px 12px", fontWeight: 600, whiteSpace: "nowrap" };
 export const td: CSSProperties = { padding: "8px 12px", verticalAlign: "middle", color: "var(--text-body)" };

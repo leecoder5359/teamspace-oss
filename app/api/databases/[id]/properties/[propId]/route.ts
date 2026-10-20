@@ -1,10 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
+import { rederiveBoardTaskColumns } from "@/lib/taskRows";
+import { log } from "@/lib/log";
 
 export const runtime = "nodejs";
 
@@ -82,6 +84,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string; p
     return NextResponse.json({ error: "변경할 내용이 없습니다." }, { status: 400 });
   }
   const updated = await prisma.dbProperty.update({ where: { id: propId }, data });
+  // 감사 P-14 — 속성이 바뀌면 상태·담당자 속성 선택(taskColsKey)이 바뀔 수 있다. 응답 뒤에 이 보드 칸을 다시 맞춘다
+  // (안 돌거나 실패해도 키가 다른 행은 읽기 쪽이 props 로 거른다 — 느려질 뿐).
+  after(() => rederiveBoardTaskColumns(id).catch((e) => log.warn("board.task_cols_rederive_failed", { msg: "보드 태스크 칸 재계산 실패", boardId: id, err: e })));
   return NextResponse.json({ property: updated });
 }
 
@@ -95,5 +100,8 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string;
   const prop = await loadProp(id, propId, guard.workspaceId);
   if (!prop) return NextResponse.json({ error: "Not found" }, { status: 404 });
   await prisma.dbProperty.delete({ where: { id: propId } });
+  // 감사 P-14 — 속성이 바뀌면 상태·담당자 속성 선택(taskColsKey)이 바뀔 수 있다. 응답 뒤에 이 보드 칸을 다시 맞춘다
+  // (안 돌거나 실패해도 키가 다른 행은 읽기 쪽이 props 로 거른다 — 느려질 뿐).
+  after(() => rederiveBoardTaskColumns(id).catch((e) => log.warn("board.task_cols_rederive_failed", { msg: "보드 태스크 칸 재계산 실패", boardId: id, err: e })));
   return NextResponse.json({ ok: true });
 }

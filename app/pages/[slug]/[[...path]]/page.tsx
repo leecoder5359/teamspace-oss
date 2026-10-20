@@ -80,12 +80,12 @@ export default async function SharedSitePage({ params }: { params: Promise<{ slu
     return (
       <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center", padding: "24px 16px", background: "var(--surface-page, #f7f7f8)" }}>
         <div style={{ maxWidth: 420, textAlign: "center" }}>
-          <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>이 페이지에 접근 권한이 없습니다</h1>
+          <h1 style={{ fontSize: "var(--ds-fs-xl)", fontWeight: 700, margin: 0 }}>이 페이지에 접근 권한이 없습니다</h1>
           <p style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-muted, #666)", margin: "10px 0 18px" }}>
             지금 <b>{email}</b> 계정으로 로그인되어 있습니다. 초대받은 이메일 계정으로 다시 로그인하세요.
           </p>
           <form action={switchAccount}>
-            <button type="submit" style={{ padding: "10px 16px", borderRadius: 9, border: "1px solid var(--border-default, #ddd)", background: "var(--surface-card, #fff)", fontSize: "var(--ds-fs-base)", cursor: "pointer" }}>
+            <button type="submit" style={{ padding: "10px 16px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default, #ddd)", background: "var(--surface-card, #fff)", fontSize: "var(--ds-fs-base)", cursor: "pointer" }}>
               다른 계정으로 로그인
             </button>
           </form>

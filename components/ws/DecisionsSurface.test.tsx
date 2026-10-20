@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, cleanup, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, cleanup, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { useState } from "react";
 import DecisionsSurface from "./DecisionsSurface";
 
 // 선택은 허브(Docs)가 들고 있다(U-11) — 테스트에서는 같은 역할의 상태만 둔다.
-function Surface({ project }: { project: string }) {
-  const [selId, setSelId] = useState<string | null>(null);
+function Surface({ project, initial = null }: { project: string; initial?: string | null }) {
+  const [selId, setSelId] = useState<string | null>(initial);
   return <DecisionsSurface project={project} selId={selId} onSelect={setSelId} />;
 }
 
@@ -153,5 +153,58 @@ describe("DecisionsSurface 오래된 오류(리뷰 지적)", () => {
     fireEvent.click(screen.getByText("인증은 Auth.js"));
     const dialog = screen.getByRole("dialog");
     expect(dialog.querySelector("[role=alert]")).toBeNull();
+  });
+});
+
+describe("DecisionsSurface 목록 밖 딥링크(?id=)", () => {
+  const far = { ...dec, id: "d9", title: "오래된 결정" };
+
+  it("목록에 없는 선택은 단건으로 읽어 상세를 연다", async () => {
+    fetchMock.mockImplementation(async (u: string) => (u === "/api/decisions/d9" ? json({ decision: far }) : json({ decisions: [dec] })));
+    render(<Surface project="" initial="d9" />);
+    const dialog = await screen.findByRole("dialog");
+    expect(document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent).toBe("오래된 결정");
+  });
+
+  it("단건도 없으면(404) 선택을 푼다", async () => {
+    fetchMock.mockImplementation(async (u: string) => (u === "/api/decisions/gone" ? json({ error: "Not found" }, 404) : json({ decisions: [dec] })));
+    const onSelect = vi.fn();
+    render(<DecisionsSurface project="" selId="gone" onSelect={onSelect} />);
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(null));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("목록 밖 결정의 상태를 바꾸면 다시 읽어 드로어에 반영한다", async () => {
+    let cur = far;
+    fetchMock.mockImplementation(async (u: string, init?: RequestInit) => {
+      if (u === "/api/decisions/d9" && init?.method === "PATCH") {
+        cur = { ...far, status: JSON.parse(String(init.body)).status };
+        return json({ ok: true });
+      }
+      if (u === "/api/decisions/d9") return json({ decision: cur });
+      return json({ decisions: [dec] });
+    });
+    render(<Surface project="" initial="d9" />);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "대체됨" }));
+    await waitFor(() => expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "대체됨" })).toBeNull());
+    expect(cur.status).toBe("superseded");
+  });
+
+  it("상태 변경 뒤 다시 읽을 때 사라졌으면(404) 선택을 푼다", async () => {
+    let gone = false;
+    fetchMock.mockImplementation(async (u: string, init?: RequestInit) => {
+      if (u === "/api/decisions/d9" && init?.method === "PATCH") {
+        gone = true; // 다른 사람이 그사이 지웠다
+        return json({ ok: true });
+      }
+      if (u === "/api/decisions/d9") return gone ? json({ error: "Not found" }, 404) : json({ decision: far });
+      return json({ decisions: [dec] });
+    });
+    const onSelect = vi.fn();
+    render(<DecisionsSurface project="" selId="d9" onSelect={onSelect} />);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "대체됨" }));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(null));
   });
 });

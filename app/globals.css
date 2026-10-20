@@ -165,7 +165,7 @@
 }
 .bn-block:has(> .react-renderer [data-callout-kind="WARNING"]),
 .bn-block:has(> .react-renderer [data-callout-kind="CAUTION"]) {
-  --callout-color: #e0900f;
+  --callout-color: var(--yellow-600);
 }
 .bn-block:has(> .react-renderer [data-callout-kind="DANGER"]),
 .bn-block:has(> .react-renderer [data-callout-kind="ERROR"]) {

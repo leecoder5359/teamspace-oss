@@ -172,14 +172,14 @@ export default function Inbox() {
                   <button
                     onClick={() => setOpen((p) => { const nx = new Set(p); if (nx.has(gk)) nx.delete(gk); else nx.add(gk); return nx; })}
                     aria-expanded={expanded}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 10, flex: 1, minWidth: 0,
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: "var(--ds-r-md)", flex: 1, minWidth: 0,
                       border: `1px solid ${g.unread ? "var(--color-primary)" : "var(--border-subtle)"}`, background: "var(--surface-card)",
                       cursor: "pointer", textAlign: "left", opacity: g.unread ? 1 : 0.65, font: "inherit", color: "inherit" }}
                   >
                     <span style={{ display: "flex", color: "var(--color-primary)" }}><Icon name={TYPE_ICON[g.type] ?? "bell"} /></span>
                     <span className="ws-nav-count">{g.count}</span>
-                    <span className="ws-btn-soft" style={{ padding: "1px 8px", fontSize: 11.5 }}>{TYPE_LABEL[g.type] ?? g.type}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: g.unread ? 700 : 500, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span className="ws-btn-soft" style={{ padding: "1px 8px", fontSize: "var(--ds-fs-sm)" }}>{TYPE_LABEL[g.type] ?? g.type}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-base)", fontWeight: g.unread ? 700 : 500, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {g.sample[0]} <span style={{ fontWeight: 500, color: "var(--text-muted)" }}>· {g.count - 1}건 더</span>
                     </span>
                   </button>
@@ -204,7 +204,7 @@ export default function Inbox() {
 
 function Row({ n, onOpen }: { n: Notif; onOpen: (n: Notif) => void | Promise<void> }) {
   const style: CSSProperties = {
-    display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 10,
+    display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: "var(--ds-r-md)",
     border: `1px solid ${n.readAt ? "var(--border-subtle)" : "var(--color-primary)"}`,
     background: "var(--surface-card)", cursor: "pointer", textAlign: "left",
     opacity: n.readAt ? 0.65 : 1, font: "inherit", color: "inherit", width: "100%", textDecoration: "none",
@@ -215,8 +215,8 @@ function Row({ n, onOpen }: { n: Notif; onOpen: (n: Notif) => void | Promise<voi
         <Icon name={TYPE_ICON[n.type] ?? "bell"} />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: n.readAt ? 500 : 700, color: "var(--text-strong)" }}>{n.title}</div>
-        <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{new Date(n.createdAt).toLocaleString("ko-KR")}</div>
+        <div style={{ fontSize: "var(--ds-fs-base)", fontWeight: n.readAt ? 500 : 700, color: "var(--text-strong)" }}>{n.title}</div>
+        <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>{new Date(n.createdAt).toLocaleString("ko-KR")}</div>
       </div>
       {!n.readAt && <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--color-primary)", flexShrink: 0 }} />}
     </>

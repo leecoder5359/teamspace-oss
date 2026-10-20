@@ -81,7 +81,7 @@ export default function Reminders() {
       <h1 className="ws-db-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Icon name="bell" /> 리마인더
       </h1>
-      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4 }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 4 }}>
         지정 시각에 알림을 보냅니다. 슬랙 채널이 설정되면 해당 채널로 발송돼요.
       </p>
 
@@ -94,27 +94,27 @@ export default function Reminders() {
             <Icon name="plus" /> 등록
           </button>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
+        {err && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
       </div>
 
       {/* 목록 */}
       {list.length === 0 ? (
         <div className="ws-empty">
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <div style={{ width: 52, height: 52, borderRadius: "var(--ds-r-lg)", background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
             <Icon name="bell" />
           </div>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>예약된 리마인더가 없어요</div>
+          <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-body)" }}>예약된 리마인더가 없어요</div>
           <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>위에서 시각과 내용을 정해 등록해 보세요.</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {list.map((s) => (
-            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)" }}>
+            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)" }}>
               <span style={{ display: "flex", color: "var(--color-primary)" }}>
                 <Icon name="clock" />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{s.template?.text ?? "(내용 없음)"}</div>
+                <div style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-strong)", fontWeight: 600 }}>{s.template?.text ?? "(내용 없음)"}</div>
                 <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>
                   {fmt(s.spec)}
                   {s.channelId ? "" : " · 채널 미설정"}

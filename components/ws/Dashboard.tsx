@@ -1,28 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { Icon } from "./icons";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { Avatar, DDay, Dot, colorFor, shortId } from "./ui";
-import {
-  classifyRoles,
-  type DbProperty,
-  type DbRow,
-  type Role,
-} from "../DatabaseView";
+import type { DashboardStats } from "@/lib/dashboardStats";
 import { getPages } from "@/lib/pagesClient";
 import { relativeTime, summarizeSessions, type SessionLike, type SessionSummary } from "@/lib/sessionSummary";
 
 /* 대시보드 — 전체 현황 요약 (Saebit dashboard.jsx 포팅 → 제네릭 DB 모델 매핑) */
-
-type DbPayload = {
-  page: { id: string; title: string; kind: string };
-  properties: DbProperty[];
-  rows: DbRow[];
-};
 
 /* 디자인 소스 accent 팔레트 */
 const ACCENT = {
@@ -34,14 +23,6 @@ const ACCENT = {
 };
 
 /* ---------- 헬퍼 ---------- */
-function personNames(value: unknown): string[] {
-  if (typeof value !== "string" || !value.trim()) return [];
-  return value
-    .split(/[,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 /** 오늘 기준 마감일까지 남은 일수 (음수 = 지연) */
 function dayDiff(value: unknown): number | null {
   if (typeof value !== "string" || !value) return null;
@@ -82,11 +63,11 @@ function ActivityFeed() {
           {items.map((a, i) => (
             <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderTop: i ? "1px solid var(--border-subtle)" : "none" }}>
               <Avatar name={a.actorName} size={22} />
-              <span style={{ fontSize: 12.5, color: "var(--text-body)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 <b style={{ color: "var(--text-strong)" }}>{a.actorName}</b>
                 {" · "}{TYPE[a.targetType] ?? a.targetType} <b>{a.targetTitle}</b> {VERB[a.verb] ?? a.verb}
               </span>
-              <span style={{ fontSize: 11.5, color: "var(--text-muted)", flex: "0 0 auto" }}>
+              <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", flex: "0 0 auto" }}>
                 {new Date(a.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
               </span>
             </div>
@@ -134,18 +115,18 @@ function SessionCard() {
         <div style={emptyNote}>아직 연결된 에이전트 세션이 없어요.</div>
       ) : (
         <>
-          <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginBottom: 4 }}>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginBottom: 4 }}>
             활성 {sum.active} · 24시간 {sum.recent}
             {sum.lastActivityAt && ` · 마지막 활동 ${relativeTime(sum.lastActivityAt, now)}`}
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             {sum.top.map((t, i) => (
               <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderTop: i ? "1px solid var(--border-subtle)" : "none" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: t.status === "active" ? "var(--color-primary)" : "var(--text-muted)", flex: "0 0 auto" }}>
+                <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: t.status === "active" ? "var(--color-primary)" : "var(--text-muted)", flex: "0 0 auto" }}>
                   {t.status === "active" ? "활성" : "종료"}
                 </span>
-                <span style={{ fontSize: 12.5, color: "var(--text-body)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ fontSize: 11.5, color: "var(--text-muted)", flex: "0 0 auto" }}>
+                <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", flex: "0 0 auto" }}>
                   항목 {t.itemCount} · {relativeTime(t.updatedAt, now)}
                 </span>
               </div>
@@ -173,7 +154,7 @@ function DashPanel({
       style={{
         background: "var(--surface-card)",
         border: "1px solid var(--border-subtle)",
-        borderRadius: 14,
+        borderRadius: "var(--ds-r-lg)",
         padding: 18,
         ...style,
       }}
@@ -222,7 +203,7 @@ function Metric({
         style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: accent }}
         aria-hidden
       />
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-sub)" }}>{label}</div>
+      <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-sub)" }}>{label}</div>
       <div
         style={{
           fontFamily: "var(--font-display)",
@@ -266,7 +247,7 @@ function BarRow({
         style={{
           width: 96,
           flexShrink: 0,
-          fontSize: 12.5,
+          fontSize: "var(--ds-fs-md)",
           color: "var(--text-sub)",
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -290,7 +271,7 @@ function BarRow({
         />
       </span>
       <span
-        style={{ width: 26, textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--text-strong)" }}
+        style={{ width: 26, textAlign: "right", fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)" }}
       >
         {count}
       </span>
@@ -302,7 +283,7 @@ function BarRow({
 export default function Dashboard({ userName }: { userName: string }) {
   const router = useRouter();
   const [taskDbId, setTaskDbId] = useState<string | null>(null);
-  const [data, setData] = useState<DbPayload | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [notif, setNotif] = useState<{ sentToday: number; logs: { id: string; channel: string; text: string; state: string; createdAt: string }[] } | null>(null);
 
@@ -321,14 +302,14 @@ export default function Dashboard({ userName }: { userName: string }) {
     const db = pages.find((p) => p.kind === "database");
     if (!db) {
       setTaskDbId(null);
-      setData(null);
+      setStats(null);
       return;
     }
     setTaskDbId(db.id);
-    const dbRes = await fetch(`/api/databases/${db.id}`, { cache: "no-store" });
+    // 보드 전체(~400KB) 대신 서버 집계만 받는다(감사 P-8, lib/dashboardStats)
+    const dbRes = await fetch(`/api/databases/${db.id}/stats`, { cache: "no-store" });
     if (!dbRes.ok) return;
-    const payload = (await dbRes.json()) as DbPayload;
-    setData(payload);
+    setStats(((await dbRes.json()) as { stats: DashboardStats }).stats);
   }, []);
 
   useEffect(() => {
@@ -337,48 +318,16 @@ export default function Dashboard({ userName }: { userName: string }) {
     load().finally(() => setLoading(false));
   }, [load]);
 
-  const model = useMemo(() => {
-    if (!data) return null;
-    const { roles, titleId } = classifyRoles(data.properties);
-    const byRole = (r: Role) => data.properties.find((p) => roles.get(p.id) === r);
-    const statusProp = byRole("status");
-    // 두 번째 분포 패널: 우선순위 → 심각도 → 첫 라벨 순으로 선택
-    const secondProp =
-      byRole("priority") ?? byRole("severity") ?? data.properties.find((p) => roles.get(p.id) === "label");
-    const personProp = byRole("person");
-    const dateProp = byRole("date");
-    const titleProp = data.properties.find((p) => p.id === titleId) ?? data.properties[0];
-
-    const statusOptions = statusProp?.config?.options ?? [];
-    // 완료 = 마지막 상태 옵션, 진행 중 = 이름 휴리스틱 → 없으면 2번째 옵션
-    const doneOpt = statusOptions[statusOptions.length - 1];
-    const inProgressOpt =
-      statusOptions.find((o) => /진행|doing|in.?progress|wip|작업/i.test(o.name)) ??
-      (statusOptions.length > 2 ? statusOptions[1] : undefined);
-
-    return {
-      rows: data.rows,
-      statusProp,
-      statusOptions,
-      doneOpt,
-      inProgressOpt,
-      secondProp,
-      personProp,
-      dateProp,
-      titleProp,
-    };
-  }, [data]);
-
   const taskHref = `/p/${taskDbId}?view=table`;
   const openTask = () => {
     if (taskDbId) router.push(taskHref);
   };
 
-  if (loading && !data) {
+  if (loading && !stats) {
     return <div style={wrap}>불러오는 중…</div>;
   }
 
-  if (!taskDbId || !model) {
+  if (!taskDbId || !stats) {
     return (
       <div style={wrap}>
         <h1 style={greetingStyle}>안녕하세요, {userName}님</h1>
@@ -389,11 +338,11 @@ export default function Dashboard({ userName }: { userName: string }) {
             textAlign: "center",
             background: "var(--surface-card)",
             border: "1px solid var(--border-subtle)",
-            borderRadius: 14,
+            borderRadius: "var(--ds-r-lg)",
             color: "var(--text-sub)",
           }}
         >
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-strong)", marginBottom: 6 }}>
+          <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 600, color: "var(--text-strong)", marginBottom: 6 }}>
             아직 태스크가 없어요
           </div>
           <div style={{ fontSize: "var(--ds-fs-md)", marginBottom: 16 }}>
@@ -411,69 +360,43 @@ export default function Dashboard({ userName }: { userName: string }) {
     );
   }
 
-  const { rows, statusProp, statusOptions, doneOpt, inProgressOpt, secondProp, personProp, dateProp } = model;
-  const total = rows.length;
+  const { total, status, second, dueOpen } = stats;
+  const inProgress = status?.inProgress?.count ?? 0;
 
-  /* ---------- 상태 메트릭 ---------- */
-  const statusCount = (optId: string) => rows.filter((r) => r.props[statusProp!.id] === optId).length;
-  const inProgress = inProgressOpt ? statusCount(inProgressOpt.id) : 0;
-  const done = doneOpt ? statusCount(doneOpt.id) : 0;
+  /* ---------- 마감 메트릭 — 날짜는 보는 사람의 로컬 오늘 기준이라 화면에서 센다(열린 행만 서버가 줌) ---------- */
+  const dueDiffs = (dueOpen ?? []).map((row) => ({ row, diff: dayDiff(row.due) }));
+  const overdue = dueDiffs.filter((x) => x.diff !== null && x.diff < 0).length;
+  const dueToday = dueDiffs.filter((x) => x.diff === 0).length;
+  const dueThisWeek = dueDiffs.filter((x) => x.diff !== null && x.diff >= 0 && x.diff <= 7).length;
 
-  /* ---------- 마감 메트릭 ---------- */
-  const isOpen = (r: DbRow) => !doneOpt || r.props[statusProp?.id ?? ""] !== doneOpt.id;
-  const dueDiffs = dateProp
-    ? rows.map((r) => ({ row: r, diff: dayDiff(r.props[dateProp.id]) }))
-    : [];
-  const overdue = dueDiffs.filter((x) => x.diff !== null && x.diff < 0 && isOpen(x.row)).length;
-  const dueToday = dueDiffs.filter((x) => x.diff === 0 && isOpen(x.row)).length;
-  const dueThisWeek = dueDiffs.filter((x) => x.diff !== null && x.diff >= 0 && x.diff <= 7 && isOpen(x.row)).length;
-
-  const greetingSub = dateProp
+  const greetingSub = dueOpen
     ? `오늘 마감 ${dueToday}건, 이번 주 마감 ${dueThisWeek}건, 지연 ${overdue}건이 있어요.`
     : `진행 중인 태스크 ${inProgress}건이 있어요.`;
 
   /* ---------- 상태 분포 ---------- */
-  const statusBuckets = statusOptions
-    .map((o) => ({ opt: o, count: statusCount(o.id) }))
-    .filter((b) => b.count > 0);
-  const unsetCount = statusProp
-    ? rows.filter((r) => !statusOptions.some((o) => o.id === r.props[statusProp.id])).length
-    : 0;
+  const statusBuckets = (status?.buckets ?? []).filter((b) => b.count > 0);
+  const unsetCount = status?.unset ?? 0;
   const distTotal = statusBuckets.reduce((s, b) => s + b.count, 0) + unsetCount;
 
   /* ---------- 두 번째 분포 (BarRow) ---------- */
-  const secondOptions = secondProp?.config?.options ?? [];
-  const secondBuckets = secondOptions.map((o) => ({
-    opt: o,
-    count: rows.filter((r) => r.props[secondProp!.id] === o.id).length,
-  }));
+  const secondBuckets = second?.buckets ?? [];
   const secondMax = Math.max(1, ...secondBuckets.map((b) => b.count));
 
   /* ---------- 담당자별 작업량 ---------- */
-  const assigneeMap = new Map<string, number>();
-  if (personProp) {
-    for (const r of rows) {
-      for (const name of personNames(r.props[personProp.id])) {
-        assigneeMap.set(name, (assigneeMap.get(name) ?? 0) + 1);
-      }
-    }
-  }
-  const assignees = [...assigneeMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const assigneeMax = Math.max(1, ...assignees.map(([, c]) => c));
+  const assignees = stats.assignees;
+  const assigneeMax = Math.max(1, ...assignees.map((a) => a.count));
 
   /* ---------- 마감 임박 ---------- */
-  const upcoming = dateProp
-    ? dueDiffs
-        .filter((x) => x.diff !== null && isOpen(x.row))
-        .sort((a, b) => (a.diff! - b.diff!))
-        .slice(0, 5)
-    : [];
+  const upcoming = dueDiffs
+    .filter((x) => x.diff !== null)
+    .sort((a, b) => a.diff! - b.diff!)
+    .slice(0, 5);
 
   return (
     <div style={wrap}>
       {/* 인사 */}
       <h1 style={greetingStyle}>안녕하세요, {userName}님</h1>
-      <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-sub)" }}>{greetingSub}</p>
+      <p style={{ margin: "6px 0 0", fontSize: "var(--ds-fs-base)", color: "var(--text-sub)" }}>{greetingSub}</p>
 
       {/* 메트릭 그리드 */}
       <div
@@ -485,14 +408,14 @@ export default function Dashboard({ userName }: { userName: string }) {
         }}
       >
         <Metric label="전체 태스크" value={total} accent={ACCENT.blue} />
-        {statusProp && (
+        {status && (
           <Metric
-            label={inProgressOpt ? inProgressOpt.name : "진행 중"}
+            label={status.inProgress ? status.inProgress.name : "진행 중"}
             value={inProgress}
             accent={ACCENT.orange}
           />
         )}
-        {dateProp && (
+        {dueOpen && (
           <Metric
             label="이번 주 마감"
             value={dueThisWeek}
@@ -501,8 +424,8 @@ export default function Dashboard({ userName }: { userName: string }) {
             alert={overdue > 0}
           />
         )}
-        {statusProp && doneOpt && (
-          <Metric label={doneOpt.name} value={done} accent={ACCENT.green} />
+        {status?.done && (
+          <Metric label={status.done.name} value={status.done.count} accent={ACCENT.green} />
         )}
       </div>
 
@@ -522,22 +445,22 @@ export default function Dashboard({ userName }: { userName: string }) {
               >
                 {statusBuckets.map((b) => (
                   <span
-                    key={b.opt.id}
-                    title={`${b.opt.name} ${b.count}`}
-                    style={{ width: `${(b.count / distTotal) * 100}%`, background: colorFor(b.opt.color) }}
+                    key={b.id}
+                    title={`${b.name} ${b.count}`}
+                    style={{ width: `${(b.count / distTotal) * 100}%`, background: colorFor(b.color) }}
                   />
                 ))}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", marginTop: 14 }}>
                 {statusBuckets.map((b) => (
-                  <span key={b.opt.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
-                    <Dot color={b.opt.color} />
-                    <span style={{ color: "var(--text-sub)" }}>{b.opt.name}</span>
+                  <span key={b.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)" }}>
+                    <Dot color={b.color} />
+                    <span style={{ color: "var(--text-sub)" }}>{b.name}</span>
                     <span style={{ fontWeight: 600, color: "var(--text-strong)" }}>{b.count}</span>
                   </span>
                 ))}
                 {unsetCount > 0 && (
-                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)" }}>
                     <Dot color="gray" />
                     <span style={{ color: "var(--text-sub)" }}>미지정</span>
                     <span style={{ fontWeight: 600, color: "var(--text-strong)" }}>{unsetCount}</span>
@@ -550,15 +473,15 @@ export default function Dashboard({ userName }: { userName: string }) {
           )}
         </DashPanel>
 
-        <DashPanel title={secondProp ? secondProp.name : "분류"} style={{ flex: "1 1 240px" }}>
+        <DashPanel title={second ? second.name : "분류"} style={{ flex: "1 1 240px" }}>
           {secondBuckets.length > 0 ? (
             secondBuckets.map((b) => (
               <BarRow
-                key={b.opt.id}
-                label={b.opt.name}
+                key={b.id}
+                label={b.name}
                 count={b.count}
                 max={secondMax}
-                color={colorFor(b.opt.color)}
+                color={colorFor(b.color)}
               />
             ))
           ) : (
@@ -571,7 +494,7 @@ export default function Dashboard({ userName }: { userName: string }) {
       <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
         <DashPanel title="담당자별 작업량" style={{ flex: "1 1 320px" }}>
           {assignees.length > 0 ? (
-            assignees.map(([name, count]) => (
+            assignees.map(({ name, count }) => (
               <BarRow
                 key={name}
                 label={name}
@@ -597,8 +520,7 @@ export default function Dashboard({ userName }: { userName: string }) {
         >
           {upcoming.length > 0 ? (
             upcoming.map(({ row }) => {
-              const title = model.titleProp ? row.props[model.titleProp.id] : "";
-              const assignee = personProp ? personNames(row.props[personProp.id])[0] ?? "" : "";
+              const { title, assignee } = row;
               return (
                 <Link
                   key={row.id}
@@ -633,7 +555,7 @@ export default function Dashboard({ userName }: { userName: string }) {
                       {shortId(row.id)}
                     </span>
                   </span>
-                  {dateProp && <DDay value={row.props[dateProp.id]} />}
+                  <DDay value={row.due} />
                 </Link>
               );
             })
@@ -670,14 +592,14 @@ export default function Dashboard({ userName }: { userName: string }) {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginBottom: 4 }}>오늘 {notif.sentToday}건 전송</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginBottom: 4 }}>오늘 {notif.sentToday}건 전송</div>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {notif.logs.map((l, i) => (
                   <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderTop: i ? "1px solid var(--border-subtle)" : "none" }}>
                     <span style={{ display: "flex", color: l.state === "failed" ? "var(--color-danger)" : "var(--text-muted)" }}><Icon name="hash" size={15} /></span>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-body)", flex: "0 0 auto" }}>{l.channel}</span>
-                    <span style={{ fontSize: 12.5, color: "var(--text-sub)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.text}</span>
-                    <span style={{ fontSize: 11.5, color: "var(--text-muted)", flex: "0 0 auto" }}>{new Date(l.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-body)", flex: "0 0 auto" }}>{l.channel}</span>
+                    <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.text}</span>
+                    <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", flex: "0 0 auto" }}>{new Date(l.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 ))}
               </div>
@@ -698,14 +620,14 @@ const wrap: CSSProperties = {
 const greetingStyle: CSSProperties = {
   margin: 0,
   fontFamily: "var(--font-display)",
-  fontSize: 24,
+  fontSize: "var(--ds-fs-2xl)",
   fontWeight: 700,
   letterSpacing: "-0.02em",
   color: "var(--text-strong)",
 };
 
 const emptyNote: CSSProperties = {
-  fontSize: 12.5,
+  fontSize: "var(--ds-fs-md)",
   color: "var(--text-muted)",
   padding: "6px 0",
 };

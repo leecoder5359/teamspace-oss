@@ -75,7 +75,9 @@ const fake = {
 vi.mock("@/lib/prisma", () => ({ prisma: fake }));
 vi.mock("@/lib/approvals", () => ({ sendApproval: (w: string, a: Record<string, unknown>) => sendApproval(w, a) }));
 vi.mock("@/lib/llm", () => ({ hasLLM: () => true, complete: vi.fn(async () => null) }));
+vi.mock("@/lib/graphLoad", () => ({ invalidateGraphCache: vi.fn() }));
 
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { applyHygieneRun, inHygieneWindow, processHygieneDecisions, revertHygieneRun, runWeeklyHygiene, type HygieneBackup } from "./service";
 
 const old = new Date("2026-08-01T00:00:00Z");
@@ -230,6 +232,16 @@ describe("승인 → 적용 → 되돌리기", () => {
     await expect(revertHygieneRun("w1", runId, now)).rejects.toThrow(/적용된 정리만/);
   });
 
+  it("적용하면 그래프 캐시를 비운다 — 워커 프로세스라 DB 세대로 웹에 알린다(lib/graphLoad)", async () => {
+    const runId = await proposed();
+    vi.mocked(invalidateGraphCache).mockClear();
+    expect((await applyHygieneRun(runId, now)).status).toBe("applied");
+    expect(invalidateGraphCache).toHaveBeenCalledWith("w1");
+    vi.mocked(invalidateGraphCache).mockClear();
+    expect((await applyHygieneRun(runId, now)).status).toBe("applied"); // 이미 적용 — 아무것도 안 바꿨다
+    expect(invalidateGraphCache).not.toHaveBeenCalled();
+  });
+
   it("제안 뒤 사람이 고친 레슨은 건너뛴다", async () => {
     const runId = await proposed();
     const c = db.lessons.find((l) => l.id === "c") as Row;
@@ -250,8 +262,10 @@ describe("승인 → 적용 → 되돌리기", () => {
     fake.$transaction.mockImplementationOnce(async () => {
       throw new Error("boom");
     });
+    vi.mocked(invalidateGraphCache).mockClear();
     const r = await applyHygieneRun(runId, now);
     expect(r.status).toBe("failed");
+    expect(invalidateGraphCache).not.toHaveBeenCalled();
     expect(db.runs[0].status).toBe("failed");
     expect(String(db.runs[0].summary)).toContain("boom");
   });

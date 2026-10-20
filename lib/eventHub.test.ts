@@ -2,15 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import { createEventHub, type EventSourceLike } from "./eventHub";
 
 class FakeES implements EventSourceLike {
-  listeners = new Map<string, (() => void)[]>();
+  listeners = new Map<string, ((ev: { data?: string }) => void)[]>();
   closed = false;
   readyState = 1;
-  addEventListener(type: string, fn: () => void) {
+  addEventListener(type: string, fn: (ev: { data?: string }) => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
   }
   close() { this.closed = true; }
-  fire(type: string) {
-    for (const fn of this.listeners.get(type) ?? []) fn();
+  fire(type: string, data?: string) {
+    for (const fn of this.listeners.get(type) ?? []) fn({ data });
   }
 }
 
@@ -211,5 +211,21 @@ describe("createEventHub — 공유 EventSource", () => {
     expect(pending()).toEqual([]);
     setHidden(false); // 다시 보이면 기다리지 않고 바로 연다
     expect(sources).toHaveLength(3);
+  });
+});
+
+describe("createEventHub — 이벤트 본문(P-8)", () => {
+  it("activity 본문 JSON 을 그대로 넘기고, notification·깨진 본문은 종류만", () => {
+    const { hub, sources, listener } = setup();
+    const l = listener();
+    hub.subscribe(l);
+    sources[0].fire("activity", JSON.stringify({ verb: "updated", targetType: "task", targetId: "r1", boardId: "b1" }));
+    sources[0].fire("notification", JSON.stringify({ type: "assigned" }));
+    sources[0].fire("activity", "{oops");
+    expect(l.onEvent.mock.calls.map((c) => c[0])).toEqual([
+      { type: "activity", verb: "updated", targetType: "task", targetId: "r1", boardId: "b1" },
+      { type: "notification" },
+      { type: "activity" },
+    ]);
   });
 });

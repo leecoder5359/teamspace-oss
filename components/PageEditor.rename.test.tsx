@@ -45,6 +45,15 @@ async function editTitle(next: string) {
   fireEvent.blur(input);
 }
 
+describe("PageEditor 제목 — 화면 제목 구조(U-29)", () => {
+  it("편집 가능한 제목 입력이 h1 안에 있다", async () => {
+    render(<PageEditor pageId="d1" />);
+    const input = await screen.findByDisplayValue("원래 제목");
+    expect(input.closest("h1")).not.toBeNull();
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
+  });
+});
+
 describe("PageEditor 제목 저장 — 중복 제목 안내", () => {
   it("저장 뒤 helper 가 겹침을 알리면 안내를 보인다", async () => {
     renameCollides.mockResolvedValue(true);

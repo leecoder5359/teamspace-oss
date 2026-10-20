@@ -159,7 +159,7 @@ export function SidebarTree({
           {node.restrictedSelf && (
             <span
               title="비공개 — 부여받은 사람만 볼 수 있습니다(하위 문서도 함께)"
-              style={{ display: "inline-flex", alignItems: "center", color: "#E0900F", marginRight: 2, flexShrink: 0 }}
+              style={{ display: "inline-flex", alignItems: "center", color: "var(--yellow-600)", marginRight: 2, flexShrink: 0 }}
             >
               <Icon name="lock" size={12} />
             </span>

@@ -87,12 +87,12 @@ export default function RelationCell({
           minHeight: 24,
         }}
       >
-        {shown.length === 0 && <span style={{ color: "var(--text-disabled)" }}>—</span>}
+        {shown.length === 0 && <span style={{ color: "var(--text-muted)" }}>—</span>}
         {shown.map((t, i) => (
           <span
             key={`${t}-${i}`}
             style={{
-              fontSize: 11.5,
+              fontSize: "var(--ds-fs-sm)",
               padding: "1px 7px",
               borderRadius: "var(--ds-r-pill)",
               border: "1px solid var(--border-subtle)",
@@ -101,13 +101,13 @@ export default function RelationCell({
               maxWidth: 140,
               overflow: "hidden",
               textOverflow: "ellipsis",
-              color: t === "(삭제된 행)" ? "var(--text-disabled)" : undefined,
+              color: t === "(삭제된 행)" ? "var(--text-muted)" : undefined,
             }}
           >
             {t}
           </span>
         ))}
-        {overflow > 0 && <span style={{ fontSize: 11.5, color: "var(--text-disabled)" }}>+{overflow}</span>}
+        {overflow > 0 && <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>+{overflow}</span>}
       </button>
 
       {open && !disabled && pos && createPortal(
@@ -122,7 +122,7 @@ export default function RelationCell({
             overflowY: "auto",
             background: "var(--surface-card)",
             border: "1px solid var(--border-subtle)",
-            borderRadius: 10,
+            borderRadius: "var(--ds-r-md)",
             boxShadow: "0 8px 24px rgba(0,0,0,.25)",
             padding: 8,
           }}
@@ -134,7 +134,8 @@ export default function RelationCell({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="행 검색…"
-              style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: "var(--ds-fs-md)", color: "var(--text-body)" }}
+              className="ws-focus-ring"
+              style={{ flex: 1, border: "none", background: "transparent", fontSize: "var(--ds-fs-md)", color: "var(--text-body)" }}
             />
             <button className="ws-btn-soft" style={{ padding: "2px 6px" }} onClick={() => setOpen(false)}>
               닫기
@@ -155,7 +156,7 @@ export default function RelationCell({
                   width: "100%",
                   textAlign: "left",
                   padding: "5px 6px",
-                  borderRadius: 6,
+                  borderRadius: "var(--ds-r-sm)",
                   border: "none",
                   background: on ? "var(--surface-sunken)" : "transparent",
                   cursor: "pointer",

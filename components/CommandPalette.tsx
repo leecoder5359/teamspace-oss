@@ -159,7 +159,7 @@ export default function CommandPalette() {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(620px, 92vw)", background: "var(--surface-card)",
-          border: "1px solid var(--border-subtle)", borderRadius: 14,
+          border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-lg)",
           boxShadow: "0 20px 60px rgba(0,0,0,.35)", overflow: "hidden",
         }}
       >
@@ -175,9 +175,10 @@ export default function CommandPalette() {
             onKeyDown={onInputKey}
             placeholder="문서·보드로 이동하거나 화면을 여세요"
             aria-label="검색어"
+            className="ws-focus-ring"
             style={{
-              flex: 1, background: "none", border: "none", outline: "none",
-              color: "var(--text-strong)", fontSize: 15, fontFamily: "inherit",
+              flex: 1, background: "none", border: "none",
+              color: "var(--text-strong)", fontSize: "var(--ds-fs-lg)", fontFamily: "inherit",
             }}
           />
           <kbd style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", border: "1px solid var(--border-subtle)", borderRadius: 5, padding: "1px 5px" }}>
@@ -210,15 +211,15 @@ export default function CommandPalette() {
                 }}
               >
                 <Icon name={meta.icon} size={15} />
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-base)", color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {r.item.title}
                 </span>
                 {r.item.hint && (
-                  <span style={{ fontSize: 11.5, color: "var(--text-muted)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {r.item.hint}
                   </span>
                 )}
-                <span style={{ fontSize: 10.5, color: "var(--text-muted)", border: "1px solid var(--border-subtle)", borderRadius: 5, padding: "1px 6px" }}>
+                <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", border: "1px solid var(--border-subtle)", borderRadius: 5, padding: "1px 6px" }}>
                   {meta.label}
                 </span>
               </button>

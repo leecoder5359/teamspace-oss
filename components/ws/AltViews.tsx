@@ -149,7 +149,7 @@ export function ListView({ properties, rows, titleId, onOpenRow }: Common) {
             }}
           >
             <Dot color={st ? colorFor(st.color) : "var(--border-subtle)"} />
-            <span style={{ flex: 1, fontSize: 13.5 }}>{titleOf(row, titleId)}</span>
+            <span style={{ flex: 1, fontSize: "var(--ds-fs-base)" }}>{titleOf(row, titleId)}</span>
             {st && <StatusPill label={st.name} color={st.color} />}
             {acc.date && <DDay value={row.props[acc.date.id]} />}
             <AvatarStack names={personNames(row, acc.person)} size={20} />
@@ -210,10 +210,10 @@ export function CalendarView({
           오늘
         </button>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)" }}>기준 속성: {dateProp.name}</span>
+        <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>기준 속성: {dateProp.name}</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--border-subtle)", border: "1px solid var(--border-subtle)", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--border-subtle)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", overflow: "hidden" }}>
         {WEEKDAYS.map((d) => (
           <div key={d} style={{ background: "var(--surface-sunken)", padding: "6px 8px", fontSize: "var(--ds-fs-sm)", fontWeight: 600, textAlign: "center" }}>
             {d}
@@ -233,7 +233,7 @@ export function CalendarView({
                 outlineOffset: -2,
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: cell.isToday ? 700 : 500, marginBottom: 4, color: cell.isToday ? "var(--color-primary)" : "var(--text-disabled)" }}>
+              <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: cell.isToday ? 700 : 500, marginBottom: 4, color: cell.isToday ? "var(--color-primary)" : "var(--text-muted)" }}>
                 {Number(cell.date.slice(8))}
               </div>
               {list.slice(0, 3).map((row) => {
@@ -247,7 +247,7 @@ export function CalendarView({
                       display: "block",
                       width: "100%",
                       textAlign: "left",
-                      fontSize: 11.5,
+                      fontSize: "var(--ds-fs-sm)",
                       lineHeight: 1.35,
                       padding: "2px 5px",
                       marginBottom: 3,
@@ -266,7 +266,7 @@ export function CalendarView({
                 );
               })}
               {list.length > 3 && (
-                <div style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-disabled)" }}>+{list.length - 3}건</div>
+                <div style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>+{list.length - 3}건</div>
               )}
             </div>
           );
@@ -275,7 +275,7 @@ export function CalendarView({
 
       {undated > 0 && (
         // 날짜 없는 행이 조용히 사라지면 "행이 없어졌다" 로 읽힌다 — 개수를 밝힌다.
-        <p style={{ marginTop: 10, fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)" }}>
+        <p style={{ marginTop: 10, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
           날짜가 없어 달력에 놓이지 않은 행 {undated}건
         </p>
       )}
@@ -316,7 +316,7 @@ export function TimelineView({
 
   return (
     <div style={{ padding: "8px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)", marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 8 }}>
         <span>{bounds.min}</span>
         <span>
           기준: {startProp.name}
@@ -350,7 +350,7 @@ export function TimelineView({
               >
                 {titleOf(row, titleId)}
               </button>
-              <div style={{ position: "relative", flex: 1, height: 22, background: "var(--surface-sunken)", borderRadius: 6 }}>
+              <div style={{ position: "relative", flex: 1, height: 22, background: "var(--surface-sunken)", borderRadius: "var(--ds-r-sm)" }}>
                 <button
                   onClick={() => onOpenRow(row.id)}
                   title={`${span.start} → ${span.end}`}
@@ -374,7 +374,7 @@ export function TimelineView({
       </div>
 
       {missing > 0 && (
-        <p style={{ marginTop: 10, fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)" }}>
+        <p style={{ marginTop: 10, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
           시작 날짜가 없어 막대를 그리지 못한 행 {missing}건
         </p>
       )}

@@ -149,9 +149,9 @@ export default function Projects({
           <Icon name="folder" size={16} />
         </span>
         <h1 style={{ margin: 0, fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>프로젝트</h1>
-        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{showArchived ? `활성 ${projects.filter((p) => !p.archivedAt).length} · 보관 ${projects.filter((p) => p.archivedAt).length}` : `${projects.length}개`}</span>
+        <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>{showArchived ? `활성 ${projects.filter((p) => !p.archivedAt).length} · 보관 ${projects.filter((p) => p.archivedAt).length}` : `${projects.length}개`}</span>
         <span style={{ flex: 1 }} />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
           <input
             type="checkbox"
             checked={showArchived}
@@ -205,6 +205,7 @@ export default function Projects({
                 <select
                   value={form.leadId}
                   onChange={(e) => setForm((f) => ({ ...f, leadId: e.target.value }))}
+                  className="ws-focus-ring"
                   style={selectStyle}
                   aria-label="리드"
                 >
@@ -244,17 +245,17 @@ export default function Projects({
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   aria-label="설명"
+                  className="ws-focus-ring"
                   style={{
                     flex: "1 1 220px",
                     height: 32,
                     padding: "0 10px",
                     border: "1px solid var(--border-default)",
-                    borderRadius: 9,
+                    borderRadius: "var(--ds-r-sm)",
                     background: "var(--surface-card)",
                     color: "var(--text-body)",
-                    fontSize: 12.5,
+                    fontSize: "var(--ds-fs-md)",
                     fontFamily: "inherit",
-                    outline: "none",
                   }}
                 />
                 <button
@@ -299,7 +300,7 @@ export default function Projects({
                 </div>
               </div>
               {error && (
-                <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--color-danger)" }}>{error}</p>
+                <p style={{ margin: "10px 0 0", fontSize: "var(--ds-fs-md)", color: "var(--color-danger)" }}>{error}</p>
               )}
             </section>
           )}
@@ -312,14 +313,14 @@ export default function Projects({
                 textAlign: "center",
                 background: "var(--surface-card)",
                 border: "1px solid var(--border-subtle)",
-                borderRadius: 14,
+                borderRadius: "var(--ds-r-lg)",
                 color: "var(--text-sub)",
               }}
             >
               <div style={{ color: "var(--text-muted)", marginBottom: 10 }}>
                 <Icon name="folder" size={30} />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-strong)", marginBottom: 6 }}>
+              <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 600, color: "var(--text-strong)", marginBottom: 6 }}>
                 아직 프로젝트가 없어요
               </div>
               <div style={{ fontSize: "var(--ds-fs-md)" }}>“새 프로젝트”로 첫 작업 영역을 만들어보세요.</div>
@@ -387,7 +388,7 @@ function ProjectCard({
         position: "relative",
         background: "var(--surface-card)",
         border: "1px solid var(--border-subtle)",
-        borderRadius: 14,
+        borderRadius: "var(--ds-r-lg)",
         padding: "16px 16px 14px",
         cursor: p.boardPageId ? "pointer" : "default",
         opacity: p.archivedAt ? 0.62 : 1, // 보관 카드는 흐리게(F10)
@@ -404,7 +405,7 @@ function ProjectCard({
       >
         {confirming ? (
           <>
-            <span style={{ fontSize: 11.5, color: "var(--color-danger)", fontWeight: 600 }}>삭제?</span>
+            <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--color-danger)", fontWeight: 600 }}>삭제?</span>
             <button
               className="ws-btn-soft"
               onClick={(e) => {
@@ -477,7 +478,7 @@ function ProjectCard({
           style={{
             flex: 1,
             minWidth: 0,
-            fontSize: 15,
+            fontSize: "var(--ds-fs-lg)",
             fontWeight: 700,
             letterSpacing: "-0.01em",
             color: "var(--text-strong)",
@@ -492,7 +493,7 @@ function ProjectCard({
           <span
             style={{
               flexShrink: 0,
-              fontSize: 10.5,
+              fontSize: "var(--ds-fs-xs)",
               fontWeight: 700,
               color: "var(--text-muted)",
               background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
@@ -524,7 +525,7 @@ function ProjectCard({
         <p
           style={{
             margin: 0,
-            fontSize: 12.5,
+            fontSize: "var(--ds-fs-md)",
             color: "var(--text-muted)",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -566,7 +567,7 @@ function ProjectCard({
           </div>
         </div>
       ) : (
-        <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>연결된 태스크 보드 없음</div>
+        <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>연결된 태스크 보드 없음</div>
       )}
 
       {/* 코드 repo 링크 */}
@@ -583,12 +584,12 @@ function ProjectCard({
             gap: 5,
             alignSelf: "flex-start",
             maxWidth: "100%",
-            fontSize: 11.5,
+            fontSize: "var(--ds-fs-sm)",
             fontFamily: "var(--font-mono)",
             color: "var(--text-sub)",
             background: "var(--surface-sunken)",
             border: "1px solid var(--border-subtle)",
-            borderRadius: 7,
+            borderRadius: "var(--ds-r-sm)",
             padding: "2px 8px",
             textDecoration: "none",
             overflow: "hidden",
@@ -620,7 +621,7 @@ function ProjectCard({
         </span>
         <span style={{ flex: 1 }} />
         {p.boardPageId && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11.5, fontWeight: 600, color: "var(--color-primary)", whiteSpace: "nowrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--color-primary)", whiteSpace: "nowrap" }}>
             보드 열기 <Icon name="chevronRight" size={13} />
           </span>
         )}
@@ -650,7 +651,7 @@ const cardStyle: CSSProperties = {
 
 const cardHeadStyle: CSSProperties = {
   margin: "0 0 12px",
-  fontSize: 13.5,
+  fontSize: "var(--ds-fs-base)",
   fontWeight: 700,
   color: "var(--text-strong)",
 };

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { inputStyle as inp, primaryBtn } from "./ui";
 
 /* 레슨(팀 작업규칙) surface — /api/lessons.
    W3 메모리 일원화의 핵심 층: 여기 등록된 규칙은 모든 팀원·에이전트 세션에 자동 주입된다.
@@ -220,7 +221,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>
+        <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>
           {isMine ? "내 레슨" : "팀 작업규칙"} <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span>
         </span>
         <div className="ws-search" style={{ flex: "0 1 220px" }}>
@@ -236,11 +237,11 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px 60px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           {isMine ? (
-            <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
+            <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", margin: "0 0 14px" }}>
               나와 내가 발급한 에이전트 토큰의 세션에만 주입됩니다. 공개된 것은 팀원이 둘러보고 가져갈 수 있습니다(주입은 안 됨).
             </p>
           ) : (
-            <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
+            <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", margin: "0 0 14px" }}>
               여기 등록된 규칙은 <b>모든 팀원·에이전트의 세션 시작 시 자동 주입</b>됩니다. 팀이 지켜야 할 규범·교훈을
               승격하는 자리입니다. (CLI: <code>pnpm ws lesson add</code> · MCP: <code>lesson_add</code>)
             </p>
@@ -248,15 +249,15 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
 
           {pending.length > 0 && (
             <div style={{ ...card, borderColor: "var(--color-primary)", marginBottom: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--color-primary)" }}>
+              <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--color-primary)" }}>
                 📥 승격 대기 제안 {pending.length}건 {isAdmin ? "" : "(승인은 admin)"}
               </div>
               {pending.map((pr) => (
                 <div key={pr.id} style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 8, borderTop: "1px solid var(--border-subtle)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={badge}>{pr.kind === "lesson" ? "규칙" : "결정"}</span>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{pr.title}</span>
-                    <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{pr.proposedByName}</span>
+                    <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", flex: 1 }}>{pr.title}</span>
+                    <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{pr.proposedByName}</span>
                     {isAdmin && (
                       <>
                         <button className="ws-btn-soft" disabled={busy} onClick={() => void review(pr.id, "approve")}>승인</button>
@@ -264,7 +265,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                       </>
                     )}
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--text-body)", whiteSpace: "pre-wrap" }}>{pr.body}</div>
+                  <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", whiteSpace: "pre-wrap" }}>{pr.body}</div>
                 </div>
               ))}
             </div>
@@ -279,7 +280,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="본문 — 왜 필요한지, 어떻게 적용하는지까지"
                 rows={3}
-                style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}
+                style={{ ...inp, resize: "vertical" }}
               />
               <input
                 value={keywords}
@@ -288,10 +289,10 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                 aria-label="키워드"
                 style={inp}
               />
-              {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
+              {err && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)" }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {!isMine && REAL(project) && (
-                  <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <label style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
                     <input type="checkbox" checked={scopeProject} onChange={(e) => setScopeProject(e.target.checked)} />
                     이 프로젝트에만 적용
                   </label>
@@ -313,7 +314,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
               <span style={{ color: "var(--text-muted)" }}><Icon name="flag" size={32} /></span>
               {list.length > 0 ? (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>검색어에 맞는 규칙이 없어요</div>
+                  <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>검색어에 맞는 규칙이 없어요</div>
                   <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>등록된 규칙 {list.length}건이 검색어에 걸러졌습니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button className="ws-btn-soft" onClick={() => setQ("")}>검색어 지우기</button>
@@ -321,7 +322,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀 작업규칙이 없어요</div>
+                  <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀 작업규칙이 없어요</div>
                   <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
                     규칙이 하나도 없으면 세션 시작 시 주입할 것도 없습니다. 반복해서 설명하게 되는 규범을 하나씩 승격하세요.
                     (CLI: <code>pnpm ws lesson add</code>)
@@ -338,7 +339,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                 editId === l.id ? (
                   <div key={l.id} style={card}>
                     <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inp} />
-                    <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+                    <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ ...inp, resize: "vertical" }} />
                     <input
                       value={editKeywords}
                       onChange={(e) => setEditKeywords(e.target.value)}
@@ -346,9 +347,9 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                       aria-label="키워드"
                       style={inp}
                     />
-                    {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{err}</div>}
+                    {err && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)" }}>{err}</div>}
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입. 끄면 전역">
+                      <label style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", display: "inline-flex", gap: 6, alignItems: "center" }} title="나와 내가 발급한 에이전트 토큰의 세션에만 주입. 끄면 전역">
                         <input type="checkbox" checked={editPersonal} onChange={(e) => setEditPersonal(e.target.checked)} />
                         나에게만(개인)
                       </label>
@@ -418,7 +419,7 @@ export default function LessonsSurface({ project, scope = "team" }: { project: s
                       </button>
                     </div>
                     <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{l.body}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                       수정 {new Date(l.updatedAt).toLocaleString("ko-KR")}
                       {l.keywords?.length ? <span title="메시지에 이 단어가 나오면 주입"> · 키워드: {l.keywords.join(", ")}</span> : null}
                     </div>
@@ -437,15 +438,7 @@ export const card: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", borderRadius: "var(--ds-r-md)",
   border: "1px solid var(--border-subtle)", background: "var(--surface-card)", marginBottom: 4,
 };
-const inp: CSSProperties = {
-  padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
-  background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", width: "100%",
-};
-export const primaryBtn: CSSProperties = {
-  padding: "8px 16px", borderRadius: 9, fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
-  border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
-};
 export const badge: CSSProperties = {
-  fontSize: "var(--ds-fs-xs)", fontWeight: 700, padding: "2px 8px", borderRadius: 7,
+  fontSize: "var(--ds-fs-xs)", fontWeight: 700, padding: "2px 8px", borderRadius: "var(--ds-r-sm)",
   background: "rgba(47,98,255,0.12)", color: "var(--color-primary)",
 };

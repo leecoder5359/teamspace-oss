@@ -140,7 +140,7 @@ export default function SkillRegistry() {
         <FilterBtn active={filter === "all"} onClick={() => setFilter("all")} label="전체" />
         <FilterBtn active={filter === "stale"} onClick={() => setFilter("stale")} label={`낡은 것만 ${n(s.groupsWithStale)}`} />
         <FilterBtn active={filter === "differs"} onClick={() => setFilter("differs")} label="다른 사본 있음" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 검색" aria-label="스킬 이름 검색" style={{ ...inputStyle, padding: "5px 10px", fontSize: 12.5, flex: "1 1 140px", minWidth: 0, maxWidth: 240 }} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 검색" aria-label="스킬 이름 검색" style={{ ...inputStyle, padding: "5px 10px", fontSize: "var(--ds-fs-md)", flex: "1 1 140px", minWidth: 0, maxWidth: 240 }} />
       </div>
 
       {groups.length === 0 && <p style={empty}>조건에 맞는 스킬이 없습니다.</p>}
@@ -181,7 +181,7 @@ function GroupTable({ groups, open, setOpen }: { groups: Group[]; open: string |
                   <span style={{ flex: "none", width: 12, color: "var(--text-muted)" }}>{isOpen ? "▾" : "▸"}</span>
                   <span style={{ minWidth: 0 }}>{g.name}</span>
                 </div>
-                <div style={{ marginLeft: 16, fontSize: 11.5, color: "var(--text-muted)", wordBreak: "break-all" }}>{scopeLabel(g.scope)}</div>
+                <div style={{ marginLeft: 16, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", wordBreak: "break-all" }}>{scopeLabel(g.scope)}</div>
               </td>
               <td style={tdNum}>
                 {n(g.copies.length)} · {n(g.distinct)}종
@@ -231,12 +231,12 @@ function Copies({ group }: { group: Group }) {
         <div key={c.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-subtle)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Pill color={STATUS[c.status].color} label={STATUS[c.status].label} />
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-strong)" }}>
+            <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)" }}>
               {KIND[c.kind]}
               {c.repo ? ` · ${c.repo}` : ""}
             </span>
-            {c.branch && <span style={{ fontSize: 11.5, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{c.branch}</span>}
-            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+            {c.branch && <span style={{ fontSize: "var(--ds-fs-sm)", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>{c.branch}</span>}
+            <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
               {n(c.lines)}줄 · {day(c.mtime)} 수정
             </span>
             {c.status !== "canonical" && c.status !== "same" && (
@@ -245,7 +245,7 @@ function Copies({ group }: { group: Group }) {
               </button>
             )}
           </div>
-          <div style={{ marginTop: 4, fontSize: 11.5, fontFamily: "var(--font-mono)", color: "var(--text-body)", wordBreak: "break-all" }}>{c.path}</div>
+          <div style={{ marginTop: 4, fontSize: "var(--ds-fs-sm)", fontFamily: "var(--font-mono)", color: "var(--text-body)", wordBreak: "break-all" }}>{c.path}</div>
           {diffFor === c.id && (
             <div style={{ marginTop: 8 }}>
               {diffErr && <p style={{ ...empty, color: BAD }}>{diffErr}</p>}
@@ -297,6 +297,6 @@ function FilterBtn({ active, onClick, label }: { active: boolean; onClick: () =>
 /* 설정 화면의 ghostBtn 과 같은 모양 */
 /* 레슨 주입 점검의 미리보기 pre 와 같은 모양 */
 const preStyle: CSSProperties = {
-  margin: 0, padding: 12, borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", fontSize: 11.5, lineHeight: 1.55,
+  margin: 0, padding: 12, borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", fontSize: "var(--ds-fs-sm)", lineHeight: 1.55,
   whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 420, overflow: "auto", color: "var(--text-body)", fontFamily: "var(--font-mono)",
 };

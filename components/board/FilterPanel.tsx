@@ -29,7 +29,7 @@ export default function FilterPanel({
         className="ws-filter-pop"
         style={{
           background: "var(--surface-card)", border: "1px solid var(--border-subtle)",
-          borderRadius: 10, padding: 10, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
+          borderRadius: "var(--ds-r-md)", padding: 10, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 8 }}>

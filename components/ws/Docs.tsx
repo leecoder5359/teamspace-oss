@@ -103,11 +103,11 @@ function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocIt
         <Icon name="doc" size={19} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div title={doc.title} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden" }}>
+        <div title={doc.title} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-base)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden" }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title || "제목 없음"}</span>
           {/* 목록은 평평해서 계층으로 유추할 수 없다 — 상속된 잠금도 표시한다 */}
           {doc.restricted && (
-            <span title="비공개 — 부여받은 사람만 볼 수 있습니다" style={{ display: "inline-flex", color: "#E0900F", flexShrink: 0 }}>
+            <span title="비공개 — 부여받은 사람만 볼 수 있습니다" style={{ display: "inline-flex", color: "var(--yellow-600)", flexShrink: 0 }}>
               <Icon name="lock" size={12} />
             </span>
           )}
@@ -115,7 +115,7 @@ function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocIt
             <span
               title="보관된 문서 — 사이드바·검색에는 나오지 않아요"
               style={{
-                fontSize: 10.5,
+                fontSize: "var(--ds-fs-xs)",
                 fontWeight: 700,
                 color: "var(--text-muted)",
                 background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
@@ -132,7 +132,7 @@ function DocRow({ doc, onOpen, dupCount = 0 }: { doc: DocItem; onOpen: (d: DocIt
             <span
               title={`같은 프로젝트에 같은 제목 문서가 ${dupCount}건 더 있어요`}
               style={{
-                fontSize: 10.5,
+                fontSize: "var(--ds-fs-xs)",
                 fontWeight: 700,
                 color: "var(--text-muted)",
                 background: "color-mix(in srgb, var(--text-muted) 14%, var(--surface-card))",
@@ -287,18 +287,18 @@ function DocsList({
           value={docType}
           onChange={(e) => setDocType(e.target.value as DocType | "")}
           aria-label="문서 종류 필터"
-          style={{ width: "auto", padding: "7px 10px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit" }}
+          style={{ width: "auto", padding: "7px 10px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit" }}
         >
           <option value="">전체 종류</option>
           {DOC_TYPES.map((t) => (
             <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>
           ))}
         </select>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
           <input type="checkbox" checked={showTaskNotes} onChange={(e) => setShowTaskNotes(e.target.checked)} />
           태스크 설명 포함
         </label>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", cursor: "pointer", whiteSpace: "nowrap" }}>
           <input
             type="checkbox"
             checked={archivedView === "all"}
@@ -319,7 +319,7 @@ function DocsList({
           aria-label="새 문서 템플릿"
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
-          style={{ fontSize: 12.5 }}
+          style={{ fontSize: "var(--ds-fs-md)" }}
         >
           <option value="">빈 문서</option>
           {TEMPLATE_NAMES.map((n) => (
@@ -336,7 +336,7 @@ function DocsList({
           placeholder="제목"
           aria-label="새 문서 제목"
           maxLength={200}
-          style={{ fontSize: 12.5, width: 160 }}
+          style={{ fontSize: "var(--ds-fs-md)", width: 160 }}
         />
         <button className="ws-btn-soft" onClick={create} disabled={creating}>
           <Icon name="plus" size={15} />
@@ -363,7 +363,7 @@ function DocsList({
               <span style={{ color: "var(--text-muted)" }}>
                 <Icon name="doc" size={34} />
               </span>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>
+              <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>
                 {q.trim() ? "검색 결과가 없어요" : archivedView === "only" ? "보관한 문서가 없어요" : "문서가 없어요"}
               </div>
               <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
@@ -420,7 +420,7 @@ function EmbedCard({
   const box: React.CSSProperties = {
     border: "1px solid var(--border-subtle)",
     borderLeft: "3px solid var(--color-primary)",
-    borderRadius: "0 10px 10px 0",
+    borderRadius: "0 var(--ds-r-md) var(--ds-r-md) 0",
     padding: "10px 14px",
     margin: "10px 0",
     background: "var(--surface-sunken)",
@@ -432,11 +432,11 @@ function EmbedCard({
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
         <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>임베드</span>
         {href ? (
-          <a href={href} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-primary)", textDecoration: "none" }}>
+          <a href={href} style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--color-primary)", textDecoration: "none" }}>
             {target}
           </a>
         ) : (
-          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{target} — 연결된 문서 없음</span>
+          <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>{target} — 연결된 문서 없음</span>
         )}
       </div>
       {cyclic ? (
@@ -663,19 +663,19 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
       <div style={{ flex: 1, overflowY: "auto", padding: "32px 24px 80px" }}>
         <div style={{ display: "flex", gap: 24, justifyContent: "center", alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 auto", maxWidth: 760, minWidth: 0 }}>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.02em", margin: "0 0 4px" }}>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--ds-fs-2xl)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.02em", margin: "0 0 4px" }}>
             {title || "제목 없음"}
           </h1>
           <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 18 }}>마지막 수정 {fmtEditedLong(doc.updatedAt)}</div>
           {archiveErr && (
-            <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>
+            <div role="alert" style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginBottom: 12 }}>
               {archiveErr}
             </div>
           )}
 
           {histOpen && (
-            <div style={{ marginBottom: 18, border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "12px 14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>
+            <div style={{ marginBottom: 18, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>
                 <Icon name="clock" size={14} /> 버전 히스토리
               </div>
               {revs === null ? (
@@ -686,8 +686,8 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {revs.map((r) => (
                     <div key={r.rev} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: "var(--ds-r-sm)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-muted)", width: 34 }}>v{r.rev}</span>
-                      <span style={{ flex: 1, fontSize: 12.5, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", width: 34 }}>v{r.rev}</span>
+                      <span style={{ flex: 1, fontSize: "var(--ds-fs-md)", color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {new Date(r.createdAt).toLocaleString("ko-KR")} {r.authorName ? `· ${r.authorName}` : ""}
                       </span>
                       <button className="ws-btn-soft" disabled={restoring} onClick={() => void restoreRev(r.rev)}>
@@ -738,7 +738,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
             />
             </div>
           ) : (
-            <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: 1.7, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "16px 18px", margin: 0 }}>
+            <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-md)", lineHeight: 1.7, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "16px 18px", margin: 0 }}>
               {md || "(빈 문서)"}
             </pre>
           )}
@@ -746,12 +746,12 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
 
           {/* 코멘트 (W6) */}
           <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
               <Icon name="comment" size={14} /> 코멘트 {comments ? comments.filter((c) => showResolved || !c.resolvedAt).length : ""}
               {comments && comments.some((c) => c.resolvedAt) && (
                 <button
                   className="ws-btn-soft"
-                  style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11.5 }}
+                  style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "var(--ds-fs-sm)" }}
                   onClick={() => setShowResolved((v) => !v)}
                 >
                   해결된 것 {showResolved ? "숨기기" : `보기 (${comments.filter((c) => c.resolvedAt).length})`}
@@ -765,7 +765,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                 {comments
                   .filter((c) => showResolved || !c.resolvedAt)
                   .map((c) => (
-                  <div key={c.id} style={{ padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", opacity: c.resolvedAt ? 0.6 : 1 }}>
+                  <div key={c.id} style={{ padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", opacity: c.resolvedAt ? 0.6 : 1 }}>
                     {/* 인라인 코멘트(D2): 무엇에 달린 말인지 인용문으로 보여준다 */}
                     {c.inline && (
                       <div
@@ -774,7 +774,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                           marginBottom: 5,
                           paddingLeft: 8,
                           borderLeft: `3px solid ${c.orphan ? "var(--text-disabled)" : "var(--color-primary)"}`,
-                          color: c.orphan ? "var(--text-disabled)" : "var(--text-muted)",
+                          color: "var(--text-muted)",
                         }}
                       >
                         “{c.anchorQuote}”
@@ -783,7 +783,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                     )}
                     <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 3 }}>
                       <b style={{ color: "var(--text-strong)" }}>{c.authorName}</b>
-                      {c.authorIsAgent && <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-muted)" }}>에이전트</span>}
+                      {c.authorIsAgent && <span style={{ marginLeft: 6, fontSize: "var(--ds-fs-xs)", padding: "1px 6px", borderRadius: "var(--ds-r-sm)", background: "var(--surface-sunken)", color: "var(--text-muted)" }}>에이전트</span>}
                       {" · "}{new Date(c.createdAt).toLocaleString("ko-KR")}
                       {c.resolvedAt && <span style={{ marginLeft: 6, color: "var(--color-primary)" }}>· 해결됨</span>}
                       {c.inline && (
@@ -823,7 +823,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                     onChange={(e) => setCommentDraft(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void postComment(); }}
                     placeholder={selection ? "선택한 문구에 코멘트…" : "코멘트 작성 — 본문에서 문구를 선택하면 그 문장에 달립니다"}
-                    style={{ flex: 1, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit" }}
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit" }}
                   />
                   <button className="ws-btn-soft" onClick={() => void postComment()} disabled={posting || !commentDraft.trim()}>등록</button>
                 </div>
@@ -837,7 +837,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
           {/* 백링크 */}
           {backlinks.length > 0 && (
             <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
                 <Icon name="link" size={14} /> 이 문서를 참조하는 문서 {backlinks.length}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -847,7 +847,7 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
                     <button
                       key={b.id}
                       onClick={() => target && onOpen(target)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer" }}
                     >
                       <Icon name="doc" size={13} /> {b.title}
                     </button>
@@ -865,9 +865,9 @@ function DocReader({ doc, docs, onBack, onOpen }: { doc: DocItem; docs: DocItem[
 }
 
 const badgeStyle: CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11.5,
+  display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)",
   color: "var(--text-sub)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)",
-  padding: "4px 9px", borderRadius: 7, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  padding: "4px 9px", borderRadius: "var(--ds-r-sm)", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
 };
 
 /* ---------- 준비 중 surface ---------- */
@@ -894,7 +894,7 @@ function CatItem({ cat, active, onGo }: { cat: Cat; active: boolean; onGo: () =>
       onClick={onGo}
       style={{
         display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-        padding: "8px 10px", borderRadius: 9, border: "none", cursor: "pointer",
+        padding: "8px 10px", borderRadius: "var(--ds-r-sm)", border: "none", cursor: "pointer",
         background: active ? "var(--surface-hover, var(--surface-sunken))" : "transparent",
         color: "var(--text-body)", font: "inherit",
       }}
@@ -904,7 +904,7 @@ function CatItem({ cat, active, onGo }: { cat: Cat; active: boolean; onGo: () =>
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: "block", fontSize: "var(--ds-fs-md)", fontWeight: 600, color: active ? "var(--text-strong)" : "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.label}</span>
-        <span style={{ display: "block", fontSize: 10.5, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.sub}</span>
+        <span style={{ display: "block", fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.sub}</span>
       </span>
     </button>
   );
@@ -924,7 +924,7 @@ function CatChip({ cat, active, onGo }: { cat: Cat; active: boolean; onGo: () =>
       }}
     >
       <Icon name={cat.icon} size={15} />
-      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{cat.label}</span>
+      <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600 }}>{cat.label}</span>
     </button>
   );
 }
@@ -1122,8 +1122,9 @@ export default function Docs({ initialParams = {} }: { initialParams?: { cat?: s
       onChange={(e) => setProject(e.target.value)}
       disabled={switcherDisabled}
       aria-label="프로젝트 전환"
+      className="ws-focus-ring"
       title={switcherDisabled ? "제품 공통 문서예요 — 프로젝트와 무관" : "프로젝트 전환"}
-      style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid var(--border-default)", borderRadius: 9, background: "var(--surface-card)", color: "var(--text-body)", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", outline: "none", opacity: switcherDisabled ? 0.5 : 1 }}
+      style={{ width: "100%", height: 34, padding: "0 8px", border: "1px solid var(--border-default)", borderRadius: "var(--ds-r-sm)", background: "var(--surface-card)", color: "var(--text-body)", fontSize: "var(--ds-fs-md)", fontWeight: 600, fontFamily: "inherit", opacity: switcherDisabled ? 0.5 : 1 }}
     >
       <option value="">전체 프로젝트</option>
       {projects
@@ -1243,9 +1244,9 @@ function SimilarDocs({ pageId, onOpen }: { pageId: string; onOpen: (id: string) 
 
   return (
     <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 10 }}>
         <Icon name="search" size={14} /> 비슷한 문서
-        <span style={{ fontWeight: 400, fontSize: 11.5, color: "var(--text-disabled)" }}>
+        <span style={{ fontWeight: 400, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
           낱말 빈도 기반 — 동의어는 검색의 &lsquo;개념 검색&rsquo;이 찾습니다
         </span>
       </div>
@@ -1261,8 +1262,8 @@ function SimilarDocs({ pageId, onOpen }: { pageId: string; onOpen: (id: string) 
             }}
           >
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.title}</span>
-            {x.project && <span style={{ fontSize: 11.5, color: "var(--text-disabled)" }}>{x.project}</span>}
-            <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-disabled)", fontVariantNumeric: "tabular-nums" }}>{x.score.toFixed(2)}</span>
+            {x.project && <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{x.project}</span>}
+            <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{x.score.toFixed(2)}</span>
           </button>
         ))}
       </div>

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
+import { boardEventMatches } from "@/lib/boardEvents";
+import type { HubEvent } from "@/lib/eventHub";
 import type { RelationOption } from "../ws/RelationCell";
 import type { FilterGroup } from "@/lib/dbFilter";
 
@@ -112,7 +114,19 @@ export function useBoardData(
     setRows(payload.rows);
     onLoadRef.current?.(payload);
   }, [pageId]);
-  useAutoRefresh(load); // W6: 30초 폴링+포커스 갱신
+  // W6: 30초 폴링+포커스 갱신. SSE 는 이 보드·이 보드의 행·관계 대상 보드 이벤트에만 다시 읽는다(감사 P-8).
+  const matchBoard = useCallback(
+    (ev: HubEvent) =>
+      boardEventMatches(ev, {
+        id: pageId,
+        rowIds: new Set(rows.map((r) => r.id)),
+        relatedBoardIds: new Set(
+          (data?.properties ?? []).flatMap((p) => (p.type === "relation" && p.config?.targetDatabaseId ? [p.config.targetDatabaseId] : [])),
+        ),
+      }),
+    [pageId, rows, data],
+  );
+  useAutoRefresh(load, { match: matchBoard });
 
   /* relation 속성이 가리키는 보드의 행 제목을 받아 온다(격차 C2).
      값은 행 id 라 그대로 보여 주면 사람이 못 읽는다. /api/tasks 는 이미 D3

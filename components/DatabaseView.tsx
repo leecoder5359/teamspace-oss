@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { classifyRoles, type Role } from "@/lib/propRoles";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "./ws/icons";
 import SharePanel from "./ws/SharePanel";
@@ -13,6 +14,7 @@ import { buildRowTree } from "@/lib/subitems";
 import { VIRTUAL_THRESHOLD, virtualDisabled, windowSegments } from "@/lib/virtualRows";
 import { useVirtualRows } from "./board/useVirtualRows";
 import ViewToolbar, { type Density } from "./board/ViewToolbar";
+import KanbanCardMenu from "./board/KanbanCardMenu";
 import { findStatusProp, openOnlyLayout } from "@/lib/dbOpenOnly";
 import { normalizeIds, blockingIds } from "@/lib/relation";
 import { matchesGroup, type FilterGroup } from "@/lib/dbFilter";
@@ -87,56 +89,8 @@ export function metaCell(row: DbRow, key: MetaKey, users: Record<string, string>
   }
 }
 
-/* ===== 속성 → 역할 분류 (제네릭 매핑) ===== */
-export type Role =
-  | "title"
-  | "status"
-  | "priority"
-  | "severity"
-  | "progress"
-  | "label"
-  | "person"
-  | "date"
-  | "number"
-  | "checkbox"
-  | "relation"
-  | "text";
-
-export function classifyRoles(props: DbProperty[]): { roles: Map<string, Role>; titleId: string | null } {
-  const roles = new Map<string, Role>();
-  const titleProp = props.find((p) => p.type === "text") ?? props[0];
-  const titleId = titleProp?.id ?? null;
-  for (const p of props) {
-    if (p.id === titleId) {
-      roles.set(p.id, "title");
-      continue;
-    }
-    const n = p.name.toLowerCase();
-    if (p.type === "select" || p.type === "multiselect") {
-      if (/상태|status|진행/.test(n)) roles.set(p.id, "status");
-      else if (/우선|priority/.test(n)) roles.set(p.id, "priority");
-      else if (/심각|중요|severity/.test(n)) roles.set(p.id, "severity");
-      else roles.set(p.id, "label");
-    } else if (p.type === "person") {
-      roles.set(p.id, "person");
-    } else if (p.type === "text" && /담당|assignee|manager|작성|owner/.test(n)) {
-      roles.set(p.id, "person");
-    } else if (p.type === "date") {
-      roles.set(p.id, "date");
-    } else if (p.type === "number" && /진행|progress|율|%/.test(n)) {
-      roles.set(p.id, "progress");
-    } else if (p.type === "number") {
-      roles.set(p.id, "number");
-    } else if (p.type === "checkbox") {
-      roles.set(p.id, "checkbox");
-    } else if (p.type === "relation") {
-      roles.set(p.id, "relation");
-    } else {
-      roles.set(p.id, "text");
-    }
-  }
-  return { roles, titleId };
-}
+/* ===== 속성 → 역할 분류 — 서버 집계(대시보드 통계)와 같이 쓰려고 lib/propRoles 로 옮겼다 ===== */
+export { classifyRoles, type Role };
 
 function optionById(prop: DbProperty | undefined, id: unknown): SelectOption | undefined {
   if (!prop?.config?.options || typeof id !== "string") return undefined;
@@ -409,7 +363,7 @@ export default function DatabaseView({
             padding: "8px 12px", borderRadius: "var(--ds-r-sm)",
             border: "1px solid var(--color-danger, #F0494E)",
             background: "var(--color-danger-weak, #FEECEC)",
-            color: "var(--color-danger, #F0494E)", fontSize: 12.5,
+            color: "var(--color-danger, #F0494E)", fontSize: "var(--ds-fs-md)",
           }}
         >
           <span style={{ flex: 1 }}>{editError}</span>
@@ -432,7 +386,8 @@ export default function DatabaseView({
               value={data.page.project?.id ?? ""}
               onChange={(e) => void assignProject(e.target.value)}
               aria-label="프로젝트 배정"
-              style={{ border: "none", background: "transparent", color: "var(--text-sub)", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", outline: "none", cursor: "pointer" }}
+              className="ws-focus-ring"
+              style={{ border: "none", background: "transparent", color: "var(--text-sub)", fontSize: "var(--ds-fs-md)", fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}
             >
               <option value="">미분류</option>
               {projects.map((p) => (
@@ -870,7 +825,7 @@ export function TableView({
           {ci === 0 && (blockedRows?.get(row.id) ?? 0) > 0 && (
             <span
               title={`선행 태스크 ${blockedRows!.get(row.id)}건이 아직 끝나지 않았습니다`}
-              style={{ marginRight: 6, fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "#E0900F", whiteSpace: "nowrap" }}
+              style={{ marginRight: 6, fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--color-warning-text)", whiteSpace: "nowrap" }}
             >
               ⛔{blockedRows!.get(row.id)}
             </span>
@@ -965,7 +920,7 @@ export function TableView({
                       style={{
                         background: "transparent",
                         border: "none",
-                        color: fn === "none" ? "var(--text-disabled)" : "var(--text-body)",
+                        color: fn === "none" ? "var(--text-muted)" : "var(--text-body)",
                         fontSize: "var(--ds-fs-sm)",
                         cursor: "pointer",
                         maxWidth: "100%",
@@ -1244,7 +1199,7 @@ function KanbanView({
   rows: DbRow[];
   colorMode: PillMode;
   density: Density;
-  onMove: (rowId: string, propId: string, value: unknown) => void;
+  onMove: (rowId: string, propId: string, value: unknown) => void | Promise<void>;
   onOpenRow: (rowId: string) => void;
   /** 컬럼 머리에 낼 집계(격차 C6). 뷰 config 의 첫 집계 열을 쓴다. */
   groupAgg?: { propId: string; fn: AggFn } | null;
@@ -1282,6 +1237,21 @@ function KanbanView({
       return key === "" ? !v : v === key;
     });
 
+  // 메뉴로 옮긴 카드는 새 칸에서 다시 마운트돼 포커스가 body 로 떨어진다 — 옮긴 뒤(그리고 실패로 되돌린 뒤)
+  // 그 카드의 ⋯ 로 포커스를 돌려준다. 사용자가 그새 다른 곳에 포커스를 뒀으면 건드리지 않는다.
+  const refocusMenu = (rowId: string) =>
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      const card = [...document.querySelectorAll<HTMLElement>(".ws-kanban-card[data-row-id]")].find((el) => el.dataset.rowId === rowId);
+      card?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+    });
+  const moveByMenu = async (rowId: string, colKey: string) => {
+    const saved = onMove(rowId, groupProp.id, colKey || null);
+    refocusMenu(rowId);
+    await saved;
+    refocusMenu(rowId);
+  };
+
   const handleDrop = (colKey: string) => {
     if (dragId) onMove(dragId, groupProp.id, colKey || null);
     setDragId(null);
@@ -1310,7 +1280,7 @@ function KanbanView({
               {/* 그룹 집계(격차 C6): 표에서 고른 집계를 칸반 컬럼 머리에도 보여준다.
                   "이 컬럼에 남은 공수" 같은 걸 열별로 보려면 이게 있어야 한다. */}
               {groupAgg && (
-                <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--text-disabled)", whiteSpace: "nowrap" }}>
+                <span style={{ marginLeft: "auto", fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                   {formatAgg(groupAgg.fn, computeAgg(groupAgg.fn, colRows.map((r) => r.props[groupAgg.propId])))}
                 </span>
               )}
@@ -1335,10 +1305,12 @@ function KanbanView({
                 .filter((o): o is SelectOption => Boolean(o));
               const persons = personProps.flatMap((p) => personNames(row.props[p.id]));
               const accent = col.color ? colorFor(col.color) : undefined;
+              const cardTitle = typeof title === "string" && title ? title : "제목 없음";
 
               return (
                 <div
                   key={row.id}
+                  data-row-id={row.id}
                   className={`ws-kanban-card${dragId === row.id ? " dragging" : ""}`}
                   style={accent ? ({ ["--card-accent" as string]: accent } as React.CSSProperties) : undefined}
                   draggable
@@ -1347,27 +1319,41 @@ function KanbanView({
                     setDragId(null);
                     setDropCol(null);
                   }}
-                  role="button"
-                  tabIndex={0}
+                  // 마우스 클릭은 카드 어디서든(위에 그려지는 칩 포함) 연다 — ⋯ 메뉴는 자기 클릭을 여기로 올리지 않는다
                   onClick={() => {
                     if (!dragId) onOpenRow(row.id);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
-                    e.preventDefault();
-                    onOpenRow(row.id);
-                  }}
                 >
+                  {/* 카드 열기 버튼 — 카드 전체를 덮는 형제 요소라 ⋯ 메뉴 버튼이 이 안에 중첩되지 않는다(nested-interactive).
+                      포커스·키보드(Enter/Space) 담당이고, 클릭은 위 카드로 올라가 열린다.
+                      DOM 순서상 먼저 두어, 뒤에 오는 메뉴(position:relative)가 그 위에 그려진다. */}
+                  <div
+                    className="ws-kanban-card-open"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={cardTitle}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      onOpenRow(row.id);
+                    }}
+                  />
                   <div className="ws-card-top">
                     <IdChip id={shortId(row.id)} />
                     {statusOpt && <StatusPill label={statusOpt.name} color={statusOpt.color} mode={colorMode === "bar" ? "soft" : colorMode} />}
                     <span style={{ flex: 1 }} />
                     {showSecondary && sevOpt && <SeverityBadge label={sevOpt.name} color={sevOpt.color} />}
                     {prioOpt && <PriorityTag label={prioOpt.name} color={prioOpt.color} />}
+                    <KanbanCardMenu
+                      cardTitle={cardTitle}
+                      options={columns}
+                      current={col.key}
+                      onPick={(key) => void moveByMenu(row.id, key)}
+                    />
                   </div>
 
                   <div className="ws-card-title">
-                    {typeof title === "string" && title ? title : "제목 없음"}
+                    {cardTitle}
                   </div>
 
                   {showSecondary && labels.length > 0 && (

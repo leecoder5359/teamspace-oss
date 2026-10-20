@@ -3,6 +3,7 @@ import { requireCtx } from "@/lib/workspace";
 import { loadGraph } from "@/lib/graphLoad";
 import { z } from "zod";
 import { subgraph, projectSlice } from "@/lib/graphInsights";
+import { gzipJson } from "@/lib/gzipJson";
 
 export const runtime = "nodejs";
 
@@ -27,5 +28,5 @@ export async function GET(request: Request) {
   if (q.data.project) g = projectSlice(g, q.data.project, Number(q.data.hops ?? 1));
   if (types.length) g = subgraph(g, (n) => types.includes(n.type));
   if (kinds.length) g = { nodes: g.nodes, edges: g.edges.filter((e) => e.kinds.some((k) => kinds.includes(k))) };
-  return NextResponse.json(g);
+  return gzipJson(request, g);
 }

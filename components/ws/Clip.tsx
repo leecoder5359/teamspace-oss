@@ -81,7 +81,7 @@ export default function Clip() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>
             <Icon name="check" size={16} /> 저장했어요
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 6 }}>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 6 }}>
             프로젝트: {result.projectName ?? "미분류"} · {result.mode === "classified" ? "AI 분류·요약" : "원문 저장"}
           </div>
           {result.summary && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 8, lineHeight: 1.6 }}>{result.summary}</p>}
@@ -122,12 +122,12 @@ export default function Clip() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ ...card, marginTop: 16 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>{title}</div>
+      <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>{title}</div>
       {children}
     </div>
   );
 }
 
 const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 };
-const hint: CSSProperties = { fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6 };
-const bmChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "1px dashed var(--color-primary)", background: "var(--surface-card)", color: "var(--color-primary)", fontSize: "var(--ds-fs-md)", fontWeight: 700, textDecoration: "none", cursor: "grab" };
+const hint: CSSProperties = { fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", lineHeight: 1.6 };
+const bmChip: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: "var(--ds-r-sm)", border: "1px dashed var(--color-primary)", background: "var(--surface-card)", color: "var(--color-primary)", fontSize: "var(--ds-fs-md)", fontWeight: 700, textDecoration: "none", cursor: "grab" };

@@ -61,3 +61,35 @@ describe("Search — 결과는 링크(U-18·U-11)", { timeout: 15_000 }, () => {
     expect(screen.getByRole("link", { name: /배포 결정/ }).getAttribute("href")).toBe("/docs?cat=decisions&id=d1");
   });
 });
+
+describe("Search — 짧은 질의 안내(감사 P-3 리뷰 I2)", { timeout: 15_000 }, () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+  const respond = (body: object) => {
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+  };
+  const HINT = /2글자 이하는 제목 전체와 최근 수정 문서 100개의 본문만 검색합니다/;
+
+  it("indexed:false 면 결과가 있어도·없어도 한 줄 안내", async () => {
+    respond({ indexed: false, docs: [{ id: "p1", title: "배포 문서", snippet: "" }], decisions: [] });
+    render(<Search initialQ="배포" />);
+    await screen.findByRole("link", { name: /배포 문서/ });
+    expect(screen.getByText(HINT)).toBeTruthy();
+    cleanup();
+    respond({ indexed: false, docs: [], decisions: [] });
+    render(<Search initialQ="배" />);
+    await screen.findByText(/결과가 없어요/);
+    expect(screen.getByText(HINT)).toBeTruthy();
+  });
+
+  it("indexed:true(3글자 이상)면 안내 없음", async () => {
+    respond({ indexed: true, docs: [], decisions: [] });
+    render(<Search initialQ="배포 규칙" />);
+    await screen.findByText(/결과가 없어요/);
+    expect(screen.queryByText(HINT)).toBeNull();
+  });
+});

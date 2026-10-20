@@ -10,6 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { log } from "@/lib/log";
+import { invalidateGraphCache } from "@/lib/graphLoad";
 import { sendApproval } from "@/lib/approvals";
 import { hasLLM } from "@/lib/llm";
 import { digestWeekKey, zonedParts } from "@/lib/digest";
@@ -223,6 +224,8 @@ export async function applyHygieneRun(runId: string, now: Date = new Date()): Pr
       const cur = await prisma.lessonHygieneRun.findUnique({ where: { id: runId }, select: { status: true } });
       return { status: cur?.status ?? "missing", applied: 0, skipped: [] };
     }
+    // 레슨은 그래프 노드다. 워커 프로세스라 웹의 메모리 캐시는 못 비우고 DB 세대로 알린다(lib/graphLoad).
+    invalidateGraphCache(run.workspaceId);
     log.info("lesson_hygiene.applied", { msg: `레슨 주간 정리 적용 ${run.weekKey}: ${r.applied}건`, workspaceId: run.workspaceId, runId, applied: r.applied, skipped: r.skipped.length });
     return { status: "applied", ...r };
   } catch (e) {

@@ -125,14 +125,14 @@ export default function ViewToolbar<K extends string>({
             style={{
               position: "absolute", zIndex: 20, top: "calc(100% + 4px)", left: 0, minWidth: 160,
               background: "var(--surface-card)", border: "1px solid var(--border-subtle)",
-              borderRadius: 10, padding: 8, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
+              borderRadius: "var(--ds-r-md)", padding: 8, boxShadow: "var(--shadow-md, 0 6px 20px rgba(0,0,0,.12))",
             }}
           >
             {metaColumns.map((c) => {
               const cur = meta;
               const on = cur.includes(c.key);
               return (
-                <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 2px", fontSize: 12.5, cursor: "pointer" }}>
+                <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 2px", fontSize: "var(--ds-fs-md)", cursor: "pointer" }}>
                   <input
                     type="checkbox"
                     checked={on}

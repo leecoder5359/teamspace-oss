@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireCtx } from "@/lib/workspace";
+import { attachBoardIds } from "@/lib/boardEvents";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
  * 서버가 3초 간격으로 Activity·(내) Notification 테일을 확인해 새 항목을 push 한다.
  * 인증: 세션 쿠키 또는 x-ws-token — EventSource 는 쿠키만 보낼 수 있으므로 브라우저 전용.
  * 클라이언트(useAutoRefresh)는 이벤트 수신 시 refetch 하고, 연결 실패 시 30초 폴링으로 폴백.
+ * activity 본문: { actorName, verb, targetType, targetId, targetTitle, createdAt, boardId } — boardId 는 task(행 id → 보드)·
+ * board(자기 자신)일 때만, 그 밖엔 null. 열린 보드가 자기 보드 이벤트만 골라 다시 읽는 데 쓴다(lib/boardEvents, 감사 P-8).
  */
 export async function GET() {
   const guard = await requireCtx();
@@ -38,7 +41,7 @@ export async function GET() {
               where: { workspaceId, createdAt: { gt: lastActivity } },
               orderBy: { createdAt: "asc" },
               take: 20,
-              select: { actorName: true, verb: true, targetType: true, targetTitle: true, createdAt: true },
+              select: { actorName: true, verb: true, targetType: true, targetId: true, targetTitle: true, createdAt: true },
             }),
             prisma.notification.findMany({
               where: { workspaceId, userId, createdAt: { gt: lastNotif } },
@@ -47,7 +50,11 @@ export async function GET() {
               select: { type: true, title: true, createdAt: true },
             }),
           ]);
-          for (const a of acts) {
+          const rowIds = acts.flatMap((a) => (a.targetType === "task" && a.targetId ? [a.targetId] : []));
+          const rowBoard = rowIds.length
+            ? new Map((await prisma.dbRow.findMany({ where: { id: { in: rowIds } }, select: { id: true, databasePageId: true } })).map((r) => [r.id, r.databasePageId]))
+            : new Map<string, string>();
+          for (const a of attachBoardIds(acts, rowBoard)) {
             lastActivity = a.createdAt;
             send("activity", a);
           }

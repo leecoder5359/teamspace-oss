@@ -119,6 +119,17 @@ describe("/p/[id] 탭 제목(U-16)", () => {
     expect(await meta()).toEqual({});
   });
 
+  it("탭 제목과 본문이 같은 조회(같은 인자)를 쓴다 — 요청 안에서 React cache 로 한 번만 돈다", async () => {
+    m(pageAccess).mockReturnValue("view");
+    m(prisma.page.findUnique).mockResolvedValue({ title: "T", kind: "database", deletedAt: null, workspaceId: "w1" });
+    await meta();
+    await run();
+    const calls = m(prisma.page.findUnique).mock.calls;
+    // 테스트 환경(RSC 밖)의 cache 는 기억하지 않을 수 있다 — 호출 인자가 모두 같은지만 본다
+    expect(calls.length).toBeGreaterThan(0);
+    expect(new Set(calls.map((c) => JSON.stringify(c[0]))).size).toBe(1);
+  });
+
   it("제목이 비면 '제목 없음'", async () => {
     m(pageAccess).mockReturnValue("view");
     m(prisma.page.findUnique).mockResolvedValue({ title: "", deletedAt: null, workspaceId: "w1" });

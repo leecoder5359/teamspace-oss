@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  driftLiterals,
+  driftReport,
   effectiveDecls,
   findRedundantDecls,
   parseCss,
@@ -132,4 +134,38 @@ describe("unusedClassSelectors", () => {
     const rules = parseCss(`.ws-row--muted { x: 1 }`);
     expect(unusedClassSelectors(rules, ["className={`ws-row--${tone}`}"])).toEqual([]);
   });
+
+  it("treats a template prefix that ends mid-word as a possible usage (ws-toc-l${level})", () => {
+    const rules = parseCss(`.ws-toc-l2 a { x: 1 }`);
+    expect(unusedClassSelectors(rules, ["className={`ws-toc-l${it.level}`}"])).toEqual([]);
+  });
+});
+
+describe("driftLiterals", () => {
+  const drift = (src: string) => driftLiterals(src, TOKENS).map((d) => [d.line, d.prop, d.value]);
+
+  it("flags half-pixel font sizes as numbers or px strings, in any object", () => {
+    expect(drift(`const a = <div style={{ fontSize: 12.5 }} />;\nconst b = { fontSize: "11.5px" };\nconst c = <div style={{ fontSize: 13, lineHeight: 1.5 }} />;`)).toEqual([
+      [1, "fontSize", "12.5px"],
+      [2, "fontSize", "11.5px"],
+    ]);
+  });
+
+  it("flags px radii that are not token values, checking each part of multi-value strings", () => {
+    expect(drift(`const a = <div style={{ borderRadius: 9 }} />;\nconst b = { borderRadius: "0 10px 8px 0" };\nconst c = { borderRadius: "var(--ds-r-sm)" };\nconst d = { borderRadius: 8 };`)).toEqual([
+      [1, "borderRadius", "9px"],
+      [2, "borderRadius", "10px"],
+    ]);
+  });
+
+  it("allows sub-token micro radii (2–5px), percentages, em sizes and computed values", () => {
+    expect(drift(`const a = { borderRadius: 2, fontSize: "0.86em" };\nconst b = { borderRadius: "50%", fontSize: size * 0.4 };\nconst c = { borderRadius: "5px 5px 0 0" };`)).toEqual([]);
+  });
+});
+
+describe("repo guard", () => {
+  // 새 반 픽셀 글자 크기·토큰 밖 반경이 들어오면 CI 가 잡는다 — 허용 목록은 style-audit.ts 의 DRIFT_ALLOW_FILES·DRIFT_ALLOW_VALUES·MICRO_RADIUS
+  it("has no half-pixel fontSize or non-token borderRadius literals in tsx", () => {
+    expect(driftReport()).toEqual([]);
+  }, 30_000); // 저장소 전체 tsx 를 파싱한다 — 전체 스위트 부하에서 기본 5초를 넘긴다
 });

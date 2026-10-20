@@ -77,8 +77,8 @@ export default function OpsStatus() {
           <Icon name="refresh" />
         </button>
       </div>
-      {error && <p style={{ fontSize: 12.5, color: BAD, margin: 0 }}>{error}</p>}
-      {!s && !error && <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: 0 }}>불러오는 중…</p>}
+      {error && <p style={{ fontSize: "var(--ds-fs-md)", color: BAD, margin: 0 }}>{error}</p>}
+      {!s && !error && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", margin: 0 }}>불러오는 중…</p>}
       {s && overall && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 8 }}>
@@ -102,7 +102,7 @@ export default function OpsStatus() {
           {data.warnings.length > 0 && (
             <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 6 }}>
               {data.warnings.map((w) => (
-                <li key={w.code} style={{ fontSize: 12.5, color: "var(--text-strong)", display: "flex", gap: 8, alignItems: "baseline" }}>
+                <li key={w.code} style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-strong)", display: "flex", gap: 8, alignItems: "baseline" }}>
                   <span style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: w.level === "crit" ? BAD : WARN, minWidth: 28 }}>{w.level === "crit" ? "위험" : "주의"}</span>
                   {w.message}
                 </li>
@@ -118,12 +118,12 @@ export default function OpsStatus() {
 function Tile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div style={box}>
-      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: color ?? "var(--text-strong)", fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4, overflowWrap: "anywhere" }}>{sub}</div>}
+      <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: color ?? "var(--text-strong)", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 4, overflowWrap: "anywhere" }}>{sub}</div>}
     </div>
   );
 }
 
-const box: CSSProperties = { padding: "10px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 };
+const box: CSSProperties = { padding: "10px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", minWidth: 0 };
 const iconBtn: CSSProperties = { display: "inline-flex", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", borderRadius: "var(--ds-r-sm)", padding: 6, cursor: "pointer" };

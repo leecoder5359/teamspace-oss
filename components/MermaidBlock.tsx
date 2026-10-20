@@ -90,7 +90,7 @@ export default function MermaidBlock({ code, fallback }: { code: string; fallbac
   return (
     <>
       {fallback}
-      {current && <div style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "-4px 0 10px" }}>다이어그램을 그리지 못했어요 — 원문 표시</div>}
+      {current && <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", margin: "-4px 0 10px" }}>다이어그램을 그리지 못했어요 — 원문 표시</div>}
     </>
   );
 }

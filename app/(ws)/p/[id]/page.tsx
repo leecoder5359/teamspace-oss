@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { pageAccess } from "@/lib/pageGuard";
@@ -8,12 +9,18 @@ import { getPageContent } from "@/lib/pageService";
 import PageView from "@/components/PageView";
 import DatabaseView from "@/components/DatabaseView";
 
+/* generateMetadata 와 본문이 같은 요청에서 페이지 행을 한 번만 읽도록 요청 단위로 기억한다
+   (lib/renderContext 와 같은 React `cache`). 두 쪽이 쓰는 칸을 합쳐 한 select 로 둔다. */
+const getPageHead = cache((id: string) =>
+  prisma.page.findUnique({ where: { id }, select: { title: true, kind: true, deletedAt: true, workspaceId: true } }),
+);
+
 /** 탭 제목 = 문서 제목. 본문과 같은 게이트(접근·휴지통·워크스페이스)를 통과할 때만 — 못 보는 문서의 제목이 새지 않게. */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const ctx = await getRenderContext();
   if (pageAccess(await getRenderAccess(), id) === "none") return {};
-  const page = await prisma.page.findUnique({ where: { id }, select: { title: true, deletedAt: true, workspaceId: true } });
+  const page = await getPageHead(id);
   if (!page || page.deletedAt || page.workspaceId !== ctx.workspaceId) return {};
   return { title: page.title || "제목 없음" };
 }
@@ -26,7 +33,7 @@ export default async function PagePage({ params }: { params: Promise<{ id: strin
   const access = await getRenderAccess();
   if (pageAccess(access, id) === "none") notFound();
 
-  const page = await prisma.page.findUnique({ where: { id }, select: { kind: true, deletedAt: true, workspaceId: true } });
+  const page = await getPageHead(id);
   // 없는 id·휴지통 문서·다른 워크스페이스 문서는 역할(admin 포함)과 무관하게 404 (API 와 동일 —
   // pageAccess 는 admin 에게 아무 id 나 "edit" 을 주므로 워크스페이스 소속을 여기서 따로 본다).
   if (!page || page.deletedAt || page.workspaceId !== ctx.workspaceId) notFound();

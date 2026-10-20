@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "./icons";
+import { inputStyle, primaryBtn } from "./ui";
 
 /* =====================================================================
    슬랙 연동 설정 화면 — 봇 토큰 붙여넣기 연결 + 테스트 발송(PoC).
@@ -136,7 +137,7 @@ export default function Slack() {
           style={{
             margin: "12px 0",
             padding: "10px 14px",
-            borderRadius: 10,
+            borderRadius: "var(--ds-r-md)",
             fontSize: "var(--ds-fs-md)",
             background: msg.tone === "ok" ? "var(--color-primary-weak)" : "var(--color-danger-weak)",
             color: msg.tone === "ok" ? "var(--color-primary)" : "var(--color-danger)",
@@ -166,7 +167,7 @@ export default function Slack() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="xoxb-..."
-            style={inputStyle}
+            style={{ ...inputStyle, marginTop: 4 }}
           />
           <label style={labelStyle}>기본 채널 (선택 — 채널 선택 또는 ID 입력)</label>
           <input
@@ -174,9 +175,9 @@ export default function Slack() {
             onChange={(e) => setChannel(e.target.value)}
             placeholder="채널 선택 또는 C..."
             list="ws-slack-channels"
-            style={inputStyle}
+            style={{ ...inputStyle, marginTop: 4 }}
           />
-          <button onClick={connect} disabled={busy || !token.trim()} style={primaryBtn}>
+          <button onClick={connect} disabled={busy || !token.trim()} style={{ ...primaryBtn, marginTop: 16 }}>
             연결
           </button>
         </div>
@@ -187,7 +188,7 @@ export default function Slack() {
           </div>
 
           {status.source === "env" ? (
-            <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.8 }}>
+            <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", lineHeight: 1.8 }}>
               <code>AUTH_SLACK_BOT_TOKEN</code> 환경변수로 설정됨. 기본 채널은{" "}
               <code>AUTH_SLACK_DEFAULT_CHANNEL</code>{" "}
               {status.defaultChannelId ? (
@@ -208,7 +209,7 @@ export default function Slack() {
                   onChange={(e) => setChannel(e.target.value)}
                   placeholder="채널 선택 또는 C..."
                   list="ws-slack-channels"
-                  style={{ ...inputStyle, flex: 1 }}
+                  style={{ ...inputStyle, marginTop: 4, flex: 1 }}
                 />
                 <button onClick={saveChannel} disabled={busy} style={secondaryBtn}>
                   저장
@@ -218,11 +219,11 @@ export default function Slack() {
           )}
 
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button onClick={sendTest} disabled={busy} style={primaryBtn}>
+            <button onClick={sendTest} disabled={busy} style={{ ...primaryBtn, marginTop: 16 }}>
               테스트 메시지 보내기
             </button>
             {status.source !== "env" && (
-              <button onClick={disconnect} disabled={busy} style={dangerBtn}>
+              <button onClick={disconnect} disabled={busy} style={{ ...dangerBtn, marginTop: 16 }}>
                 연결 해제
               </button>
             )}
@@ -291,30 +292,30 @@ function NotifRules() {
 
   return (
     <div style={{ marginTop: 28 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", margin: "0 0 4px" }}>자동 알림 규칙</h2>
-      <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 12px" }}>조건이 충족되면 선택한 채널로 자동 발송돼요(발송 내역에 기록).</p>
+      <h2 style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", margin: "0 0 4px" }}>자동 알림 규칙</h2>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", margin: "0 0 12px" }}>조건이 충족되면 선택한 채널로 자동 발송돼요(발송 내역에 기록).</p>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: rules.length ? 14 : 0 }}>
-        <select value={event} onChange={(e) => setEvent(e.target.value)} style={{ ...inputStyle, width: "auto", marginTop: 0 }} aria-label="이벤트">
+        <select value={event} onChange={(e) => setEvent(e.target.value)} style={{ ...inputStyle, width: "auto" }} aria-label="이벤트">
           {Object.entries(EVENT_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
-        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, width: "auto", marginTop: 0 }} aria-label="프로젝트">
+        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, width: "auto" }} aria-label="프로젝트">
           <option value="">전체 프로젝트(기본)</option>
           {projects.filter((p) => !p.archivedAt || p.id === projectId).map((p) => <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>)}
         </select>
-        <input value={channel} onChange={(e) => setChannel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} placeholder="채널 선택 또는 #qa-알림/C0123" list="ws-slack-channels" style={{ ...inputStyle, marginTop: 0, flex: "1 1 200px" }} aria-label="채널" />
-        <button onClick={() => void add()} disabled={busy || !channel.trim()} style={{ ...secondaryBtn, marginTop: 0 }}>규칙 추가</button>
+        <input value={channel} onChange={(e) => setChannel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} placeholder="채널 선택 또는 #qa-알림/C0123" list="ws-slack-channels" style={{ ...inputStyle, flex: "1 1 200px" }} aria-label="채널" />
+        <button onClick={() => void add()} disabled={busy || !channel.trim()} style={secondaryBtn}>규칙 추가</button>
       </div>
 
       {rules.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {rules.map((r) => (
-            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "10px 12px", background: "var(--surface-card)", opacity: r.enabled ? 1 : 0.55 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-sub)" }}>{EVENT_LABEL[r.event] ?? r.event}</span>
-              <span style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 6, background: "var(--surface-sunken)", color: "var(--text-sub)" }}>{r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : "전역"}</span>
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "10px 12px", background: "var(--surface-card)", opacity: r.enabled ? 1 : 0.55 }}>
+              <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, padding: "2px 8px", borderRadius: "var(--ds-r-sm)", background: "var(--surface-sunken)", color: "var(--text-sub)" }}>{EVENT_LABEL[r.event] ?? r.event}</span>
+              <span style={{ fontSize: "var(--ds-fs-sm)", padding: "2px 8px", borderRadius: "var(--ds-r-sm)", background: "var(--surface-sunken)", color: "var(--text-sub)" }}>{r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : "전역"}</span>
               <Icon name="arrowRight" size={13} />
               <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", flex: 1, minWidth: 0 }}>{r.targetId}</span>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--text-muted)", cursor: "pointer" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", cursor: "pointer" }}>
                 <input type="checkbox" checked={r.enabled} onChange={() => void toggle(r)} /> 활성
               </label>
               <button onClick={() => void remove(r.id)} title="삭제" aria-label="규칙 삭제" style={{ border: "none", background: "transparent", color: "var(--color-danger)", cursor: "pointer", padding: 2, display: "flex" }}><Icon name="close" size={14} /></button>
@@ -366,7 +367,7 @@ function SendLog() {
 
   return (
     <div style={{ marginTop: 28 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", margin: "0 0 12px" }}>알림 발송 내역</h2>
+      <h2 style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", margin: "0 0 12px" }}>알림 발송 내역</h2>
 
       {/* 요약 스탯 */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
@@ -374,7 +375,7 @@ function SendLog() {
           <div key={l} style={{ flex: "1 1 130px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "12px 16px", background: "var(--surface-card)", display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ width: 3, alignSelf: "stretch", borderRadius: "var(--ds-r-pill)", background: c }} />
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-strong)", lineHeight: 1 }}>{v}</div>
+              <div style={{ fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)", lineHeight: 1 }}>{v}</div>
               <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)", marginTop: 3 }}>{l}</div>
             </div>
           </div>
@@ -404,14 +405,14 @@ function SendLog() {
                       <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: "var(--ds-r-sm)", flex: "0 0 auto", background: "var(--surface-sunken)", color: "var(--text-sub)" }}><Icon name="hash" size={14} /></span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-strong)" }}>{l.channel}</span>
-                          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 6px", borderRadius: 5, background: `color-mix(in srgb, ${kc} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${kc} 74%, var(--text-strong))` }}>{KIND_LABEL[l.kind] ?? l.kind}</span>
+                          <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>{l.channel}</span>
+                          <span style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, padding: "1px 6px", borderRadius: 5, background: `color-mix(in srgb, ${kc} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${kc} 74%, var(--text-strong))` }}>{KIND_LABEL[l.kind] ?? l.kind}</span>
                         </div>
-                        <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.text}</div>
+                        <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.text}</div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "0 0 auto" }}>
-                        <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{new Date(l.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 600, color: failed ? "#F0494E" : "#12B886" }}>
+                        <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{new Date(l.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: failed ? "#F0494E" : "#12B886" }}>
                           <Icon name={failed ? "alert" : "check"} size={12} />{failed ? "실패" : "전송됨"}
                         </span>
                       </div>
@@ -429,39 +430,19 @@ function SendLog() {
 
 const labelStyle: CSSProperties = {
   display: "block",
-  fontSize: 12.5,
+  fontSize: "var(--ds-fs-md)",
   color: "var(--text-muted)",
   marginTop: 12,
 };
-const inputStyle: CSSProperties = {
-  width: "100%",
-  marginTop: 4,
-  padding: "9px 12px",
-  borderRadius: 9,
-  border: "1px solid var(--border-default)",
-  background: "var(--surface-card)",
-  color: "var(--text-strong)",
-  fontSize: "var(--ds-fs-md)",
-};
-const baseBtn: CSSProperties = {
-  marginTop: 16,
-  padding: "9px 16px",
-  borderRadius: 9,
-  fontSize: "var(--ds-fs-md)",
-  fontWeight: 600,
-  cursor: "pointer",
-  border: "1px solid transparent",
-};
-const primaryBtn: CSSProperties = { ...baseBtn, background: "var(--color-primary)", color: "#fff" };
+// 보조·위험 버튼은 기본 버튼의 크기를 그대로 쓰고 색만 바꾼다. 여백은 부르는 자리에서 준다.
 const secondaryBtn: CSSProperties = {
-  ...baseBtn,
-  marginTop: 0,
+  ...primaryBtn,
   background: "var(--surface-card)",
   border: "1px solid var(--border-default)",
   color: "var(--text-strong)",
 };
 const dangerBtn: CSSProperties = {
-  ...baseBtn,
+  ...primaryBtn,
   background: "transparent",
   border: "1px solid var(--border-default)",
   color: "#c0392b",

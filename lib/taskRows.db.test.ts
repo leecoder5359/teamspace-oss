@@ -96,4 +96,30 @@ describe.skipIf(!DB)("DbRow 비정규화 칸(실DB)", () => {
     const out = await rows.findTaskRows(boardId, lite, { closedOptionIds: ["o3"] });
     expect(out.map((r) => r.position)).toEqual([0, 2, 3, 4, 5, 6, 10]); // 1(완료, 칸 있음)만 빠지고 10(낡은 키)은 JS 몫으로 남는다
   });
+
+  it("rederiveBoardTaskColumns: 속성을 지워 키가 바뀌면 그 보드 행만 묶음으로 다시 맞춘다", async () => {
+    const user = await prisma.user.findFirstOrThrow({ where: { email: `taskcols-${stamp}@taskcols.test` } });
+    const b2 = await prisma.page.create({ data: { workspaceId: wsId, kind: "database", title: "P-14 보드 2", createdById: user.id } });
+    const P = `b2p-${stamp}`, S = `b2s-${stamp}`, A = `b2a-${stamp}`;
+    await prisma.dbProperty.createMany({
+      data: [
+        { id: P, databasePageId: b2.id, name: "우선순위", type: "select", position: 0, config: { options: [{ id: "hi", name: "높음" }] } },
+        { id: S, databasePageId: b2.id, name: "상태", type: "select", position: 1, config: { options: [{ id: "o1", name: "할 일" }] } },
+        { id: A, databasePageId: b2.id, name: "담당자", type: "text", position: 2 },
+      ],
+    });
+    await prisma.dbRow.createMany({ data: [0, 1, 2, 3, 4].map((i) => ({ databasePageId: b2.id, props: { [P]: "hi", [S]: "o1", [A]: " 이준 " }, position: i })) });
+    expect(await rows.rederiveBoardTaskColumns(b2.id, 2)).toBe(5);
+    const first = await prisma.dbRow.findMany({ where: { databasePageId: b2.id } });
+    expect(new Set(first.map((r) => `${r.taskColsKey}/${r.statusOptionId}/${r.assigneeText}`))).toEqual(new Set([`${S}|${A}/o1/이준`]));
+
+    await prisma.dbProperty.delete({ where: { id: S } }); // 상태 속성이 사라져 첫 select(우선순위)가 상태가 된다
+    expect(await rows.rederiveBoardTaskColumns(b2.id, 2)).toBe(5);
+    const second = await prisma.dbRow.findMany({ where: { databasePageId: b2.id } });
+    expect(new Set(second.map((r) => `${r.taskColsKey}/${r.statusOptionId}`))).toEqual(new Set([`${P}|${A}/hi`]));
+    expect(await rows.rederiveBoardTaskColumns(b2.id, 2)).toBe(0); // 멱등
+
+    const other = await prisma.dbRow.findFirstOrThrow({ where: { databasePageId: boardId, position: 10 } });
+    expect(other.taskColsKey).toBe("stale|"); // 다른 보드 행은 건드리지 않는다
+  });
 });

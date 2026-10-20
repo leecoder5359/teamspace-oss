@@ -208,7 +208,7 @@ export default function Sidebar({
           <span className="ws-nav-ico"><Icon name="inbox" /></span>
           <span className="ws-nav-label">알림</span>
           {unread > 0 && (
-            <span style={{ marginLeft: "auto", minWidth: 18, height: 18, borderRadius: 9, background: "var(--color-primary)", color: "#fff", fontSize: "var(--ds-fs-xs)", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+            <span style={{ marginLeft: "auto", minWidth: 18, height: 18, borderRadius: "var(--ds-r-sm)", background: "var(--color-primary)", color: "#fff", fontSize: "var(--ds-fs-xs)", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
               {unread > 99 ? "99+" : unread}
             </span>
           )}
@@ -217,7 +217,7 @@ export default function Sidebar({
         <SidebarQuick favorites={data.favorites} recents={data.recents} activeId={activeId} onNavigate={onNavigate} />
 
         {dupNotice && (
-          <div role="status" style={{ margin: "6px 10px", padding: "6px 10px", borderRadius: "var(--ds-r-sm)", fontSize: "var(--ds-fs-sm)", color: "#E0900F", border: "1px solid #E0900F", background: "var(--surface-sunken)" }}>
+          <div role="status" style={{ margin: "6px 10px", padding: "6px 10px", borderRadius: "var(--ds-r-sm)", fontSize: "var(--ds-fs-sm)", color: "var(--color-warning-text)", border: "1px solid var(--yellow-600)", background: "var(--surface-sunken)" }}>
             {DUPLICATE_RENAME_NOTICE}
           </div>
         )}
@@ -244,6 +244,10 @@ export default function Sidebar({
         {/* 일반 */}
         <div className="ws-nav-section">
           <div className="ws-section-label"><span>일반</span></div>
+          <Link href="/docs" className={`ws-nav-item${pathname.startsWith("/docs") ? " active" : ""}`} onClick={onNavigate} title="문서 허브">
+            <span className="ws-nav-ico"><Icon name="doc" /></span>
+            <span className="ws-nav-label">문서 허브</span>
+          </Link>
           <Link href="/calendar" className={`ws-nav-item${pathname === "/calendar" ? " active" : ""}`} onClick={onNavigate} title="캘린더">
             <span className="ws-nav-ico"><Icon name="calendar" /></span>
             <span className="ws-nav-label">캘린더</span>

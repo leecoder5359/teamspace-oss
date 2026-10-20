@@ -38,13 +38,17 @@
   /* ── Saebit semantic aliases ── */
   --color-primary:var(--blue-500); --color-primary-hover:var(--blue-600); --color-primary-press:var(--blue-700);
   --color-primary-weak:var(--blue-50); --color-on-primary:#FFFFFF;
-  --text-strong:var(--gray-900); --text-body:var(--gray-800); --text-sub:var(--gray-600);
-  --text-muted:var(--gray-500); --text-disabled:var(--gray-400);
+  --text-strong:var(--gray-900); --text-body:var(--gray-800); --text-sub:var(--gray-700);
+  /* U-9: sub·muted 모두 본문 보조 글자로 쓰여 AA(4.5:1)를 #FFF·#F2F4F6 양쪽에서 지키고, sub 가 muted 보다 짙은 위계를 유지한다.
+     sub = gray-700 #4E5968(7.11·6.45), muted = #65707E(5.03·4.57). */
+  --text-muted:#65707E; --text-disabled:var(--gray-400);
   --surface-page:var(--gray-100); --surface-card:var(--gray-0); --surface-sunken:var(--gray-50);
   --surface-hover:var(--gray-100); --surface-press:var(--gray-200);
   --border-subtle:var(--gray-200); --border-default:var(--gray-300); --border-strong:var(--gray-400);
   --color-success:var(--green-500); --color-warning:var(--yellow-500); --color-danger:var(--red-500);
   --color-success-weak:var(--green-50); --color-warning-weak:var(--yellow-50); --color-danger-weak:var(--red-50);
+  /* 경고 글자색 — --color-warning(#F5A623)은 채움용이라 흰 바탕 글자로는 2.0:1. 카드 5.26·페이지 4.77·warning-weak 4.93 */
+  --color-warning-text:#995F04;
 
   --radius-xs:6px; --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-pill:999px;
   --shadow-xs:0 1px 2px rgba(25,31,40,0.06);
@@ -128,12 +132,13 @@
   --gray-0:#1E232B; --gray-50:#1A1F26; --gray-100:#262C36; --gray-200:#2C333E; --gray-300:#39414D;
   --gray-400:#586273; --gray-500:#8A94A1; --gray-600:#A7B0BC; --gray-700:#C4CBD4; --gray-800:#DCE1E7; --gray-900:#F2F4F6;
   --surface-page:#14171C; --surface-card:#1E232B; --surface-sunken:#191D24; --surface-hover:#262C36; --surface-press:#2F3742;
-  --text-strong:#F1F3F5; --text-body:#D5DAE0; --text-sub:#A6AEB9; --text-muted:#7E8896; --text-disabled:#5A6473;
+  /* U-9: muted 는 카드 5.09·hover 4.52 로 AA. warning-text 는 채움색과 같아도 카드 8.51 */
+  --text-strong:#F1F3F5; --text-body:#D5DAE0; --text-sub:#A6AEB9; --text-muted:#8A93A1; --text-disabled:#5A6473;
   --border-subtle:#2A313B; --border-default:#39414D; --border-strong:#4C5563;
   --color-primary:#3D72FF; --color-primary-hover:#5680FF; --color-primary-press:#85A3FF; --color-primary-weak:#1B2742;
   --blue-50:#1B2742; --blue-300:#85A3FF;
   --color-success:#1CC79A; --color-success-weak:#0F2A22; --green-50:#0F2A22; --green-500:#1CC79A; --green-600:#2BD6A8;
-  --color-warning:#F5B23E; --color-warning-weak:#2C2410; --yellow-50:#2C2410; --yellow-500:#F5B23E; --yellow-600:#F5C46B;
+  --color-warning:#F5B23E; --color-warning-text:#F5B23E; --color-warning-weak:#2C2410; --yellow-50:#2C2410; --yellow-500:#F5B23E; --yellow-600:#F5C46B;
   --color-danger:#FF5C61; --color-danger-weak:#2E1719; --red-50:#2E1719; --red-500:#FF5C61; --red-600:#FF7A7E;
 
   /* --ds-* dark-only overrides (the rest cascade from the base vars above) */
@@ -357,33 +362,10 @@ body {
 }
 
 /* page tree (docs) */
-.ws-tree,
-.ws-tree-children {
+.ws-tree {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-.ws-tree-children {
-  padding-left: 18px;
-}
-.ws-tree-link {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
-  border-radius: var(--ds-r-md);
-  color: var(--ds-text-2);
-  text-decoration: none;
-  font-size: var(--ds-fs-md);
-}
-.ws-tree-link:hover {
-  background: color-mix(in srgb, var(--ds-text) 6%, transparent);
-  color: var(--ds-text);
-}
-.ws-tree-link.active {
-  background: color-mix(in srgb, var(--ds-text) 10%, transparent);
-  color: var(--ds-text);
-  font-weight: 600;
 }
 .ws-tree-icon {
   flex-shrink: 0;
@@ -603,6 +585,8 @@ body {
   margin: 0 auto;
   padding: 56px 28px 120px;
 }
+/* 제목 입력을 감싸는 h1 — 브라우저 기본 h1 여백·글꼴을 지워 감싸기 전과 같은 배치를 유지 */
+.ws-title-h1 { margin: 0; font: inherit; }
 .ws-title-input {
   font-family: var(--ds-font-display);
   font-size: var(--ds-fs-3xl);
@@ -704,11 +688,14 @@ body {
 .ws-db-filter:focus,
 .ws-quickadd-name:focus,
 .ws-quickadd-time:focus,
+.ws-focus-ring:focus,
 .ws-search:focus-within {
   outline: none;
   border-color: var(--ds-primary);
   box-shadow: 0 0 0 3px var(--ds-primary-weak);
 }
+/* .ws-focus-ring: 인라인 style 로 테두리를 그리는 입력·select 에 붙이는 같은 포커스 표시 — 인라인 테두리를 이기도록 !important */
+.ws-focus-ring:focus { border-color: var(--ds-primary) !important; }
 .ws-db-search {
   flex: 0 1 260px;
 }
@@ -1034,6 +1021,12 @@ body {
   border-color: var(--ds-border-strong);
   box-shadow: var(--ds-shadow-md);
 }
+/* 카드 전체를 덮는 열기 영역(U-31) — 메뉴 버튼과 형제라 중첩 인터랙티브가 아니다. 포커스 링은 카드 모서리를 따른다 */
+.ws-kanban-card-open {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
 .ws-kanban-card.dragging {
   opacity: 0.45;
   cursor: grabbing;
@@ -1273,8 +1266,6 @@ body {
 .ws-subtab[data-on="1"] { background:var(--surface-sunken); color:var(--text-strong); }
 .ws-toggle-md { border:1px solid var(--border-default); background:var(--surface-card); color:var(--text-sub); font-size:11.5px; font-weight:600; font-family:inherit; cursor:pointer; padding:4px 10px; border-radius:7px; }
 .ws-toggle-md[data-on="1"] { background:var(--text-strong); color:var(--surface-card); border-color:var(--text-strong); }
-.ws-check-item:hover { background:var(--surface-hover); }
-.ws-comment-input:focus { border-color:var(--color-primary) !important; }
 .ws-menuitem:hover { background:var(--surface-hover) !important; }
 .ws-btn-soft { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 11px; border:1px solid var(--border-default); border-radius:9px; background:var(--surface-card); color:var(--text-body); font-size:12.5px; font-weight:600; font-family:inherit; cursor:pointer; transition:.12s; }
 .ws-btn-soft:hover { background:var(--surface-hover); }
@@ -1354,17 +1345,6 @@ body {
 .ws-md-body code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border-radius: 4px; padding: 1px 4px; }
 .ws-md-pre, .ws-md-body pre { font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-body); }
 
-.ws-check-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
-.ws-check-item { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; font-size: 13px; color: var(--text-body); cursor: pointer; }
-.ws-check-item.done span { text-decoration: line-through; color: var(--text-muted); }
-
-.ws-comment { display: flex; gap: 9px; padding: 8px 0; }
-.ws-comment-name { font-size: 12.5px; font-weight: 700; color: var(--text-strong); }
-.ws-comment-time { font-size: 11px; color: var(--text-muted); }
-.ws-comment-text { font-size: 13px; color: var(--text-body); line-height: 1.55; }
-.ws-comment-input { flex: 1; min-width: 0; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card); color: var(--text-body); font: inherit; font-size: 13px; padding: 8px 11px; outline: none; }
-
-.ws-detail-toast { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--text-strong); color: var(--surface-card); font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 10px; box-shadow: var(--shadow-md); z-index: 30; white-space: nowrap; }
 
 .ws-table-row { cursor: pointer; }
 
@@ -1464,7 +1444,6 @@ body {
 @media (max-width: 768px) {
   /* ① 사이드바·탭·툴바 탭 타겟 */
   .ws-nav-item,
-  .ws-tree-item,
   .ws-db-tab,
   .ws-seg-btn {
     min-height: 40px;
@@ -1478,12 +1457,13 @@ body {
     height: 44px;
   }
 
-  /* ② iOS 포커스 확대 방지 — 16px 미만이면 사파리가 화면을 당긴다 */
+  /* ② iOS 포커스 확대 방지 — 16px 미만이면 사파리가 화면을 당긴다.
+     공용 입력 상수(ui.tsx)는 인라인 font-size 를 주므로 !important 로 이긴다. */
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea,
   .ws-cell-input {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 
   /* ③ 안전 영역(노치·홈 인디케이터) */

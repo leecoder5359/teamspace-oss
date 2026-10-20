@@ -188,7 +188,7 @@ export default function Members({
           멤버
         </h1>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+        <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>
           {humans.length}명
         </span>
       </div>
@@ -220,6 +220,7 @@ export default function Members({
               <select
                 value={addRole}
                 onChange={(e) => setAddRole(e.target.value as Role)}
+                className="ws-focus-ring"
                 style={selectStyle}
                 aria-label="역할 선택"
               >
@@ -245,7 +246,7 @@ export default function Members({
               <p
                 style={{
                   margin: "10px 0 0",
-                  fontSize: 12.5,
+                  fontSize: "var(--ds-fs-md)",
                   color:
                     feedback.type === "ok"
                       ? "var(--color-success)"
@@ -265,7 +266,7 @@ export default function Members({
                 <span style={{ display: "flex", color: "var(--text-muted)" }}><Icon name="users" size={14} /></span>
                 <input placeholder="새 팀 이름" value={teamName} onChange={(e) => setTeamName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createTeam(); }} aria-label="새 팀 이름" />
               </div>
-              <select value={teamColorSel} onChange={(e) => setTeamColorSel(e.target.value)} style={selectStyle} aria-label="팀 색상">
+              <select value={teamColorSel} onChange={(e) => setTeamColorSel(e.target.value)} className="ws-focus-ring" style={selectStyle} aria-label="팀 색상">
                 {TEAM_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <button className="ws-btn-soft" onClick={() => void createTeam()} disabled={!teamName.trim()} style={{ flexShrink: 0 }}><Icon name="plus" size={14} /> 팀 만들기</button>
@@ -275,9 +276,9 @@ export default function Members({
                 {teams.map((t) => {
                   const count = members.filter((m) => m.teamId === t.id).length;
                   return (
-                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "9px 12px" }}>
+                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "9px 12px" }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: teamColor(t.color), flexShrink: 0 }} />
-                      <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>{t.name}</span>
+                      <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 600, color: "var(--text-strong)" }}>{t.name}</span>
                       <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{count}명</span>
                       <span style={{ flex: 1 }} />
                       <button className="ws-btn-soft" onClick={() => void deleteTeam(t.id)} title="팀 삭제" aria-label="팀 삭제" style={{ padding: "0 9px", color: "var(--color-danger)" }}><Icon name="close" size={13} /></button>
@@ -334,7 +335,7 @@ export default function Members({
                       >
                         <span
                           style={{
-                            fontSize: 13.5,
+                            fontSize: "var(--ds-fs-base)",
                             fontWeight: 600,
                             color: "var(--text-strong)",
                             overflow: "hidden",
@@ -363,9 +364,9 @@ export default function Members({
                         {member.status === "invited" && (
                           <span
                             style={{
-                              fontSize: 10.5,
+                              fontSize: "var(--ds-fs-xs)",
                               fontWeight: 700,
-                              color: "#E0900F",
+                              color: "var(--color-warning-text)",
                               background: "color-mix(in srgb, #F5A623 16%, var(--surface-card))",
                               padding: "1px 6px",
                               borderRadius: "var(--ds-r-pill)",
@@ -398,6 +399,7 @@ export default function Members({
                         onChange={(e) => void assignTeam(member.id, e.target.value || null)}
                         aria-label="팀"
                         title="팀 배정"
+                        className="ws-focus-ring"
                         style={selectStyle}
                       >
                         <option value="">미배정</option>
@@ -420,6 +422,7 @@ export default function Members({
                           : undefined
                       }
                       aria-label="역할"
+                      className="ws-focus-ring"
                       style={{
                         ...selectStyle,
                         opacity: locked ? 0.5 : 1,
@@ -489,11 +492,11 @@ export default function Members({
                       ...(idx > 0 ? { borderTop: "1px solid var(--border-subtle)" } : {}),
                     }}
                   >
-                    <span aria-hidden style={{ width: 36, height: 36, borderRadius: "var(--ds-r-pill)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-sunken, var(--border-subtle))", fontSize: 18, flexShrink: 0 }}>
+                    <span aria-hidden style={{ width: 36, height: 36, borderRadius: "var(--ds-r-pill)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-sunken, var(--border-subtle))", fontSize: "var(--ds-fs-xl)", flexShrink: 0 }}>
                       🤖
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: "var(--ds-fs-base)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {displayName}
                       </div>
                       <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -501,7 +504,7 @@ export default function Members({
                       </div>
                     </div>
                     {tok?.revokedAt && (
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-danger)", background: "color-mix(in srgb, var(--color-danger) 12%, var(--surface-card))", padding: "1px 6px", borderRadius: "var(--ds-r-pill)", flexShrink: 0, lineHeight: 1.7 }}>
+                      <span style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--color-danger)", background: "color-mix(in srgb, var(--color-danger) 12%, var(--surface-card))", padding: "1px 6px", borderRadius: "var(--ds-r-pill)", flexShrink: 0, lineHeight: 1.7 }}>
                         회수됨
                       </span>
                     )}
@@ -529,7 +532,7 @@ const cardStyle: CSSProperties = {
 
 const cardHeadStyle: CSSProperties = {
   margin: "0 0 12px",
-  fontSize: 13.5,
+  fontSize: "var(--ds-fs-base)",
   fontWeight: 700,
   color: "var(--text-strong)",
 };
@@ -537,7 +540,7 @@ const cardHeadStyle: CSSProperties = {
 const listHeadStyle: CSSProperties = {
   padding: "12px 16px",
   borderBottom: "1px solid var(--border-subtle)",
-  fontSize: 11.5,
+  fontSize: "var(--ds-fs-sm)",
   fontWeight: 700,
   color: "var(--text-muted)",
   textTransform: "uppercase",

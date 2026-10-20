@@ -325,6 +325,12 @@ add({
   },
 });
 add({
+  name: "board stats",
+  usage: "board stats <boardId>   (대시보드 통계 — 상태·분류 분포·담당자별·열린 마감 목록, 행 원본 없이)",
+  ep: ["databases/[id]/stats/route.ts"],
+  run: async (a) => out(await api("GET", `/api/databases/${a.pos[0]}/stats`)),
+});
+add({
   name: "board new",
   usage: 'board new [title] [--parent <id>] [--project <id>]',
   ep: ["databases/route.ts"],
@@ -956,6 +962,19 @@ for (const r of RESOURCES) {
     run: async (a) => out(await api("DELETE", `/api/${r.path}/${a.pos[0]}`)),
   });
 }
+add({
+  name: "decision show",
+  usage: "decision show <id>   (결정 하나 — 목록(최신 200건) 밖의 것도)",
+  ep: ["decisions/[id]/route.ts"],
+  run: async (a) => {
+    if (!a.pos[0]) throw new Error("id 가 필요합니다: ws decision show <id>");
+    const { decision: d } = (await api("GET", `/api/decisions/${encodeURIComponent(a.pos[0])}`)) as {
+      decision: { title: string; status: string; context: string | null; decision: string | null; decidedAt: string; project: { name: string } | null };
+    };
+    const head = `# ${d.title}  [${d.status} · ${d.decidedAt.slice(0, 10)}${d.project ? ` · ${d.project.name}` : ""}]`;
+    out([head, d.context && `## 맥락\n${d.context}`, d.decision && `## 결정\n${d.decision}`].filter(Boolean).join("\n\n"));
+  },
+});
 add({
   name: "changelog draft",
   usage: "changelog draft [--since <ref|YYYY-MM-DD>] [--project <id|auto|none>] [--dry-run]   (--project 기본 auto = cwd→프로젝트 라우트 규칙, 매핑 없으면 공용 + 경고. 앵커·버전은 같은 프로젝트 항목만 보되, 프로젝트 항목이 0건이면 공용 항목으로 폴백(버전은 합집합). --dry-run 은 앵커 출처 표시. since 이후 feat/fix/perf 커밋 → 변경 이력 1건. 기본 since=마지막 자동 초안(버전 YYYY.MM.DD·제목 '배포 …')의 releasedAt, 없으면 7일 전. 불릿 50개 상한, 같은 버전이면 .2/.3)",

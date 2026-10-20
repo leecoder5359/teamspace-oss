@@ -112,7 +112,7 @@ export default function LiveSessions({ isAdmin }: { isAdmin: boolean }) {
                 <td style={{ ...td, ...fill, verticalAlign: "top" }} title={s.cwd ?? undefined}>
                   <div style={{ ...oneLine, fontWeight: 600, color: "var(--text-strong)" }}>{s.repo ?? lastFolder(s.cwd)}</div>
                   {(s.branch || s.worktree || s.agentName) && (
-                    <div style={{ ...oneLine, fontSize: 11.5, color: "var(--text-muted)" }}>
+                    <div style={{ ...oneLine, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                       {[s.branch, s.worktree, s.agentName].filter(Boolean).join(" · ")}
                     </div>
                   )}
@@ -133,11 +133,11 @@ export default function LiveSessions({ isAdmin }: { isAdmin: boolean }) {
               <tr key={s.id} style={rowStyle}>
                 <td style={{ ...td, verticalAlign: "top" }} title={s.cwd ?? undefined}>
                   <div style={{ ...oneLine, maxWidth: 140, fontWeight: 600, color: "var(--text-strong)" }}>{s.repo ?? lastFolder(s.cwd)}</div>
-                  <div style={{ ...oneLine, maxWidth: 140, fontSize: 11.5, color: "var(--text-muted)" }}>{s.agentName ?? "—"}</div>
+                  <div style={{ ...oneLine, maxWidth: 140, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{s.agentName ?? "—"}</div>
                 </td>
                 <td style={{ ...td, verticalAlign: "top" }}>
                   <div style={{ ...mono, ...oneLine, maxWidth: 160 }} title={s.branch ?? undefined}>{s.branch ?? "—"}</div>
-                  <div style={{ ...mono, ...oneLine, maxWidth: 160, fontSize: 11.5, color: "var(--text-muted)" }} title={s.worktree ?? undefined}>
+                  <div style={{ ...mono, ...oneLine, maxWidth: 160, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }} title={s.worktree ?? undefined}>
                     {s.worktree ?? (s.repo ? "본체" : "—")}
                   </div>
                 </td>
@@ -161,7 +161,7 @@ export default function LiveSessions({ isAdmin }: { isAdmin: boolean }) {
               <tr key={l.name} style={rowStyle}>
                 <td style={{ ...td, ...fill, verticalAlign: "top" }} title={[l.branch, l.cwd].filter(Boolean).join(" · ") || undefined}>
                   <div style={{ ...mono, ...oneLine, fontWeight: 600, color: "var(--text-strong)" }}>{l.name}</div>
-                  <div style={{ ...oneLine, fontSize: 11.5, color: "var(--text-muted)" }}>
+                  <div style={{ ...oneLine, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                     {l.holderName} · {l.ageMin}분 전부터
                   </div>
                   {l.note && <div style={{ overflowWrap: "anywhere" }}>{l.note}</div>}
@@ -186,7 +186,7 @@ export default function LiveSessions({ isAdmin }: { isAdmin: boolean }) {
                 <td style={{ ...td, ...mono, fontWeight: 600, color: "var(--text-strong)" }}>{l.name}</td>
                 <td style={{ ...td, whiteSpace: "nowrap" }} title={[l.branch, l.cwd].filter(Boolean).join(" · ") || undefined}>
                   {l.holderName}
-                  <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{l.ageMin}분 전부터</div>
+                  <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{l.ageMin}분 전부터</div>
                 </td>
                 <td style={{ ...td, minWidth: 120, overflowWrap: "anywhere" }}>{l.note ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                 <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }} title={new Date(l.expiresAt).toLocaleString("ko-KR")}>

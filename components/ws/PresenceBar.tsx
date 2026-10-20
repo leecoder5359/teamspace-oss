@@ -61,7 +61,7 @@ export default function PresenceBar({ pageId, editing = false }: { pageId: strin
       <AvatarStack names={viewers.map((v) => v.name)} size={20} />
       <span style={{ whiteSpace: "nowrap" }}>
         {editors.length > 0 ? (
-          <span style={{ color: "#E0900F", fontWeight: 600 }}>{summarize(editors, 2)} 편집 중</span>
+          <span style={{ color: "var(--color-warning-text)", fontWeight: 600 }}>{summarize(editors, 2)} 편집 중</span>
         ) : (
           `${label} 보는 중`
         )}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
-import { inputStyleLg as inputStyle, primaryBtnInline as primaryBtn } from "./ui";
+import { inputStyle, primaryBtnInline as primaryBtn } from "./ui";
 
 type Detail = {
   site: { id: string; slug: string; title: string; status: "active" | "disabled"; currentVersion: number; apiUpstream: string | null; aliases?: string[] };
@@ -138,15 +138,15 @@ export default function SiteDetail({ id }: { id: string }) {
       </h1>
 
       <div style={{ ...card, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <code style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.url}</code>
+        <code style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-md)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.url}</code>
         <button className="ws-btn-soft" onClick={() => navigator.clipboard.writeText(d.url)}>링크 복사</button>
         <a className="ws-btn-soft" href={d.url} target="_blank" rel="noreferrer">미리보기</a>
       </div>
-      {msg && <pre style={{ whiteSpace: "pre-wrap", fontSize: 12.5, color: "var(--color-danger)" }}>{msg}</pre>}
+      {msg && <pre style={{ whiteSpace: "pre-wrap", fontSize: "var(--ds-fs-md)", color: "var(--color-danger)" }}>{msg}</pre>}
 
       <h2 style={h2}>주소</h2>
       <div style={card}>
-        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+        <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginBottom: 10 }}>
           지금 주소는 <code>/pages/{site.slug}</code> 입니다. 영문 소문자·숫자·하이픈으로 바꿀 수 있어요(예: banjang-handover). 안쪽 페이지는 <code>/pages/{site.slug}/이름</code> 처럼 바로 링크할 수 있고, 바꾼 뒤에도 옛 주소는 계속 열리며 새 주소로 넘어갑니다.
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -167,13 +167,13 @@ export default function SiteDetail({ id }: { id: string }) {
           <button onClick={invite} disabled={busy || !emails.trim()} style={primaryBtn}><Icon name="plus" /> 초대</button>
         </div>
         {share && (
-          <div style={{ marginTop: 10, fontSize: 12.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <div style={{ marginTop: 10, fontSize: "var(--ds-fs-md)", display: "flex", gap: 8, alignItems: "flex-start" }}>
             <span style={{ flex: 1 }}>{share}</span>
             <button className="ws-btn-soft" onClick={() => navigator.clipboard.writeText(share)}>문구 복사</button>
           </div>
         )}
         {d.invites.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 10 }}>아직 초대한 사람이 없어요. 초대 전에는 워크스페이스 멤버만 볼 수 있어요.</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 10 }}>아직 초대한 사람이 없어요. 초대 전에는 워크스페이스 멤버만 볼 수 있어요.</div>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
             {d.invites.map((i) => (
@@ -193,17 +193,17 @@ export default function SiteDetail({ id }: { id: string }) {
         <>
           <h2 style={h2}>받은 계정 정보</h2>
           <div style={card}>
-            <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 10 }}>
+            <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginBottom: 10 }}>
               퍼블리시 페이지의 폼으로 들어온 값입니다. 저장은 암호화(AES-256-GCM)돼 있고, <b>값 보기</b>를 누른 순간만 풀립니다 — 그 열람은 활동 로그에 남습니다.
               값 보기·삭제는 <b>admin</b> 권한이 필요합니다. 진짜 있어야 할 곳(비밀번호 관리자 등)으로 옮겼으면 여기서는 지우세요.
             </div>
             {intake.keyMissing && (
-              <div style={{ fontSize: 12.5, color: "#c0392b", marginBottom: 10 }}>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "#c0392b", marginBottom: 10 }}>
                 SITE_INTAKE_KEY 가 설정되지 않았습니다 — 새 제출은 거절되고, 이미 받은 값도 풀 수 없습니다.
               </div>
             )}
             {intake.entries.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>아직 받은 값이 없습니다.</div>
+              <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>아직 받은 값이 없습니다.</div>
             ) : (
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {intake.entries.map((e) => (
@@ -223,7 +223,7 @@ export default function SiteDetail({ id }: { id: string }) {
                       }}>삭제</button>
                     </div>
                     {revealed[e.id] && (
-                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6, fontSize: 12.5 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6, fontSize: "var(--ds-fs-md)" }}>
                         <tbody>
                           {revealed[e.id]!.map((f, i) => (
                             <tr key={`${f.label}-${i}`}>
@@ -248,7 +248,7 @@ export default function SiteDetail({ id }: { id: string }) {
       <h2 style={h2}>접근 이력</h2>
       <div style={card}>
         {!access || access.accounts.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>아직 열어본 사람이 없어요. 링크를 열면 계정별로 여기 쌓입니다(같은 계정이 10분 안에 다시 열면 한 번으로 셉니다).</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>아직 열어본 사람이 없어요. 링크를 열면 계정별로 여기 쌓입니다(같은 계정이 10분 안에 다시 열면 한 번으로 셉니다).</div>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {access.accounts.map((a) => (
@@ -259,7 +259,7 @@ export default function SiteDetail({ id }: { id: string }) {
                   style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left", flexWrap: "wrap", color: "inherit", font: "inherit" }}
                 >
                   <span style={{ flex: 1, minWidth: 160, fontSize: "var(--ds-fs-md)", overflow: "hidden", textOverflow: "ellipsis" }}>{a.email}</span>
-                  <span style={{ fontSize: 11.5, padding: "1px 7px", borderRadius: "var(--ds-r-pill)", background: "var(--surface-sunken)", color: a.kind === "revoked" ? "#c0392b" : "var(--text-muted)" }}>{KIND_LABEL[a.kind]}</span>
+                  <span style={{ fontSize: "var(--ds-fs-sm)", padding: "1px 7px", borderRadius: "var(--ds-r-pill)", background: "var(--surface-sunken)", color: a.kind === "revoked" ? "#c0392b" : "var(--text-muted)" }}>{KIND_LABEL[a.kind]}</span>
                   <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                     {a.count}회 · 처음 {when(a.firstAt)} · 마지막 {when(a.lastAt)}
                   </span>

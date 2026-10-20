@@ -195,13 +195,14 @@ function renderInline(nodes: Inline[], ctx: Ctx, keyPrefix = ""): ReactNode[] {
 
 /* ---------- 콜아웃 ---------- */
 
-const CALLOUT_META: Record<string, { color: string; icon: Parameters<typeof Icon>[0]["name"]; label: string }> = {
+// color = 라벨 글자색, bar = 테두리·액센트 바(없으면 color). 경고는 글자만 AA 용 짙은 토큰을 쓰고 바는 원래 경고색.
+const CALLOUT_META: Record<string, { color: string; icon: Parameters<typeof Icon>[0]["name"]; label: string; bar?: string }> = {
   NOTE: { color: "var(--color-primary)", icon: "flag", label: "노트" },
   INFO: { color: "var(--color-primary)", icon: "flag", label: "정보" },
   TIP: { color: "#0CA678", icon: "check", label: "팁" },
   SUCCESS: { color: "#0CA678", icon: "check", label: "완료" },
-  WARNING: { color: "#E0900F", icon: "flag", label: "주의" },
-  CAUTION: { color: "#E0900F", icon: "flag", label: "주의" },
+  WARNING: { color: "var(--color-warning-text)", bar: "var(--yellow-600)", icon: "flag", label: "주의" },
+  CAUTION: { color: "var(--color-warning-text)", bar: "var(--yellow-600)", icon: "flag", label: "주의" },
   DANGER: { color: "#D14343", icon: "flag", label: "위험" },
   ERROR: { color: "#D14343", icon: "flag", label: "오류" },
 };
@@ -224,11 +225,11 @@ function renderListItems(items: ListItem[], ctx: Ctx, keyPrefix: string): ReactN
                 display: "flex",
                 gap: 8,
                 alignItems: "flex-start",
-                fontSize: 13.5,
+                fontSize: "var(--ds-fs-base)",
                 color: item.checked ? "var(--text-muted)" : "var(--text-body)",
                 lineHeight: 1.55,
               }
-            : { fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.6 }
+            : { fontSize: "var(--ds-fs-base)", color: "var(--text-body)", lineHeight: 1.6 }
         }
       >
         {isTask && (
@@ -262,11 +263,11 @@ function renderListItems(items: ListItem[], ctx: Ctx, keyPrefix: string): ReactN
 }
 
 const H_STYLE: Record<number, React.CSSProperties> = {
-  1: { fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--text-strong)", margin: "4px 0 12px", letterSpacing: "-0.02em" },
+  1: { fontFamily: "var(--font-display)", fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)", margin: "4px 0 12px", letterSpacing: "-0.02em" },
   2: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", margin: "20px 0 8px", letterSpacing: "-0.01em" },
   3: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", margin: "16px 0 6px" },
   4: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)", margin: "14px 0 5px" },
-  5: { fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 700, color: "var(--text-sub)", margin: "13px 0 5px" },
+  5: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-sub)", margin: "13px 0 5px" },
   6: { fontFamily: "var(--font-body)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-sub)", margin: "12px 0 4px", textTransform: "uppercase", letterSpacing: "0.03em" },
 };
 
@@ -294,7 +295,7 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
 
       case "para":
         return (
-          <p key={key} style={{ fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.7, margin: "6px 0" }}>
+          <p key={key} style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-body)", lineHeight: 1.7, margin: "6px 0" }}>
             {renderInline(b.c, ctx, key + "-")}
           </p>
         );
@@ -308,9 +309,9 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
               padding: "6px 0 6px 14px",
               margin: "8px 0",
               color: "var(--text-sub)",
-              fontSize: 13.5,
+              fontSize: "var(--ds-fs-base)",
               background: "var(--surface-sunken)",
-              borderRadius: "0 8px 8px 0",
+              borderRadius: "0 var(--ds-r-sm) var(--ds-r-sm) 0",
             }}
           >
             {renderBlocks(b.c, ctx, key + "-", renderEmbed)}
@@ -323,15 +324,15 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
           <div
             key={key}
             style={{
-              border: `1px solid ${meta.color}`,
-              borderLeft: `3px solid ${meta.color}`,
-              borderRadius: "0 8px 8px 0",
+              border: `1px solid ${meta.bar ?? meta.color}`,
+              borderLeft: `3px solid ${meta.bar ?? meta.color}`,
+              borderRadius: "0 var(--ds-r-sm) var(--ds-r-sm) 0",
               padding: "10px 14px",
               margin: "10px 0",
               background: "var(--surface-sunken)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: meta.color, fontWeight: 700, fontSize: 12.5, marginBottom: b.c.length ? 6 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: meta.color, fontWeight: 700, fontSize: "var(--ds-fs-md)", marginBottom: b.c.length ? 6 : 0 }}>
               <Icon name={meta.icon} size={13} />
               {b.title ? renderInline(b.title, ctx, key + "t") : meta.label}
             </div>
@@ -348,7 +349,7 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
           >
             <code
               data-lang={b.lang ?? undefined}
-              style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: 1.6, color: "var(--text-body)", whiteSpace: "pre" }}
+              style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-md)", lineHeight: 1.6, color: "var(--text-body)", whiteSpace: "pre" }}
             >
               {b.v}
             </code>
@@ -428,9 +429,9 @@ function renderBlocks(blocks: Block[], ctx: Ctx, keyPrefix = "", renderEmbed?: M
         return (
           <div
             key={key}
-            style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "10px 14px", margin: "10px 0", background: "var(--surface-card)", fontSize: "var(--ds-fs-md)" }}
+            style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: "10px 14px", margin: "10px 0", background: "var(--surface-card)", fontSize: "var(--ds-fs-md)" }}
           >
-            <span style={{ color: "var(--text-muted)", fontSize: 11.5, marginRight: 6 }}>임베드</span>
+            <span style={{ color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)", marginRight: 6 }}>임베드</span>
             {href ? (
               <a href={href} style={{ color: "var(--color-primary)", fontWeight: 600, textDecoration: "none" }}>
                 {b.target}

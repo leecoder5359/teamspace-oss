@@ -149,3 +149,11 @@ describe("ws CLI ↔ 라우트 메서드·필드 패리티", () => {
     }
   }
 });
+
+describe("단건 읽기 명령 ↔ 라우트 GET", () => {
+  it("'decision show' → decisions/[id]/route.ts 에 GET 이 있다", () => {
+    const cmd = MANIFEST.find((c) => c.name === "decision show");
+    expect(cmd?.ep).toEqual(["decisions/[id]/route.ts"]);
+    expect(readFileSync(resolve(API_ROOT, "decisions/[id]/route.ts"), "utf8")).toMatch(/export async function GET/);
+  });
+});

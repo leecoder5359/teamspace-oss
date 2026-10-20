@@ -72,7 +72,7 @@ export default function QaSurface({ project }: { project: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>QA <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span></span>
+        <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>QA <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{rows.length}</span></span>
         <select value={filter} onChange={(e) => setFilter(e.target.value as "all" | St)} style={{ ...inp, width: "auto" }} aria-label="상태 필터">
           <option value="all">전체 상태</option>
           <option value="pending">대기</option>
@@ -109,10 +109,10 @@ export default function QaSurface({ project }: { project: string }) {
               renderProposal={(p) => (
                 <>
                   <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>{p.title}</div>
-                  {p.steps && <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{p.steps}</div>}
-                  {p.expected && <div style={{ fontSize: 12.5, color: "var(--text-body)", marginTop: 4 }}><b>기대:</b> {p.expected}</div>}
+                  {p.steps && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 2, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{p.steps}</div>}
+                  {p.expected && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", marginTop: 4 }}><b>기대:</b> {p.expected}</div>}
                   {p.status === "conflict" && (p.existingSteps || p.existingExpected) && (
-                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "#E0900F", marginTop: 4 }}>기존: {[p.existingSteps, p.existingExpected].filter(Boolean).join(" / ")}</div>
+                    <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--color-warning-text)", marginTop: 4 }}>기존: {[p.existingSteps, p.existingExpected].filter(Boolean).join(" / ")}</div>
                   )}
                 </>
               )}
@@ -133,7 +133,7 @@ export default function QaSurface({ project }: { project: string }) {
               <span style={{ color: "var(--text-muted)" }}><Icon name="check" size={32} /></span>
               {list.length > 0 ? (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 시나리오가 없어요</div>
+                  <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>이 상태에 해당하는 시나리오가 없어요</div>
                   <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>등록된 시나리오 {list.length}건은 다른 상태에 있습니다.</div>
                   <div style={{ marginTop: 14 }}>
                     <button className="ws-btn-soft" onClick={() => setFilter("all")}>전체 상태 보기</button>
@@ -141,7 +141,7 @@ export default function QaSurface({ project }: { project: string }) {
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>시나리오가 없어요</div>
+                  <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>시나리오가 없어요</div>
                   <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>무엇을 어떻게 확인했는지 남겨 두면 다음 릴리스에서 같은 걸 다시 헤매지 않습니다. 직접 적거나, 스펙 문서에서 뽑아 오세요.</div>
                   <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                     <button style={primary} onClick={() => setOpen(true)}>첫 시나리오 추가</button>
@@ -162,7 +162,7 @@ export default function QaSurface({ project }: { project: string }) {
                       <span style={pill(st.color)}><span style={{ width: 6, height: 6, borderRadius: "var(--ds-r-pill)", background: st.color }} />{st.label}</span>
                       {q.project && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)" }}><span style={{ width: 7, height: 7, borderRadius: 2, background: projColor(q.project.color) }} />{q.project.name}</span>}
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 10 }}>{q.title}</div>
+                    <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 10 }}>{q.title}</div>
                     {q.steps && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6, margin: "8px 0 0", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}><b>단계:</b> {q.steps}</p>}
                   </div>
                 );
@@ -183,7 +183,7 @@ export default function QaSurface({ project }: { project: string }) {
             </header>
             <div className="ws-drawer-body">
               <h2 id={titleId} style={{ margin: "0 0 14px", fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>{sel.title}</h2>
-              {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
+              {sel.project && <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginBottom: 14 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: projColor(sel.project.color) }} />{sel.project.name}</div>}
               <Sect label="단계">{sel.steps ? <pre style={prose}>{sel.steps}</pre> : <p style={{ ...prose, color: "var(--text-muted)" }}>단계가 없어요.</p>}</Sect>
               <Sect label="기대 결과">{sel.expected ? <pre style={prose}>{sel.expected}</pre> : <p style={{ ...prose, color: "var(--text-muted)" }}>기대 결과가 없어요.</p>}</Sect>
             </div>
@@ -203,11 +203,11 @@ export default function QaSurface({ project }: { project: string }) {
 function Sect({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 8 }}>{label}</div>
       {children}
     </div>
   );
 }
 
-const pill = (color: string): CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` });
-const prose: CSSProperties = { margin: 0, fontFamily: "inherit", fontSize: 13.5, color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" };
+const pill = (color: string): CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 5, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 80%, var(--text-strong))` });
+const prose: CSSProperties = { margin: 0, fontFamily: "inherit", fontSize: "var(--ds-fs-base)", color: "var(--text-body)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" };

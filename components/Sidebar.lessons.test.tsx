@@ -30,4 +30,9 @@ describe("Sidebar 레슨 메뉴", () => {
     render(<Sidebar rail={false} theme="light" onToggleRail={() => {}} onToggleTheme={() => {}} />);
     expect(screen.getByTitle("레슨").getAttribute("href")).toBe("/lessons");
   });
+
+  it("일반 섹션에 문서 허브(/docs) 링크가 있다(U-10)", () => {
+    render(<Sidebar rail={false} theme="light" onToggleRail={() => {}} onToggleTheme={() => {}} />);
+    expect(screen.getByTitle("문서 허브").getAttribute("href")).toBe("/docs");
+  });
 });

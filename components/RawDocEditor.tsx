@@ -11,7 +11,7 @@ type EditorMode = "edit" | "preview";
 type ProvTag = "추출" | "추론" | "모호";
 type Claim = { claim: string; tag: ProvTag; note: string };
 
-const TAG_COLOR: Record<ProvTag, string> = { 추출: "var(--color-primary)", 추론: "#E0900F", 모호: "var(--text-disabled)" };
+const TAG_COLOR: Record<ProvTag, string> = { 추출: "var(--color-primary)", 추론: "var(--color-warning-text)", 모호: "var(--text-muted)" };
 const TAG_HINT: Record<ProvTag, string> = { 추출: "문서에 명시됨", 추론: "유추됨", 모호: "근거 약함" };
 
 export default function RawDocEditor({ pageId, initial }: { pageId: string; initial?: PagePrefetch | null }) {
@@ -142,22 +142,25 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
 
   return (
     <div className="ws-editor">
-      <input
-        className="ws-title-input"
-        value={title}
-        placeholder="제목 없음"
-        onChange={(e) => {
-          setTitle(e.target.value);
-          titleRef.current = e.target.value;
-          scheduleSave();
-        }}
-        onBlur={() => save()}
-      />
+      {/* U-29: 화면 제목 — 입력을 h1 로 감싸 제목 구조를 잡고, 겉모양은 .ws-title-h1 이 그대로 둔다 */}
+      <h1 className="ws-title-h1">
+        <input
+          className="ws-title-input"
+          value={title}
+          placeholder="제목 없음"
+          onChange={(e) => {
+            setTitle(e.target.value);
+            titleRef.current = e.target.value;
+            scheduleSave();
+          }}
+          onBlur={() => save()}
+        />
+      </h1>
       <div className="ws-save-state">
         {state === "saving" && "저장 중…"}
         {state === "saved" && "저장됨 ✓"}
         {state === "error" && "저장 실패 ✗"}
-        {state === "conflict" && <span style={{ color: "#E0900F" }}>{conflictNote ?? "다른 곳에서 먼저 수정됨"}</span>}
+        {state === "conflict" && <span style={{ color: "var(--color-warning-text)" }}>{conflictNote ?? "다른 곳에서 먼저 수정됨"}</span>}
         {state === "loading" && "불러오는 중…"}
       </div>
 
@@ -189,19 +192,19 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
 
       {mode === "edit" ? (
         <textarea
+          className="ws-focus-ring"
           style={{
             width: "100%",
             minHeight: "60vh",
             fontFamily: "var(--font-mono)",
-            fontSize: 13.5,
+            fontSize: "var(--ds-fs-base)",
             lineHeight: 1.7,
             color: "var(--text-body)",
             background: "var(--surface-sunken)",
             border: "1px solid var(--border-subtle)",
-            borderRadius: 10,
+            borderRadius: "var(--ds-r-md)",
             padding: "16px 18px",
             resize: "vertical",
-            outline: "none",
             boxSizing: "border-box",
           }}
           value={markdown}
@@ -228,7 +231,7 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
         {provOpen && (
           <div style={{ marginTop: 12 }}>
             {provLoading && <div className="ws-empty-hint">문서 주장을 분석하는 중입니다(수십 초)…</div>}
-            {provErr && <p style={{ fontSize: 12.5, color: "var(--color-danger)" }}>{provErr}</p>}
+            {provErr && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)" }}>{provErr}</p>}
             {provCounts && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                 {(Object.keys(TAG_COLOR) as ProvTag[]).map((t) => (
@@ -241,18 +244,18 @@ export default function RawDocEditor({ pageId, initial }: { pageId: string; init
             {provClaims && provClaims.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {provClaims.map((c, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", border: "1px solid var(--border-subtle)", borderRadius: 9, background: "var(--surface-card)" }}>
-                    <span title={TAG_HINT[c.tag]} style={{ flex: "0 0 auto", fontSize: 10.5, fontWeight: 700, color: TAG_COLOR[c.tag], border: `1px solid ${TAG_COLOR[c.tag]}`, borderRadius: "var(--ds-r-pill)", padding: "1px 7px", marginTop: 1 }}>{c.tag}</span>
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", background: "var(--surface-card)" }}>
+                    <span title={TAG_HINT[c.tag]} style={{ flex: "0 0 auto", fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: TAG_COLOR[c.tag], border: `1px solid ${TAG_COLOR[c.tag]}`, borderRadius: "var(--ds-r-pill)", padding: "1px 7px", marginTop: 1 }}>{c.tag}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-strong)", lineHeight: 1.5 }}>{c.claim}</div>
-                      {c.note && <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{c.note}</div>}
+                      {c.note && <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>{c.note}</div>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
             {provClaims && provClaims.length === 0 && !provLoading && (
-              <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>분석된 주장이 없습니다.</p>
+              <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>분석된 주장이 없습니다.</p>
             )}
           </div>
         )}

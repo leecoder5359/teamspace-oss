@@ -4,6 +4,7 @@ import { requireCtx } from "@/lib/workspace";
 import { requirePage } from "@/lib/pageGuard";
 import { safeParseDbPropertyConfig } from "@/lib/dbConfig";
 import { withReq } from "@/lib/log";
+import { gzipJson } from "@/lib/gzipJson";
 
 // GET /api/databases/[id] → database 페이지 메타 + 속성/뷰/행 일괄
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -43,5 +44,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     : [];
   const users = Object.fromEntries(actors.map((u) => [u.id, u.name ?? u.email ?? u.id]));
 
-  return NextResponse.json({ page, properties, views, rows, users });
+  return gzipJson(req, { page, properties, views, rows, users });
 }

@@ -321,6 +321,12 @@ server.registerTool(
 );
 
 server.registerTool(
+  "decision_get",
+  { description: "결정 하나(맥락·결정 전문, 상태·프로젝트). search 결과의 decision id 를 읽을 때.", inputSchema: { id: z.string() } },
+  async ({ id }) => jsonResult(await api("GET", `/api/decisions/${encodeURIComponent(id)}`)),
+);
+
+server.registerTool(
   "propose",
   {
     description: "팀 지식 승격 제안(제안+승인 관문). 이 세션에서 배운 팀 규범/확정 사항을 lesson 또는 decision 으로 제안 — admin 승인 후 등록·전 세션 주입. 확신이 높고 admin 이면 lesson_add/decision_add 직접 사용.",

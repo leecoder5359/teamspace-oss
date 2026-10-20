@@ -44,7 +44,7 @@ export default function DodSurface() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>완료 기준 (DoD) <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{doneN}/{list.length}</span></span>
+        <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>완료 기준 (DoD) <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{doneN}/{list.length}</span></span>
         <span style={{ flex: 1 }} />
         <button className="ws-btn-soft" onClick={() => setExtractOpen((v) => !v)}><Icon name="doc" size={15} /> 문서에서 추출</button>
       </div>
@@ -71,7 +71,7 @@ export default function DodSurface() {
           {list.length === 0 ? (
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="check" size={32} /></span>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>DoD 항목이 없어요</div>
+              <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>DoD 항목이 없어요</div>
               <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>‘완료’의 기준을 합의해 두지 않으면 매번 다시 다툽니다. 위 입력칸에 항목을 적거나, 이미 쓴 문서가 있으면 거기서 뽑아 오세요.</div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button style={primary} onClick={() => inputRef.current?.focus()}>첫 항목 적기</button>
@@ -85,7 +85,7 @@ export default function DodSurface() {
                   <button onClick={() => toggle(i.id, !i.done)} disabled={busy} title="토글" style={{ width: 18, height: 18, flex: "0 0 auto", borderRadius: 5, cursor: "pointer", border: i.done ? "none" : "1.5px solid var(--border-default)", background: i.done ? "var(--color-success, #12B886)" : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {i.done && <Icon name="check" size={12} />}
                   </button>
-                  <span style={{ flex: 1, fontSize: 13.5, color: i.done ? "var(--text-muted)" : "var(--text-body)", textDecoration: i.done ? "line-through" : "none" }}>{i.text}</span>
+                  <span style={{ flex: 1, fontSize: "var(--ds-fs-base)", color: i.done ? "var(--text-muted)" : "var(--text-body)", textDecoration: i.done ? "line-through" : "none" }}>{i.text}</span>
                   <button className="ws-btn-soft" disabled={busy} onClick={() => remove(i.id)} title="삭제"><Icon name="close" size={14} /></button>
                 </div>
               ))}

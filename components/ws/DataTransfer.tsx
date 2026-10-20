@@ -139,7 +139,7 @@ export default function DataTransfer() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {err && (
-        <p style={{ fontSize: 12.5, color: "var(--color-danger)", margin: 0 }}>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", margin: 0 }}>
           <Icon name="alert" size={13} /> {err}
         </p>
       )}
@@ -147,7 +147,7 @@ export default function DataTransfer() {
       {/* ── 내보내기 ── */}
       <div>
         <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, marginBottom: 6 }}>내보내기</div>
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.7, margin: "0 0 10px" }}>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", lineHeight: 1.7, margin: "0 0 10px" }}>
           문서(마크다운)·보드(CSV)·구조(workspace.json)를 zip 한 개로 받습니다. 본문의 첨부 링크는 zip 안의
           상대경로로 바뀌어, 서버 없이 옵시디언 같은 도구에서 바로 열립니다.
           <br />
@@ -169,7 +169,7 @@ export default function DataTransfer() {
       {/* ── 가져오기 ── */}
       <div>
         <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, marginBottom: 6 }}>가져오기</div>
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.7, margin: "0 0 10px" }}>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", lineHeight: 1.7, margin: "0 0 10px" }}>
           우리 내보내기 zip · 노션 export zip · 마크다운 폴더 zip 을 받습니다. 마크다운은 문서로,{" "}
           <strong>CSV 는 보드</strong>로 만듭니다(열 타입은 값을 보고 정합니다). 파일을 고르면{" "}
           <strong>먼저 미리보기</strong>를 보여주고, 확인한 뒤에만 실제로 만듭니다.
@@ -199,7 +199,7 @@ export default function DataTransfer() {
           )}
         </div>
 
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12.5, marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: "var(--ds-fs-md)", marginBottom: 10 }}>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />
             같은 제목이 이미 있으면 건너뛰기
@@ -220,8 +220,8 @@ export default function DataTransfer() {
 function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: boolean }) {
   const c = plan.counts;
   return (
-    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: 12, background: "var(--surface-sunken)" }}>
-      <div style={{ fontSize: 12.5, marginBottom: 8 }}>
+    <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", padding: 12, background: "var(--surface-sunken)" }}>
+      <div style={{ fontSize: "var(--ds-fs-md)", marginBottom: 8 }}>
         <strong>{FORMAT_LABEL[plan.format] ?? plan.format}</strong> 으로 읽었습니다 — 문서 <strong>{c.documents}</strong>건
         {c.boards > 0 && (
           <>
@@ -235,7 +235,7 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
       </div>
 
       {plan.warnings.map((w, i) => (
-        <p key={i} style={{ fontSize: "var(--ds-fs-sm)", color: "#E0900F", margin: "0 0 4px" }}>
+        <p key={i} style={{ fontSize: "var(--ds-fs-sm)", color: "var(--color-warning-text)", margin: "0 0 4px" }}>
           ⚠ {w}
         </p>
       ))}
@@ -250,14 +250,14 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
       )}
 
       <details style={{ marginTop: 6 }}>
-        <summary style={{ fontSize: 12.5, cursor: "pointer" }}>만들어질 문서 {plan.documents.length}건 보기</summary>
+        <summary style={{ fontSize: "var(--ds-fs-md)", cursor: "pointer" }}>만들어질 문서 {plan.documents.length}건 보기</summary>
         <ul style={{ maxHeight: 200, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)" }}>
           {plan.documents.map((d, i) => (
-            <li key={i} style={{ color: d.duplicate ? "var(--text-disabled)" : "var(--text-body)" }}>
+            <li key={i} style={{ color: d.duplicate ? "var(--text-muted)" : "var(--text-body)" }}>
               {d.title}
-              {d.project && <span style={{ color: "var(--text-disabled)" }}> [{d.project}]</span>}
-              {d.attachments ? <span style={{ color: "var(--text-disabled)" }}> 📎{d.attachments}</span> : null}
-              {d.duplicate && <span style={{ color: "#E0900F" }}> · 같은 제목 있음</span>}
+              {d.project && <span style={{ color: "var(--text-muted)" }}> [{d.project}]</span>}
+              {d.attachments ? <span style={{ color: "var(--text-muted)" }}> 📎{d.attachments}</span> : null}
+              {d.duplicate && <span style={{ color: "var(--color-warning-text)" }}> · 같은 제목 있음</span>}
             </li>
           ))}
         </ul>
@@ -265,18 +265,18 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
 
       {(plan.boards?.length ?? 0) > 0 && (
         <details style={{ marginTop: 4 }}>
-          <summary style={{ fontSize: 12.5, cursor: "pointer" }}>만들어질 보드 {plan.boards!.length}개 보기</summary>
+          <summary style={{ fontSize: "var(--ds-fs-md)", cursor: "pointer" }}>만들어질 보드 {plan.boards!.length}개 보기</summary>
           <ul style={{ maxHeight: 200, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)" }}>
             {plan.boards!.map((b, i) => (
               <li key={i}>
                 {b.title}
                 {(b.project ?? b.projectName) && (
-                  <span style={{ color: "var(--text-disabled)" }}> [{b.project ?? b.projectName}]</span>
+                  <span style={{ color: "var(--text-muted)" }}> [{b.project ?? b.projectName}]</span>
                 )}
-                <span style={{ color: "var(--text-disabled)" }}> · 행 {b.rows}</span>
-                {b.linkedDocs ? <span style={{ color: "var(--text-disabled)" }}> · 본문 {b.linkedDocs}</span> : null}
-                {b.duplicate && <span style={{ color: "#E0900F" }}> · 같은 제목 있음</span>}
-                <div style={{ color: "var(--text-disabled)", fontSize: 11.5 }}>
+                <span style={{ color: "var(--text-muted)" }}> · 행 {b.rows}</span>
+                {b.linkedDocs ? <span style={{ color: "var(--text-muted)" }}> · 본문 {b.linkedDocs}</span> : null}
+                {b.duplicate && <span style={{ color: "var(--color-warning-text)" }}> · 같은 제목 있음</span>}
+                <div style={{ color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)" }}>
                   {b.columns.map((col) => `${col.name}(${TYPE_LABEL[col.type] ?? col.type})`).join(" · ")}
                 </div>
               </li>
@@ -287,7 +287,7 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
 
       {plan.skipped.length > 0 && (
         <details style={{ marginTop: 4 }}>
-          <summary style={{ fontSize: 12.5, cursor: "pointer" }}>건너뛴 파일 {plan.skipped.length}건 보기</summary>
+          <summary style={{ fontSize: "var(--ds-fs-md)", cursor: "pointer" }}>건너뛴 파일 {plan.skipped.length}건 보기</summary>
           <ul style={{ maxHeight: 160, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
             {plan.skipped.map((s, i) => (
               <li key={i}>
@@ -311,7 +311,7 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
               ? `문서 ${plan.documents.length}건 · 보드 ${c.boards}개 만들기`
               : `문서 ${plan.documents.length}건 만들기`}
         </button>
-        <span style={{ fontSize: 11.5, color: "var(--text-disabled)" }}>되돌리려면 휴지통에서 하나씩 지워야 합니다.</span>
+        <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>되돌리려면 휴지통에서 하나씩 지워야 합니다.</span>
       </div>
     </div>
   );
@@ -320,11 +320,11 @@ function Preview({ plan, onRun, busy }: { plan: Plan; onRun: () => void; busy: b
 function Result({ plan }: { plan: Plan }) {
   const c = plan.counts;
   return (
-    <div style={{ border: "1px solid var(--color-primary)", borderRadius: 10, padding: 12, background: "var(--surface-sunken)" }}>
+    <div style={{ border: "1px solid var(--color-primary)", borderRadius: "var(--ds-r-md)", padding: 12, background: "var(--surface-sunken)" }}>
       <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, marginBottom: 4 }}>
         <Icon name="check" size={14} /> 가져오기 완료
       </div>
-      <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+      <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)" }}>
         문서 {c.created ?? 0}건 생성
         {(c.boardsCreated ?? 0) > 0 && (
           <>

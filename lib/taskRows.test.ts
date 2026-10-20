@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: { dbRow: { findMany: vi.fn() }, dbProperty: { findMany: vi.fn() } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { dbRow: { findMany: vi.fn() }, dbProperty: { findMany: vi.fn() }, $executeRawUnsafe: vi.fn() } }));
 
 import { prisma } from "@/lib/prisma";
-import { findTaskRows, taskColumnsForBoard, taskRowQueries } from "./taskRows";
+import { findTaskRows, rederiveBoardTaskColumns, taskColumnsForBoard, taskRowQueries } from "./taskRows";
+import { REDERIVE_BOARD_TASK_COLUMNS_SQL } from "./taskColumnsSql";
 
 const m = (f: unknown) => f as Mock;
 const status = { id: "pS", name: "상태", type: "select", config: { options: [{ id: "o1", name: "할 일" }, { id: "o3", name: "완료" }] } };
@@ -70,5 +71,45 @@ describe("taskColumnsForBoard", () => {
     await taskColumnsForBoard("db1", {}, tx as never);
     expect(tx.dbProperty.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.dbProperty.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("rederiveBoardTaskColumns(속성 변경 뒤 한 보드)", () => {
+  beforeEach(() => vi.resetAllMocks());
+  const ids = (...xs: string[]) => xs.map((id) => ({ id }));
+
+  it("지금 키와 다른 행만 id 순 묶음으로 골라 보드 범위 SQL 로 다시 쓴다", async () => {
+    m(prisma.dbProperty.findMany).mockResolvedValue(props);
+    m(prisma.dbRow.findMany).mockResolvedValueOnce(ids("a", "b")).mockResolvedValueOnce(ids("c"));
+    m(prisma.$executeRawUnsafe).mockResolvedValueOnce(2).mockResolvedValueOnce(1);
+    expect(await rederiveBoardTaskColumns("db1", 2)).toBe(3);
+    const [first, second] = m(prisma.dbRow.findMany).mock.calls.map((c) => c[0]);
+    expect(first).toEqual({
+      where: { databasePageId: "db1", OR: [{ taskColsKey: null }, { taskColsKey: { not: "pS|pA" } }] },
+      orderBy: { id: "asc" },
+      take: 2,
+      select: { id: true },
+    });
+    expect(second.where).toEqual({ ...first.where, id: { gt: "b" } }); // 커서 — 다시 쓰지 못한 행이 있어도 끝난다
+    expect(m(prisma.$executeRawUnsafe).mock.calls).toEqual([
+      [REDERIVE_BOARD_TASK_COLUMNS_SQL, "db1", ["a", "b"]],
+      [REDERIVE_BOARD_TASK_COLUMNS_SQL, "db1", ["c"]],
+    ]);
+  });
+
+  it("낡은 행이 없으면 쓰지 않는다(옵션 편집처럼 키가 그대로인 변경)", async () => {
+    m(prisma.dbProperty.findMany).mockResolvedValue(props);
+    m(prisma.dbRow.findMany).mockResolvedValueOnce([]);
+    expect(await rederiveBoardTaskColumns("db1")).toBe(0);
+    expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("묶음이 꽉 차면 다음 묶음을 더 본다 — 빈 묶음에서 멈춘다", async () => {
+    m(prisma.dbProperty.findMany).mockResolvedValue(props);
+    m(prisma.dbRow.findMany).mockResolvedValueOnce(ids("a", "b")).mockResolvedValueOnce([]);
+    m(prisma.$executeRawUnsafe).mockResolvedValue(0);
+    expect(await rederiveBoardTaskColumns("db1", 2)).toBe(0);
+    expect(prisma.dbRow.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
   });
 });

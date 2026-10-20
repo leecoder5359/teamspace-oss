@@ -14,6 +14,7 @@ import { listPagesForSidebar } from "@/lib/pagesList";
 import { findSameTitleDocs } from "@/lib/docTitles";
 import { TEMPLATES, TEMPLATE_NAMES, renderTemplate } from "@/lib/docTemplates";
 import { writeDoc, docFolderFor, listDocFolder, uniqueFileName } from "@/lib/docFiles";
+import { gzipJson } from "@/lib/gzipJson";
 
 const CreateBody = z.object({
   title: z.string().optional(),
@@ -39,7 +40,7 @@ export async function GET(request?: Request) {
   if ("err" in guard) return guard.err;
   const a = request ? new URL(request.url).searchParams.get("archived") : null;
   const archived = a === "1" ? "only" : a === "all" ? "all" : "active";
-  return NextResponse.json({ pages: await listPagesForSidebar(guard, undefined, { archived }) });
+  return gzipJson(request, { pages: await listPagesForSidebar(guard, undefined, { archived }) });
 }
 
 // POST /api/pages → 新規ページ作成

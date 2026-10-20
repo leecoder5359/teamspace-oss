@@ -89,7 +89,10 @@ describe.skipIf(!DB)("푸시 잠금·라이브 세션(실DB)", () => {
   });
 
   it("검증: 이름 형식·TTL 상한", async () => {
-    await expect(lock.takeLock(a, "Bad Name", {}, t0)).rejects.toMatchObject({ status: 400 });
+    // 2026-10-10 부터 이름은 정규형(canonicalLockName)으로 맞춘 뒤 검증한다 — 대문자·공백은 거절이 아니라 정규화된다.
+    expect((await lock.takeLock(a, "Bad Name", {}, t0)).lock.name).toBe("bad/name");
+    // 정규화해도 형식 밖인 이름은 400: 빈 이름·영숫자가 아닌 첫 글자·허용 밖 문자
+    for (const bad of ["   ", "!!", "잠금/이름"]) await expect(lock.takeLock(a, bad, {}, t0)).rejects.toMatchObject({ status: 400 });
     await expect(lock.takeLock(a, "ok/name", { ttlMinutes: 241 }, t0)).rejects.toMatchObject({ status: 400 });
   });
 
@@ -139,7 +142,8 @@ describe.skipIf(!DB)("푸시 잠금·라이브 세션(실DB)", () => {
   });
 
   it("라이브 세션: 하트비트·인입 필드·2시간 창·진행 중 태스크·잠금 터치", async () => {
-    const now = new Date();
+    // 고정 시각 — 실제 시계를 쓰면 t0 에 잡은 잠금(banjang/develop, min(70) 만료)이 날짜가 지나며 사라진다.
+    const now = min(10);
     await live.heartbeat(a, { sessionId: "sess-a", cwd: "/w/banjang-wt", branch: "feat/x", repo: "banjang", worktree: "/w/banjang-wt" }, now);
     await prisma.claudeSession.create({ data: { workspaceId: ws.id, externalId: "sess-old", status: "active", startedAt: new Date(now.getTime() - 5 * 3600000), lastSeenAt: new Date(now.getTime() - 3 * 3600000) } });
     await prisma.claudeSession.create({ data: { workspaceId: ws.id, externalId: "sess-ended", status: "ended", lastSeenAt: now } });

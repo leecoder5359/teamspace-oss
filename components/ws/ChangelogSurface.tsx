@@ -68,7 +68,7 @@ export default function ChangelogSurface() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="ws-filterbar">
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>변경 이력 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{list.length}</span></span>
+        <span style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>변경 이력 <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{list.length}</span></span>
         <select className="ws-db-filter" value={filter} onChange={(e) => { setFilter(e.target.value); void load(e.target.value); }} aria-label="프로젝트">
           <option value="">전체</option>
           {projects.filter((p) => !p.archivedAt || p.id === filter).map((p) => <option key={p.id} value={p.id}>{p.archivedAt ? `${p.name} (보관)` : p.name}</option>)}
@@ -101,7 +101,7 @@ export default function ChangelogSurface() {
           {list.length === 0 ? (
             <div className="ws-docs-empty">
               <span style={{ color: "var(--text-muted)" }}><Icon name="refresh" size={32} /></span>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>릴리스 노트가 없어요</div>
+              <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>릴리스 노트가 없어요</div>
               <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>배포할 때마다 버전과 바뀐 내용을 남기면, &ldquo;이거 언제부터 이랬죠?&rdquo; 에 답할 수 있는 기록이 됩니다.</div>
               <div style={{ marginTop: 14 }}>
                 <button style={primary} onClick={() => setOpen(true)}>첫 릴리스 추가</button>
@@ -112,15 +112,15 @@ export default function ChangelogSurface() {
               {list.map((e) => (
                 <div key={e.id} style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {e.version && <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-weak)", padding: "2px 8px", borderRadius: 6 }}>{e.version}</span>}
-                    <span style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-strong)" }}>{e.title}</span>
+                    {e.version && <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-weak)", padding: "2px 8px", borderRadius: "var(--ds-r-sm)" }}>{e.version}</span>}
+                    <span style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)" }}>{e.title}</span>
                     {e.projectId && (
-                      <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken, var(--border-subtle))", padding: "2px 8px", borderRadius: 6 }}>
+                      <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken, var(--border-subtle))", padding: "2px 8px", borderRadius: "var(--ds-r-sm)" }}>
                         {projects.find((p) => p.id === e.projectId)?.name ?? "프로젝트"}
                       </span>
                     )}
                     <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{new Date(e.releasedAt).toLocaleDateString("ko-KR")}</span>
+                    <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{new Date(e.releasedAt).toLocaleDateString("ko-KR")}</span>
                     <button className="ws-btn-soft" disabled={busy} onClick={() => remove(e.id)} title="삭제"><Icon name="close" size={14} /></button>
                   </div>
                   {e.body && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6, margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{e.body}</p>}

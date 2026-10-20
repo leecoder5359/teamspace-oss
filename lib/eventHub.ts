@@ -13,11 +13,16 @@
 export type EventSourceLike = {
   /** 0 CONNECTING · 1 OPEN · 2 CLOSED (EventSource 표준). */
   readonly readyState: number;
-  addEventListener(type: string, fn: () => void): void;
+  addEventListener(type: string, fn: (ev: { data?: string }) => void): void;
   close(): void;
 };
 
-export type HubListener = { onHello(): void; onEvent(): void; onError(): void };
+/** 구독자에게 넘기는 이벤트. activity 는 서버가 보낸 본문 필드(app/api/events)를, 알림은 종류만 싣는다. */
+export type HubEvent =
+  | { type: "activity"; verb?: string; targetType?: string; targetId?: string | null; boardId?: string | null }
+  | { type: "notification" };
+
+export type HubListener = { onHello(): void; onEvent(ev: HubEvent): void; onError(): void };
 
 export type HubDeps = {
   /** 새 연결을 연다. 미지원이면 throw 해도 된다(호출부가 폴링으로 폴백). */
@@ -40,6 +45,16 @@ const defaultSchedule = (fn: () => void, ms: number) => {
 
 export type EventHub = { subscribe(listener: HubListener): () => void };
 
+/** activity 본문에서 거르기에 쓰는 필드만 꺼낸다. 깨진 본문이면 빈 객체(→ 구독자는 종류만 본다). */
+function activityFields(data: string | undefined): Omit<Extract<HubEvent, { type: "activity" }>, "type"> {
+  try {
+    const { verb, targetType, targetId, boardId } = JSON.parse(data ?? "") as Record<string, string | null | undefined>;
+    return Object.fromEntries(Object.entries({ verb, targetType, targetId, boardId }).filter(([, v]) => v !== undefined));
+  } catch {
+    return {};
+  }
+}
+
 export function createEventHub(deps: HubDeps): EventHub {
   const subs = new Set<HubListener>();
   let es: EventSourceLike | null = null;
@@ -49,8 +64,11 @@ export function createEventHub(deps: HubDeps): EventHub {
   let retryMs = RECONNECT_BASE_MS;
   const schedule = deps.schedule ?? defaultSchedule;
 
-  const emit = (key: keyof HubListener) => {
+  const emit = (key: "onHello" | "onError") => {
     for (const l of [...subs]) l[key]();
+  };
+  const emitEvent = (ev: HubEvent) => {
+    for (const l of [...subs]) l.onEvent(ev);
   };
 
   const clearRetry = () => {
@@ -75,8 +93,8 @@ export function createEventHub(deps: HubDeps): EventHub {
       retryMs = RECONNECT_BASE_MS;
       emit("onHello");
     });
-    self.addEventListener("activity", () => live() && emit("onEvent"));
-    self.addEventListener("notification", () => live() && emit("onEvent"));
+    self.addEventListener("activity", (e) => live() && emitEvent({ ...activityFields(e.data), type: "activity" }));
+    self.addEventListener("notification", () => live() && emitEvent({ type: "notification" }));
     self.addEventListener("error", () => {
       if (!live()) return;
       connected = false;

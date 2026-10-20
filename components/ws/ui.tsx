@@ -240,16 +240,14 @@ export function shortId(id: string, prefix = "TSK"): string {
  */
 /** 폭을 정하지 않는 입력(가로 배치용). */
 export const inputBase: CSSProperties = {
-  padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-default)",
+  padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-default)",
   background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontFamily: "inherit",
 };
 /** 한 줄을 다 쓰는 입력 — 폼의 기본. */
 export const inputStyle: CSSProperties = { width: "100%", ...inputBase };
-/** 사이트 화면의 입력 — 글자 16px. */
-export const inputStyleLg: CSSProperties = { ...inputStyle, fontSize: "var(--ds-fs-lg)" };
 
 export const primaryBtn: CSSProperties = {
-  padding: "9px 16px", borderRadius: 9, fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
+  padding: "9px 16px", borderRadius: "var(--ds-r-sm)", fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
   border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
 };
 /** 좁은 칸에서 줄바꿈하지 않는 기본 버튼. */
@@ -258,7 +256,7 @@ export const primaryBtnNowrap: CSSProperties = { ...primaryBtn, whiteSpace: "now
 export const primaryBtnInline: CSSProperties = { ...primaryBtn, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" };
 
 export const ghostBtn: CSSProperties = {
-  padding: "6px 14px", borderRadius: "var(--ds-r-sm)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+  padding: "6px 14px", borderRadius: "var(--ds-r-sm)", fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
   border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", whiteSpace: "nowrap",
 };
 
@@ -267,10 +265,10 @@ export const selectStyle: CSSProperties = {
   height: 32,
   padding: "0 8px",
   border: "1px solid var(--border-default)",
-  borderRadius: 9,
+  borderRadius: "var(--ds-r-sm)",
   background: "var(--surface-card)",
   color: "var(--text-body)",
-  fontSize: 12.5,
+  fontSize: "var(--ds-fs-md)",
   fontFamily: "inherit",
   fontWeight: 600,
 };

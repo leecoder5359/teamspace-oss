@@ -113,13 +113,13 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
         style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
       >
         <Icon name={restricted ? "lock" : "users"} size={14} />
-        공유 {restricted && <span style={{ color: "#E0900F", fontWeight: 700 }}>· 비공개</span>}
+        공유 {restricted && <span style={{ color: "var(--color-warning-text)", fontWeight: 700 }}>· 비공개</span>}
         <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
       </button>
 
       {open && (
         <div style={{ marginTop: 12, fontSize: "var(--ds-fs-md)" }}>
-          {err && <p style={{ color: "var(--color-danger)", fontSize: 12.5 }}>{err}</p>}
+          {err && <p style={{ color: "var(--color-danger)", fontSize: "var(--ds-fs-md)" }}>{err}</p>}
           {!data && !err && <div className="ws-empty-hint">불러오는 중…</div>}
 
           {data && (
@@ -153,7 +153,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                     <span style={{ flex: 1 }}>
                       {g.team ? `#${g.team.name}` : (g.user?.name ?? g.user?.email ?? "(알 수 없음)")}
                     </span>
-                    <span style={{ color: "var(--text-disabled)", fontSize: "var(--ds-fs-sm)" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)" }}>
                       {g.level === "edit" ? "편집" : "보기"}
                     </span>
                     {canManage && (
@@ -217,7 +217,7 @@ export default function SharePanel({ pageId, projectId }: { pageId?: string; pro
                 </div>
               )}
 
-              <p style={{ marginTop: 12, fontSize: "var(--ds-fs-sm)", color: "var(--text-disabled)", lineHeight: 1.6 }}>
+              <p style={{ marginTop: 12, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", lineHeight: 1.6 }}>
                 {data.adminBypass && "워크스페이스 관리자는 비공개 문서도 볼 수 있습니다(잠금 방지). "}
                 사람에게 공유하면 알림이 갑니다. 하위 문서는 이 설정을 물려받고, 하위에 따로 부여하면 그쪽이 우선합니다.
                 {!canManage && " 범위를 바꾸려면 편집 권한이 필요합니다."}

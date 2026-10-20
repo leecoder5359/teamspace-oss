@@ -19,12 +19,15 @@
    팀 레슨 생성·수정(개인 전환·프로젝트 이동)·삭제·승격·정리 되돌리기, 보드 행 생성·삭제·보드 이동·
    제목(text)/문서 연결 변경(rowPatchTouchesGraph), 새 related 간선 infer)는 같은 요청에서
    invalidateGraphCache(workspaceId) 를 부른다. loadRaw 에 새 테이블을 넣으면 그 쓰기 라우트에도 건다.
-   이 캐시는 프로세스 메모리라 **다른 프로세스(scripts/worker.ts — 레슨 정리 적용 등)의 쓰기는 비울 수 없다**:
-   그 쓰기는 최대 10분 낡는다.
+   이 캐시는 프로세스 메모리라 다른 프로세스(scripts/worker.ts — 레슨 정리 적용 등)의 쓰기를 직접 비울 수 없다.
+   그래서 invalidateGraphCache 는 DB 세대(GraphCacheGen)도 올리고, loadGraph 는 워크스페이스당 GRAPH_GEN_CHECK_MS 에
+   한 번 그 세대를 읽어 원시 항목을 읽을 때의 세대와 다르면 버린다 — 다른 프로세스의 쓰기는 최대 그 간격만큼 낡는다.
+   세대 읽기·쓰기가 실패하면 '모름'으로 보고 예전처럼(최대 10분) 동작한다.
    ===================================================================== */
 
 import { createHash } from "node:crypto";
 import { archivedPageIds } from "@/lib/pageArchive";
+import { log } from "@/lib/log";
 import { prisma } from "@/lib/prisma";
 import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { pageAccess, projectAccess, type AccessIndex } from "@/lib/pageAccess";
@@ -34,28 +37,72 @@ import { buildGraph, type GraphInput, type KGraph } from "@/lib/knowledgeGraph";
 export const GRAPH_CACHE_TTL_MS = 60_000;
 /** 만료된 원시 항목을 기다리지 않고 돌려줘도 되는 최대 나이 — 이보다 낡으면 다시 읽기를 기다린다. */
 export const GRAPH_CACHE_MAX_STALE_MS = 10 * 60_000;
+/** DB 세대(다른 프로세스의 무효화)를 다시 읽는 간격 — 워크스페이스당 이 간격에 한 번만 읽는다. */
+export const GRAPH_GEN_CHECK_MS = 5_000;
 const BUILT_CACHE_MAX = 200;
 
 type Raw = Awaited<ReturnType<typeof loadRaw>>;
-type RawEntry = { at: number; gen: number; raw: Promise<Raw>; ready: boolean };
+/** stamp = 이 항목을 읽기 시작할 때 본 DB 세대(null = 몰랐다). */
+type RawEntry = { at: number; gen: number; stamp: number | null; raw: Promise<Raw>; ready: boolean };
 // 진행 중 Promise 도 담아 동시 요청이 DB 를 한 번만 읽게 한다. gen 은 다시 읽을 때마다 바뀐다.
 const rawCache = new Map<string, RawEntry>();
 // 만료된 항목을 돌려주는 동안 진행 중인 백그라운드 재로드(워크스페이스당 하나). resolve 되면 rawCache 로 올라간다.
 const refreshing = new Map<string, RawEntry>();
 const builtCache = new Map<string, KGraph>(); // key = `${workspaceId}:${sha1}`
+// 워크스페이스별 마지막 DB 세대 확인 — 진행 중 Promise 를 담아 동시 요청이 한 번만 읽게 한다.
+const stampChecks = new Map<string, { at: number; stamp: Promise<number | null> }>();
 let genSeq = 0;
 
-/** 캐시 비우기. workspaceId 를 주면 그 워크스페이스 항목만(원시·완성 둘 다). */
+/** 캐시 비우기. workspaceId 를 주면 그 워크스페이스 항목만(원시·완성 둘 다) 비우고 DB 세대를 올려 다른 프로세스에도 알린다.
+ *  인자 없는 전체 비우기는 이 프로세스만(테스트용). */
 export function invalidateGraphCache(workspaceId?: string): void {
   if (workspaceId === undefined) {
     rawCache.clear();
     refreshing.clear();
     builtCache.clear();
+    stampChecks.clear();
     return;
   }
+  dropLocal(workspaceId);
+  bumpStamp(workspaceId);
+}
+
+function dropLocal(workspaceId: string): void {
   rawCache.delete(workspaceId);
   refreshing.delete(workspaceId); // 무효화 전에 시작한 재로드 결과는 채택하지 않는다
   dropBuilt(workspaceId);
+}
+
+/** DB 세대를 올린다. 올린 값을 확인 결과로 기록해 두어 자기 무효화 때문에 한 번 더 다시 읽지 않는다.
+ *  호출자(쓰기 라우트)를 기다리게 하지 않는다 — 실패는 로그만 남기고 '모름'. */
+function bumpStamp(workspaceId: string): void {
+  const stamp = Promise.resolve()
+    .then(() =>
+      prisma.graphCacheGen.upsert({
+        where: { workspaceId },
+        create: { workspaceId, gen: 1 },
+        update: { gen: { increment: 1 } },
+        select: { gen: true },
+      }),
+    )
+    .then((r) => r.gen)
+    .catch((e: unknown) => {
+      log.warn("graph_cache.gen_bump_failed", { msg: "그래프 캐시 세대 올리기 실패", workspaceId, err: e });
+      return null;
+    });
+  stampChecks.set(workspaceId, { at: Date.now(), stamp });
+}
+
+/** 지금 DB 세대(GRAPH_GEN_CHECK_MS 안이면 지난 확인 값). 행이 없으면 0, 읽기 실패면 null(모름). */
+function currentStamp(workspaceId: string, now: number): Promise<number | null> {
+  const hit = stampChecks.get(workspaceId);
+  if (hit && now - hit.at < GRAPH_GEN_CHECK_MS) return hit.stamp;
+  const stamp = Promise.resolve()
+    .then(() => prisma.graphCacheGen.findUnique({ where: { workspaceId }, select: { gen: true } }))
+    .then((r) => r?.gen ?? 0)
+    .catch(() => null);
+  stampChecks.set(workspaceId, { at: now, stamp });
+  return stamp;
 }
 
 function dropBuilt(workspaceId: string): void {
@@ -76,8 +123,8 @@ export function __graphCacheSizes(): { raw: number; built: number } {
 /** 호출자가 배열을 바꿔도 캐시가 오염되지 않게 얕은 복사로 내준다(소비자는 노드·간선 객체를 바꾸지 않는다). */
 const copy = (g: KGraph): KGraph => ({ nodes: [...g.nodes], edges: [...g.edges] });
 
-function startLoad(workspaceId: string, now: number): RawEntry {
-  const entry: RawEntry = { at: now, gen: ++genSeq, raw: loadRaw(workspaceId), ready: false };
+function startLoad(workspaceId: string, now: number, stamp: number | null): RawEntry {
+  const entry: RawEntry = { at: now, gen: ++genSeq, stamp, raw: loadRaw(workspaceId), ready: false };
   entry.raw.then(() => { entry.ready = true; }, () => {});
   return entry;
 }
@@ -94,9 +141,9 @@ function adopt(workspaceId: string, entry: RawEntry): RawEntry {
 }
 
 /** 옛 항목을 계속 내주는 동안 백그라운드로 하나만 다시 읽는다. 실패하면 옛 항목을 유지한다. */
-function refreshInBackground(workspaceId: string, now: number): void {
+function refreshInBackground(workspaceId: string, now: number, stamp: number | null): void {
   if (refreshing.has(workspaceId)) return;
-  const next = startLoad(workspaceId, now);
+  const next = startLoad(workspaceId, now, stamp);
   refreshing.set(workspaceId, next);
   next.raw.then(
     () => { if (refreshing.get(workspaceId) === next) adopt(workspaceId, next); },
@@ -115,17 +162,20 @@ function sweepStale(workspaceId: string, now: number): void {
   }
 }
 
-function getRaw(workspaceId: string): { gen: number; raw: Promise<Raw> } {
+/** stamp = 지금 DB 세대(currentStamp). 알 때(null 아님) 항목의 세대와 다르면 다른 프로세스가 무효화한 것이다. */
+function getRaw(workspaceId: string, stamp: number | null): { gen: number; raw: Promise<Raw> } {
   const now = Date.now();
   sweepStale(workspaceId, now);
+  const cached = rawCache.get(workspaceId);
+  if (cached && stamp !== null && cached.stamp !== stamp) dropLocal(workspaceId);
   const hit = rawCache.get(workspaceId);
   if (hit && now - hit.at < GRAPH_CACHE_TTL_MS) return hit;
   if (hit && hit.ready && now - hit.at < GRAPH_CACHE_MAX_STALE_MS) {
-    refreshInBackground(workspaceId, now);
+    refreshInBackground(workspaceId, now, stamp);
     return hit;
   }
   // 진행 중 재로드가 있으면 새로 읽지 않고 그것을 기다린다.
-  return adopt(workspaceId, refreshing.get(workspaceId) ?? startLoad(workspaceId, now));
+  return adopt(workspaceId, refreshing.get(workspaceId) ?? startLoad(workspaceId, now, stamp));
 }
 
 async function loadRaw(workspaceId: string) {
@@ -175,7 +225,7 @@ export async function loadGraph(ctx: Ctx, access?: AccessIndex): Promise<KGraph>
   const { workspaceId } = ctx;
   const idx = access ?? (await loadAccess(ctx));
   if (idx.ceiling === "none") return { nodes: [], edges: [] };
-  const { gen, raw } = getRaw(workspaceId);
+  const { gen, raw } = getRaw(workspaceId, await currentStamp(workspaceId, Date.now()));
   const input = filterInput(idx, await raw);
   const key = fingerprint(workspaceId, gen, input);
   let g = builtCache.get(key);

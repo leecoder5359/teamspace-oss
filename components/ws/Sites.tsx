@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
-import { inputStyleLg as inputStyle, primaryBtnInline as primaryBtn } from "./ui";
+import { inputStyle, primaryBtnInline as primaryBtn } from "./ui";
 
 /* =====================================================================
    퍼블리시 — HTML/zip 을 올려 초대 이메일로만 열리는 링크를 만든다(/api/sites).
@@ -98,7 +98,7 @@ export default function Sites() {
       <h1 className="ws-db-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Icon name="link" /> 퍼블리시
       </h1>
-      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4 }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 4 }}>
         HTML 파일이나 zip(index.html 포함)을 올리면 초대한 이메일로 Google 로그인한 사람만 볼 수 있는 링크가 생깁니다.
       </p>
 
@@ -112,12 +112,12 @@ export default function Sites() {
             <Icon name="plus" /> 퍼블리시
           </button>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
+        {err && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginTop: 8 }}>{err}</div>}
       </div>
 
       {list.length === 0 ? (
         <div className="ws-empty">
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>퍼블리시한 페이지가 없어요</div>
+          <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-body)" }}>퍼블리시한 페이지가 없어요</div>
           <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>위에서 파일을 올려 보세요. Claude 세션에서는 `pnpm ws site publish` 로 올릴 수 있어요.</div>
         </div>
       ) : (
@@ -126,7 +126,7 @@ export default function Sites() {
             <div key={s.id} style={{ ...row, flexDirection: "column", alignItems: "stretch" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <Link href={`/sites/${s.id}`} style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{s.title}</Link>
+                  <Link href={`/sites/${s.id}`} style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-strong)", fontWeight: 600 }}>{s.title}</Link>
                   <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>
                     /pages/{s.slug} · v{s.currentVersion} · 초대 {s.inviteCount}명 · 마지막 열람 {fmt(s.lastAccessAt)}
                     {s.status === "disabled" ? " · 비활성" : ""}
@@ -155,9 +155,9 @@ export default function Sites() {
                       <Icon name="plus" /> 초대
                     </button>
                   </div>
-                  {inviteMsg?.error && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginTop: 8 }}>{inviteMsg.error}</div>}
+                  {inviteMsg?.error && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginTop: 8 }}>{inviteMsg.error}</div>}
                   {inviteMsg?.share && (
-                    <div style={{ marginTop: 8, fontSize: 12.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <div style={{ marginTop: 8, fontSize: "var(--ds-fs-md)", display: "flex", gap: 8, alignItems: "flex-start" }}>
                       <span style={{ flex: 1, wordBreak: "break-all" }}>{inviteMsg.share}</span>
                       <button className="ws-btn-soft" onClick={() => navigator.clipboard.writeText(inviteMsg.share!)}>문구 복사</button>
                     </div>
@@ -173,4 +173,4 @@ export default function Sites() {
 }
 
 const card: CSSProperties = { border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 14, margin: "16px 0" };
-const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", flexWrap: "wrap" };
+const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", flexWrap: "wrap" };

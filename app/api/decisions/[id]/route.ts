@@ -18,6 +18,19 @@ export const runtime = "nodejs";
 const STATUSES = ["proposed", "accepted", "superseded"] as const;
 type Status = (typeof STATUSES)[number];
 
+// GET /api/decisions/[id] → 결정 하나(목록 항목과 같은 모양). 문서 허브 딥링크가 목록(최신 200건·프로젝트 필터) 밖의 결정을 열 때.
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const guard = await requireCtx();
+  if ("err" in guard) return guard.err;
+  const decision = await prisma.decision.findFirst({
+    where: { id, workspaceId: guard.workspaceId },
+    include: { project: { select: { name: true, color: true } } },
+  });
+  if (!decision) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ decision });
+}
+
 // PATCH /api/decisions/[id] → 결정 수정(상태/내용)
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

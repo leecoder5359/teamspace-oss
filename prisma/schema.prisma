@@ -99,6 +99,7 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@index([teamId])
+  @@index([userId, status]) // 감사 P-12 — 요청마다 사용자의 활성·초대 멤버십 찾기(lib/workspace). unique(workspaceId, userId) 는 userId 만으론 못 탄다
 }
 
 // 에이전트별 워크스페이스 스코프 API 토큰 (W1 보안 기반).
@@ -453,6 +454,8 @@ model DbProperty {
   type           PropType
   config         Json     @default("{}")
   position       Int      @default(0)
+
+  @@index([databasePageId]) // 감사 P-12 — 보드 속성 읽기(모든 보드·태스크 라우트)
 }
 
 model DbRow {
@@ -533,6 +536,8 @@ model DbView {
   type           ViewType @default(table)
   config         Json     @default("{}") // { filters, sort, groupBy }
   position       Int      @default(0)
+
+  @@index([databasePageId]) // 감사 P-12 — 보드 뷰 읽기
 }
 
 // ---------- 슬랙 ----------
@@ -1369,4 +1374,12 @@ model LessonHygieneRun {
 
   @@unique([workspaceId, weekKey])
   @@index([status])
+}
+
+/// 지식 그래프 캐시 세대(lib/graphLoad) — invalidateGraphCache 가 올리고, 웹은 몇 초마다 읽어 다르면 캐시를 버린다.
+/// 그래프 캐시가 프로세스 메모리라 다른 프로세스(워커 — 레슨 정리 적용 등)의 쓰기를 알 길이 이것뿐이다.
+model GraphCacheGen {
+  workspaceId String   @id
+  gen         Int      @default(0)
+  updatedAt   DateTime @updatedAt
 }

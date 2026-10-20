@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Mock } from "vitest";
 
 vi.mock("@/lib/pageGuard", () => ({ loadAccess: vi.fn(), visibleOnly: vi.fn() }));
@@ -13,13 +13,14 @@ vi.mock("@/lib/prisma", () => ({
     dbRow: { findMany: vi.fn() },
     dbProperty: { findMany: vi.fn() },
     graphEdge: { findMany: vi.fn() },
+    graphCacheGen: { findUnique: vi.fn(), upsert: vi.fn() },
   },
 }));
 
 import { prisma } from "@/lib/prisma";
 import { loadAccess, visibleOnly } from "@/lib/pageGuard";
 import { pageAccess, projectAccess } from "@/lib/pageAccess";
-import { loadGraph, invalidateGraphCache, rowPatchTouchesGraph, GRAPH_CACHE_TTL_MS, GRAPH_CACHE_MAX_STALE_MS, __graphCacheSizes } from "./graphLoad";
+import { loadGraph, invalidateGraphCache, rowPatchTouchesGraph, GRAPH_CACHE_TTL_MS, GRAPH_CACHE_MAX_STALE_MS, GRAPH_GEN_CHECK_MS, __graphCacheSizes } from "./graphLoad";
 
 const m = (f: unknown) => f as Mock;
 const ctx = { workspaceId: "w1", userId: "u1", role: "member" } as never;
@@ -301,6 +302,7 @@ describe("loadGraph — stale-while-revalidate", () => {
     await loadGraph(ctx); // 백그라운드 재로드 시작
     vi.advanceTimersByTime(GRAPH_CACHE_MAX_STALE_MS);
     const pending = loadGraph(ctx);
+    await flush(); // 세대 확인(비동기)을 지나 getRaw 가 진행 중 재로드를 집은 뒤에 끝낸다
     next.resolve(page("새 제목"));
     expect(titles(await pending)).toContain("새 제목");
     expect(prisma.page.findMany).toHaveBeenCalledTimes(2);
@@ -333,6 +335,85 @@ describe("loadGraph — stale-while-revalidate", () => {
     next.resolve(page("낡은 재로드"));
     await flush();
     expect(titles(await loadGraph(ctx))).toContain("무효화 뒤");
+  });
+});
+
+describe("loadGraph — 다른 프로세스의 무효화(DB 세대)", () => {
+  const flush = () => new Promise<void>((r) => setImmediate(r));
+  let dbGen: number;
+
+  beforeEach(() => {
+    invalidateGraphCache();
+    vi.resetAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    m(loadAccess).mockResolvedValue({});
+    m(visibleOnly).mockImplementation((_i: unknown, rows: unknown[]) => rows);
+    m(pageAccess).mockReturnValue("view");
+    m(projectAccess).mockReturnValue("view");
+    for (const f of [prisma.page, prisma.project, prisma.decision, prisma.lesson, prisma.risk, prisma.dbRow, prisma.dbProperty, prisma.graphEdge]) {
+      m(f.findMany).mockResolvedValue([]);
+    }
+    dbGen = 3;
+    m(prisma.graphCacheGen.findUnique).mockImplementation(async () => ({ gen: dbGen }));
+    m(prisma.graphCacheGen.upsert).mockImplementation(async () => ({ gen: ++dbGen }));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("세대가 그대로면 캐시를 쓰고, 다른 프로세스가 올렸으면 확인 간격 뒤 다시 읽는다", async () => {
+    await loadGraph(ctx);
+    dbGen = 4; // 워커가 invalidateGraphCache — 이 프로세스 메모리는 모른다
+    vi.advanceTimersByTime(GRAPH_GEN_CHECK_MS - 1);
+    await loadGraph(ctx);
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(1); // 간격 안 — 세대를 다시 읽지 않는다
+    vi.advanceTimersByTime(2);
+    await loadGraph(ctx);
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2); // TTL(60초) 전이지만 세대가 달라 다시 읽는다
+    vi.advanceTimersByTime(GRAPH_GEN_CHECK_MS + 1);
+    await loadGraph(ctx);
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2); // 새 세대로 기록 — 같은 세대면 그대로
+  });
+
+  it("세대 읽기는 워크스페이스당 확인 간격에 한 번 — 동시 요청도 한 번만 읽는다", async () => {
+    await Promise.all([loadGraph(ctx), loadGraph(ctx), loadGraph(ctx)]);
+    await loadGraph(ctx);
+    expect(prisma.graphCacheGen.findUnique).toHaveBeenCalledTimes(1);
+    await loadGraph({ workspaceId: "w2", userId: "u1", role: "member" } as never);
+    expect(prisma.graphCacheGen.findUnique).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(GRAPH_GEN_CHECK_MS);
+    await loadGraph(ctx);
+    expect(prisma.graphCacheGen.findUnique).toHaveBeenCalledTimes(3);
+  });
+
+  it("invalidateGraphCache(워크스페이스) 는 DB 세대를 올리고, 자기 무효화로 한 번 더 읽지 않는다", async () => {
+    await loadGraph(ctx);
+    invalidateGraphCache("w1");
+    await flush();
+    expect(prisma.graphCacheGen.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { workspaceId: "w1" }, create: { workspaceId: "w1", gen: 1 }, update: { gen: { increment: 1 } } }),
+    );
+    await loadGraph(ctx); // 즉시 다시 읽는다(프로세스 안 무효화는 그대로 즉시)
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(GRAPH_GEN_CHECK_MS + 1);
+    await loadGraph(ctx);
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2); // 올린 세대를 기록해 두었다 — 불필요한 재로드 없음
+  });
+
+  it("세대 읽기·쓰기가 실패해도(마이그레이션 전 등) 그래프는 돌고 캐시는 예전처럼 쓴다", async () => {
+    m(prisma.graphCacheGen.findUnique).mockRejectedValue(new Error("relation does not exist"));
+    m(prisma.graphCacheGen.upsert).mockRejectedValue(new Error("relation does not exist"));
+    await loadGraph(ctx);
+    vi.advanceTimersByTime(GRAPH_GEN_CHECK_MS + 1);
+    await loadGraph(ctx);
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(1);
+    invalidateGraphCache("w1");
+    await flush();
+    await loadGraph(ctx);
+    expect(prisma.page.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidateGraphCache() 전체 비우기는 DB 세대를 쓰지 않는다(테스트·프로세스 내부용)", () => {
+    invalidateGraphCache();
+    expect(prisma.graphCacheGen.upsert).not.toHaveBeenCalled();
   });
 });
 

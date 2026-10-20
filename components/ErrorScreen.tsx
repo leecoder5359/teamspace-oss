@@ -51,7 +51,7 @@ export function ErrorScreen({
           boxShadow: "var(--shadow-sm)",
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "var(--text-strong)" }}>{title}</h1>
+        <h1 style={{ margin: 0, fontSize: "var(--ds-fs-xl)", fontWeight: 700, color: "var(--text-strong)" }}>{title}</h1>
         <p style={{ margin: "6px 0 20px", fontSize: "var(--ds-fs-md)", lineHeight: 1.5, color: "var(--text-sub)" }}>{body}</p>
         {actions && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{actions}</div>}
         {digest && (

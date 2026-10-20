@@ -137,7 +137,7 @@ export default function AiConnect() {
             <h1 className="ws-db-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Icon name="logo" /> {detail.project ?? detail.cwd ?? detail.externalId}
             </h1>
-            <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4 }}>
+            <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 4 }}>
               {detail.cwd ?? "—"} · {new Date(detail.startedAt).toLocaleString("ko-KR")} · {detail.status}
             </div>
 
@@ -154,7 +154,7 @@ export default function AiConnect() {
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: k.color }}>{k.label}</span>
+                          <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: k.color }}>{k.label}</span>
                           <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>{new Date(it.createdAt).toLocaleTimeString("ko-KR")}</span>
                           {it.externalRef && <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)" }}>{it.externalRef}</span>}
                         </div>
@@ -180,7 +180,7 @@ export default function AiConnect() {
       <h1 className="ws-db-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Icon name="logo" /> AI 연결
       </h1>
-      <p style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 4, lineHeight: 1.6 }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 4, lineHeight: 1.6 }}>
         Claude 세션이 teamspace 스킬과 <code style={mono}>/api/*</code> 로 이 워크스페이스의 문서·보드·결정을 직접 읽어요. 아래는 Claude가 읽는 컨텍스트 스냅샷이에요.
       </p>
 
@@ -202,17 +202,17 @@ export default function AiConnect() {
         ) : !ctx ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }} aria-busy="true">
             <div className="ws-skeleton" style={{ height: 24, width: "60%", borderRadius: "var(--ds-r-pill)" }} />
-            <div className="ws-skeleton" style={{ height: 140, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
-            <div className="ws-skeleton" style={{ height: 140, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+            <div className="ws-skeleton" style={{ height: 140, borderRadius: "var(--ds-r-md)", border: "1px solid var(--border-subtle)" }} />
+            <div className="ws-skeleton" style={{ height: 140, borderRadius: "var(--ds-r-md)", border: "1px solid var(--border-subtle)" }} />
           </div>
         ) : (
           <>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
               {([["태스크", ctx.counts.tasks], ["문서", ctx.counts.docs], ["결정", ctx.counts.decisions], ["리스크", ctx.counts.risks], ["용어", ctx.counts.glossary]] as [string, number][]).map(([l, n]) => (
-                <span key={l} style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "2px 10px" }}>{l} {n}</span>
+                <span key={l} style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-sub)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "2px 10px" }}>{l} {n}</span>
               ))}
             </div>
-            <pre style={{ margin: 0, padding: 14, fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", lineHeight: 1.6, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: 10, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 280, overflow: "auto" }}>{ctx.markdown}</pre>
+            <pre style={{ margin: 0, padding: 14, fontFamily: "var(--font-mono)", fontSize: "var(--ds-fs-sm)", lineHeight: 1.6, color: "var(--text-body)", background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 280, overflow: "auto" }}>{ctx.markdown}</pre>
           </>
         )}
       </section>
@@ -220,7 +220,7 @@ export default function AiConnect() {
       {/* 연결 방법 */}
       <section style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
         <div style={{ fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)", marginBottom: 10 }}>연결 방법</div>
-        <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 7, fontSize: 12.5, color: "var(--text-sub)", lineHeight: 1.6 }}>
+        <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 7, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.6 }}>
           <li>스킬: <code style={mono}>.claude/skills/teamspace/SKILL.md</code> — 이 레포에서 Claude가 자동 로드, 보드·문서·결정을 API로 다루는 법을 안내.</li>
           <li>CLI: <code style={mono}>pnpm ws &lt;명령&gt;</code> — 예: <code style={mono}>ws doc cat &lt;id&gt;</code>, <code style={mono}>ws decision ls</code>, <code style={mono}>ws search &lt;q&gt;</code>.</li>
           <li>읽기 API: <code style={mono}>GET {apiBase}/api/context</code>(이 스냅샷) · <code style={mono}>/api/pages</code> · <code style={mono}>/api/pages/&lt;id&gt;</code> · <code style={mono}>/api/search?q=</code>.</li>
@@ -228,7 +228,7 @@ export default function AiConnect() {
         </ul>
       </section>
 
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", margin: "28px 0 4px" }}>Claude 작업 세션</h2>
+      <h2 style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", margin: "28px 0 4px" }}>Claude 작업 세션</h2>
       <p style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginBottom: 12 }}>cwd→워크스페이스로 매핑된 세션. 실시간 인입은 agentmemory 훅 → <code style={mono}>/api/ingest</code>.</p>
 
       {list === null && loadError ? (
@@ -236,15 +236,15 @@ export default function AiConnect() {
       ) : list === null ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }} aria-busy="true">
           {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="ws-skeleton" style={{ height: 63, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+            <div key={i} className="ws-skeleton" style={{ height: 63, borderRadius: "var(--ds-r-md)", border: "1px solid var(--border-subtle)" }} />
           ))}
         </div>
       ) : list.length === 0 ? (
         <div className="ws-empty" style={{ marginTop: 24 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <div style={{ width: 52, height: 52, borderRadius: "var(--ds-r-lg)", background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
             <Icon name="logo" />
           </div>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>아직 인입된 세션이 없어요</div>
+          <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-body)" }}>아직 인입된 세션이 없어요</div>
           <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>
             agentmemory 훅을 /api/ingest 로 연결하면 관찰·요약·결정·커밋이 여기에 모여요.
           </div>
@@ -255,13 +255,13 @@ export default function AiConnect() {
             <button
               key={s.id}
               onClick={() => open(s.id)}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", cursor: "pointer", textAlign: "left", font: "inherit" }}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", cursor: "pointer", textAlign: "left", font: "inherit" }}
             >
               <span style={{ display: "flex", color: s.status === "active" ? "var(--color-success)" : "var(--text-disabled)" }}>
                 <Icon name="circle" />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-strong)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {s.project ?? s.cwd ?? s.externalId}
                 </div>
                 <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 2 }}>

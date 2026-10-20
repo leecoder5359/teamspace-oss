@@ -184,7 +184,7 @@ export default function Calendar() {
                 key={s}
                 onClick={() => setScopeOn((p) => ({ ...p, [s]: !p[s] }))}
                 title={sc.label}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 11px", borderRadius: "var(--ds-r-sm)", cursor: "pointer", font: "inherit", fontSize: 12.5, fontWeight: 600, border: `1px solid ${on ? `color-mix(in srgb, ${sc.color} 45%, transparent)` : "var(--border-default)"}`, background: on ? `color-mix(in srgb, ${sc.color} 13%, var(--surface-card))` : "var(--surface-card)", color: on ? `color-mix(in srgb, ${sc.color} 76%, var(--text-strong))` : "var(--text-muted)" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 11px", borderRadius: "var(--ds-r-sm)", cursor: "pointer", font: "inherit", fontSize: "var(--ds-fs-md)", fontWeight: 600, border: `1px solid ${on ? `color-mix(in srgb, ${sc.color} 45%, transparent)` : "var(--border-default)"}`, background: on ? `color-mix(in srgb, ${sc.color} 13%, var(--surface-card))` : "var(--surface-card)", color: on ? `color-mix(in srgb, ${sc.color} 76%, var(--text-strong))` : "var(--text-muted)" }}
               >
                 <span style={{ width: 8, height: 8, borderRadius: "var(--ds-r-pill)", background: on ? sc.color : "var(--text-disabled)", flex: "0 0 auto" }} />
                 {sc.label}
@@ -196,7 +196,7 @@ export default function Calendar() {
       </div>
 
       {loaded && total === 0 && (
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 12 }}>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginBottom: 12 }}>
           마감일이 설정된 태스크와 문서 수정 이력이 캘린더에 표시됩니다.
         </p>
       )}
@@ -219,7 +219,7 @@ export default function Calendar() {
           ) : !loaded ? (
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }} aria-busy="true">
               {Array.from({ length: view === "month" ? 42 : view === "week" ? 7 : 1 }, (_, i) => (
-                <div key={i} className="ws-skeleton" style={{ minHeight: view === "month" ? 94 : 220, borderRadius: 10, border: "1px solid var(--border-subtle)" }} />
+                <div key={i} className="ws-skeleton" style={{ minHeight: view === "month" ? 94 : 220, borderRadius: "var(--ds-r-md)", border: "1px solid var(--border-subtle)" }} />
               ))}
             </div>
           ) : (
@@ -269,14 +269,14 @@ function DayCell({ d, inMonth, tall, events, today, onSelect }: { d: Date; inMon
   const isToday = toKey(d) === toKey(today);
   const limit = tall ? 12 : 3;
   return (
-    <div style={{ minHeight: tall ? 220 : 94, borderRadius: 10, border: "1px solid var(--border-subtle)", background: inMonth ? "var(--surface-card)" : "var(--surface-sunken)", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+    <div style={{ minHeight: tall ? 220 : 94, borderRadius: "var(--ds-r-md)", border: "1px solid var(--border-subtle)", background: inMonth ? "var(--surface-card)" : "var(--surface-sunken)", padding: 6, display: "flex", flexDirection: "column", gap: 3 }}>
       <div style={{ display: "flex", justifyContent: tall ? "flex-start" : "flex-end", marginBottom: 2 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: isToday ? "var(--color-primary)" : "transparent", color: isToday ? "#fff" : !inMonth ? "var(--text-disabled)" : dow === 0 ? "#F0494E" : dow === 6 ? "#2F62FF" : "var(--text-muted)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 20, height: 20, padding: "0 6px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: isToday ? "var(--color-primary)" : "transparent", color: isToday ? "#fff" : !inMonth ? "var(--text-muted)" : dow === 0 ? "#F0494E" : dow === 6 ? "#2F62FF" : "var(--text-muted)" }}>
           {tall ? `${d.getMonth() + 1}/${d.getDate()} (${WD[dow]})` : d.getDate()}
         </span>
       </div>
       {events.slice(0, limit).map((e) => <EventPill key={e.id} e={e} onSelect={onSelect} />)}
-      {events.length > limit && <span style={{ fontSize: 10.5, color: "var(--text-muted)", paddingLeft: 4 }}>+{events.length - limit}</span>}
+      {events.length > limit && <span style={{ fontSize: "var(--ds-fs-xs)", color: "var(--text-muted)", paddingLeft: 4 }}>+{events.length - limit}</span>}
     </div>
   );
 }
@@ -301,29 +301,29 @@ export function EventDetail({
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(25,31,40,0.40)", zIndex: 900 }} />
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 901, width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 64px)", overflow: "auto", background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: 18, boxShadow: "var(--ds-shadow-lg, var(--shadow-lg))", padding: 20 }}>
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 901, width: "min(440px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 64px)", overflow: "auto", background: "var(--surface-card)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-xl)", boxShadow: "var(--ds-shadow-lg, var(--shadow-lg))", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 22, padding: "0 9px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
             <span style={{ width: 7, height: 7, borderRadius: "var(--ds-r-pill)", background: sc.color }} />{sc.label}
           </span>
           <span style={{ flex: 1 }} />
           <button ref={closeRef} className="ws-icon-btn" onClick={onClose} title="닫기"><Icon name="close" size={18} /></button>
         </div>
 
-        <h3 id={titleId} style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>
+        <h3 id={titleId} style={{ margin: 0, fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em", lineHeight: 1.35 }}>
           {ev.scope === "deadline" ? `${ev.title} 마감` : ev.title}
         </h3>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 12.5, color: "var(--text-sub)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)" }}>
           <Icon name="calendar" size={14} /> {ev.date.replace(/-/g, ". ")}{ev.scope === "reminder" && ev.time ? ` · ${ev.time}` : ""}
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--text-disabled)", letterSpacing: "0.02em", marginBottom: 7 }}>
+          <div style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.02em", marginBottom: 7 }}>
             {ev.scope === "deadline" ? "연결된 태스크" : ev.scope === "document" ? "문서" : "알림"}
           </div>
           {ev.scope === "reminder" ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", borderRadius: 9, padding: "9px 11px" }}>
-              <span style={{ width: 26, height: 26, borderRadius: 7, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", borderRadius: "var(--ds-r-sm)", padding: "9px 11px" }}>
+              <span style={{ width: 26, height: 26, borderRadius: "var(--ds-r-sm)", flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
                 <Icon name="bell" size={15} />
               </span>
               <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-md)", color: "var(--text-body)" }}>{ev.title}</span>
@@ -333,9 +333,9 @@ export function EventDetail({
               onClick={ev.scope === "deadline" ? onOpenTask : onOpenDoc}
               disabled={ev.scope === "deadline" && !databaseId}
               className="ws-listrow"
-              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", borderRadius: 9, padding: "9px 11px", cursor: "pointer", font: "inherit" }}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", borderRadius: "var(--ds-r-sm)", padding: "9px 11px", cursor: "pointer", font: "inherit" }}
             >
-              <span style={{ width: 26, height: 26, borderRadius: 7, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
+              <span style={{ width: 26, height: 26, borderRadius: "var(--ds-r-sm)", flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${sc.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${sc.color} 78%, var(--text-strong))` }}>
                 <Icon name={sc.icon} size={15} />
               </span>
               <span style={{ flex: 1, minWidth: 0, fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

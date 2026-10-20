@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { IconName } from "./icons";
 import { LoadErrorNotice } from "./AiConnect";
-import { inputStyle } from "./ui";
+import { inputStyle, primaryBtnInline as primaryBtn } from "./ui";
 
 /* =====================================================================
    승인 대기 인박스 (design app/approvals.jsx 포팅) — 에이전트/앱이 만든
@@ -196,7 +196,7 @@ export default function Approvals() {
         {loadErr ? (
           <LoadErrorNotice message="승인 목록을 불러오지 못했어요." onRetry={() => void load()} />
         ) : (
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)", padding: "20px 4px" }}>불러오는 중…</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", padding: "20px 4px" }}>불러오는 중…</div>
         )}
       </div>
     );
@@ -212,12 +212,12 @@ export default function Approvals() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", marginBottom: 16, flexWrap: "wrap" }}>
         <div style={aiBadge}>AI</div>
         <div style={{ flex: 1, minWidth: 160 }}>
-          <h1 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-strong)" }}>승인 대기 인박스</h1>
-          <div style={{ fontSize: 12.5, color: "var(--text-sub)", marginTop: 2 }}>
+          <h1 style={{ margin: 0, fontSize: "var(--ds-fs-base)", fontWeight: 700, color: "var(--text-strong)" }}>승인 대기 인박스</h1>
+          <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 2 }}>
             중요한 건만 컨펌하면 돼요. 승인/거부/추가요청은 슬랙(#workspace-confirm)에서도 가능합니다.
           </div>
         </div>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12.5, fontWeight: 600, color: "var(--text-sub)", cursor: "pointer", flex: "0 0 auto" }} title="대기 중인 저위험 건을 일괄 승인">
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-sub)", cursor: "pointer", flex: "0 0 auto" }} title="대기 중인 저위험 건을 일괄 승인">
           <input type="checkbox" checked={autoLow} disabled={busy} onChange={(e) => void onAutoLow(e.target.checked)} />
           낮은 위험 자동 승인{lowPendingCount ? ` (${lowPendingCount})` : ""}
         </label>
@@ -236,32 +236,32 @@ export default function Approvals() {
             <option value="project">프로젝트화</option>
             <option value="deploy">배포 컨펌</option>
           </select>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-sub)", cursor: "pointer" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", cursor: "pointer" }}>
             <input type="checkbox" checked={highRisk} onChange={(e) => setHighRisk(e.target.checked)} /> 컨펌 필요(높은 위험)
           </label>
           <span style={{ flex: 1 }} />
           <button onClick={createReq} disabled={busy || !title.trim()} style={primaryBtn}>슬랙으로 승인 요청 보내기</button>
         </div>
-        {msg && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 8 }}>{msg}</div>}
+        {msg && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 8 }}>{msg}</div>}
       </div>
 
-      {err && <div role="alert" style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 12 }}>{err}</div>}
+      {err && <div role="alert" style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginBottom: 12 }}>{err}</div>}
 
       {/* 이미 받은 목록이 있을 때의 다시 읽기 실패 — 목록은 그대로 두고 같은 안내+다시 시도 */}
       {loadErr && <LoadErrorNotice message="승인 목록을 불러오지 못했어요." onRetry={() => void load()} />}
 
       {focusId && missingId === focusId && !inList && (
-        <div role="status" style={{ fontSize: 12.5, color: "var(--text-sub)", padding: "10px 14px", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-sunken)", marginBottom: 12 }}>
+        <div role="status" style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", padding: "10px 14px", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-sunken)", marginBottom: 12 }}>
           해당 승인을 찾을 수 없어요
         </div>
       )}
 
       {list.length === 0 ? (
         <div className="ws-empty">
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <div style={{ width: 52, height: 52, borderRadius: "var(--ds-r-lg)", background: "var(--surface-sunken)", color: "var(--text-disabled)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
             <Icon name="inbox" />
           </div>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-body)" }}>승인 대기 중인 제안이 없어요</div>
+          <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-body)" }}>승인 대기 중인 제안이 없어요</div>
           <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 5 }}>새 요청을 만들거나, 에이전트가 제안하면 여기로 알려드릴게요.</div>
         </div>
       ) : (
@@ -282,7 +282,7 @@ function Card({ a, busy, onDecide, flash }: { a: Approval; busy: boolean; onDeci
   const k = KIND_META[a.kind];
   const pending = a.status === "pending";
   const chip = (label: string, color: string, icon?: IconName) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 21, padding: "0 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, background: `color-mix(in srgb, ${color} 13%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 74%, var(--text-strong))` }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 21, padding: "0 8px", borderRadius: "var(--ds-r-sm)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${color} 13%, var(--surface-card))`, color: `color-mix(in srgb, ${color} 74%, var(--text-strong))` }}>
       {icon && <Icon name={icon} size={12} />}{label}
     </span>
   );
@@ -291,17 +291,17 @@ function Card({ a, busy, onDecide, flash }: { a: Approval; busy: boolean; onDeci
     <div
       id={`approval-${a.id}`}
       data-flash={flash ? "1" : undefined}
-      style={{ border: `1px solid ${flash ? "var(--color-primary)" : "var(--border-subtle)"}`, borderRadius: 14, background: "var(--surface-card)", padding: 18, boxShadow: flash ? "0 0 0 3px var(--color-primary-weak)" : "var(--shadow-xs)", transition: "box-shadow .3s, border-color .3s", scrollMarginTop: 80 }}
+      style={{ border: `1px solid ${flash ? "var(--color-primary)" : "var(--border-subtle)"}`, borderRadius: "var(--ds-r-lg)", background: "var(--surface-card)", padding: 18, boxShadow: flash ? "0 0 0 3px var(--color-primary-weak)" : "var(--shadow-xs)", transition: "box-shadow .3s, border-color .3s", scrollMarginTop: 80 }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <div style={aiBadge}>AI</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>제안 · {new Date(a.createdAt).toLocaleString("ko-KR")}</div>
-          <h3 style={{ margin: "3px 0 0", fontSize: 15.5, fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{a.title}</h3>
+          <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>제안 · {new Date(a.createdAt).toLocaleString("ko-KR")}</div>
+          <h3 style={{ margin: "3px 0 0", fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", letterSpacing: "-0.01em" }}>{a.title}</h3>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {k && chip(k.label, k.color, k.icon)}
-          {a.highRisk ? chip("컨펌 필요", "#E0900F", "alert") : chip("낮은 위험", "#9AA0A6", "circle")}
+          {a.highRisk ? chip("컨펌 필요", "var(--color-warning-text)", "alert") : chip("낮은 위험", "#9AA0A6", "circle")}
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 24, padding: "0 10px", borderRadius: "var(--ds-r-pill)", fontSize: "var(--ds-fs-sm)", fontWeight: 700, background: `color-mix(in srgb, ${s.color} 14%, var(--surface-card))`, color: `color-mix(in srgb, ${s.color} 78%, var(--text-strong))` }}>
             <span style={{ width: 7, height: 7, borderRadius: "var(--ds-r-pill)", background: s.color }} />{s.label}
           </span>
@@ -310,7 +310,7 @@ function Card({ a, busy, onDecide, flash }: { a: Approval; busy: boolean; onDeci
 
       {a.body && <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", lineHeight: 1.55, margin: "12px 0 0", whiteSpace: "pre-wrap" }}>{a.body}</p>}
       {a.responseText && (
-        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: "var(--surface-sunken)", fontSize: 12.5, color: "var(--text-body)" }}>
+        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: "var(--ds-r-md)", background: "var(--surface-sunken)", fontSize: "var(--ds-fs-md)", color: "var(--text-body)" }}>
           <b>{a.status === "rejected" ? "거부 사유" : "추가 요청"}:</b> {a.responseText}
         </div>
       )}
@@ -339,14 +339,8 @@ function Card({ a, busy, onDecide, flash }: { a: Approval; busy: boolean; onDeci
 }
 
 const aiBadge: CSSProperties = {
-  width: 34, height: 34, borderRadius: 10, flex: "0 0 auto",
+  width: 34, height: 34, borderRadius: "var(--ds-r-md)", flex: "0 0 auto",
   background: "var(--color-primary-weak)", color: "var(--color-primary)",
   display: "flex", alignItems: "center", justifyContent: "center",
   fontSize: "var(--ds-fs-sm)", fontWeight: 800,
-};
-const primaryBtn: CSSProperties = {
-  padding: "8px 14px", borderRadius: 9, fontSize: "var(--ds-fs-md)", fontWeight: 600,
-  cursor: "pointer", border: "1px solid transparent",
-  background: "var(--color-primary)", color: "#fff",
-  display: "inline-flex", alignItems: "center", gap: 5,
 };

@@ -224,8 +224,8 @@ export default function LessonInspect() {
               </Table>
             )}
             <details style={{ marginTop: 10 }}>
-              <summary style={{ fontSize: 12.5, cursor: "pointer", color: "var(--text-muted)" }}>실제로 들어가는 레슨 부분 미리보기</summary>
-              <pre style={{ marginTop: 8, padding: 12, borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", fontSize: 11.5, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 420, overflow: "auto", color: "var(--text-body)" }}>
+              <summary style={{ fontSize: "var(--ds-fs-md)", cursor: "pointer", color: "var(--text-muted)" }}>실제로 들어가는 레슨 부분 미리보기</summary>
+              <pre style={{ marginTop: 8, padding: 12, borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", fontSize: "var(--ds-fs-sm)", lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 420, overflow: "auto", color: "var(--text-body)" }}>
                 {data.preview}
               </pre>
             </details>
@@ -234,7 +234,7 @@ export default function LessonInspect() {
           <Sub label={`연결 점검${warnCount ? ` · 확인할 것 ${warnCount}건` : ""}`}>
             {checks && warnCount === 0 && <p style={empty}>문제 없습니다.</p>}
             {checks && warnCount > 0 && (
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--text-body)", lineHeight: 1.7 }}>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: "var(--ds-fs-md)", color: "var(--text-body)", lineHeight: 1.7 }}>
                 {checks.unmappedCwds.map((c) => (
                   <li key={`u-${c.cwd}`}>
                     최근 {checks.windowDays}일 동안 세션이 열린 폴더가 프로젝트에 연결돼 있지 않습니다: <code style={{ wordBreak: "break-all" }}>{c.cwd}</code> ({n(c.count)}회, 마지막 {when(c.lastAt)}) — 프로젝트 레슨이 안 들어갑니다. <code>pnpm ws route-rule add</code>
@@ -362,7 +362,7 @@ function InjectionStats() {
           {top.length > 0 && (
             <Sub label="레슨별 주입·조회">
               <details open={top.length <= 10}>
-                <summary style={{ fontSize: 12.5, cursor: "pointer", color: "var(--text-muted)", marginBottom: 6 }}>{n(top.length)}개 레슨 (조회 많은 순)</summary>
+                <summary style={{ fontSize: "var(--ds-fs-md)", cursor: "pointer", color: "var(--text-muted)", marginBottom: 6 }}>{n(top.length)}개 레슨 (조회 많은 순)</summary>
                 <Table head={["레슨", "요약", "제목만", "잘림", "조회"]} numericFrom={1}>
                   {top.map((l) => (
                     <tr key={l.id} style={rowStyle}>
@@ -404,7 +404,7 @@ function InjectionStats() {
 function BudgetRow({ label, value }: { label: string; value: number }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-      <span style={{ fontSize: 12.5, color: "var(--text-body)", flex: "1 1 200px", minWidth: 0 }}>{label}</span>
+      <span style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", flex: "1 1 200px", minWidth: 0 }}>{label}</span>
       <span style={{ flex: "1 1 140px", display: "flex" }}>
         <ProgressBar value={value} />
       </span>
@@ -443,7 +443,7 @@ function CandidateList({ title, items, none }: { title: string; items: { key: st
   return (
     <details open={items.length <= 5} style={{ marginBottom: 12 }}>
       <summary style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, cursor: "pointer" }}>{title}</summary>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--text-body)", lineHeight: 1.7 }}>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: "var(--ds-fs-md)", color: "var(--text-body)", lineHeight: 1.7 }}>
         {items.map((it) => (
           <li key={it.key}>
             {it.text}

@@ -7,6 +7,7 @@ import { neighbors as graphNeighbors } from "@/lib/graphInsights";
 import { TASK_NOTE_EXCLUDE } from "@/lib/taskNotes";
 import { mergeVariantRows, queryVariants } from "@/lib/searchVariants";
 import { passesFilters, rankSearch, usesTrigramIndex, type Candidate, type SearchKind } from "@/lib/searchRank";
+import { shortQueryPageIds, trigramPageIds } from "@/lib/searchPageIds";
 import { archivedPageIds } from "@/lib/pageArchive";
 import { withReq } from "@/lib/log";
 
@@ -20,20 +21,18 @@ export const runtime = "nodejs";
      끄트머리 일치가 동급이라 결과 순서가 사실상 DB 반환 순서였다.
    - 필터도 없어 프로젝트·종류·기간으로 좁힐 수 없었다.
 
-   인덱스: pg_trgm GIN 을 깔았다(마이그레이션 20260808140000). `ILIKE` 가
-   인덱스를 탈 수 있게 되어 문서가 늘어도 선형으로 무너지지 않는다.
-   ⚠️ 다만 트라이그램은 **3글자 미만 질의에 무력**하다("배포" 같은 2음절은
-   여전히 순차 스캔). 응답의 `indexed` 필드로 그 사실을 호출자에게 알린다 —
-   느린 이유를 숨기지 않는다.
+   인덱스: pg_trgm GIN 을 깔았다(마이그레이션 20260808140000). 그런데 한 쿼리에
+   조건을 다 실으면 플래너가 GIN 을 안 고른다(감사 P-3 EXPLAIN — lib/searchPageIds).
+   그래서 문서는 두 단계다: ① 일치 id 만(GIN 강제) ② 그 id 로 필터·본문 조회.
+   ⚠️ 트라이그램은 **3글자 미만 질의에 무력**하다("배포" 같은 2음절). 그때 ①은
+   제목 전부 + 본문은 최근 문서 상한 안에서만 본다. 응답의 `indexed` 필드로 그
+   사실을 호출자에게 알린다 — 느린(또는 덜 찾는) 이유를 숨기지 않는다.
 
    랭킹은 DB 가 아니라 lib/searchRank(순수)가 한다. 후보를 넉넉히 받아 거른 뒤
    줄 세운다 — 규모(수백~수천)에선 이게 단순하고 테스트하기도 쉽다.
    ===================================================================== */
 
 const CANDIDATE_TAKE = 300;
-const POST_FILTER_TAKE = 500;
-/** 보관 id 가 이 수를 넘으면 notIn 대신 후보를 읽은 뒤 거른다. */
-const ARCHIVED_NOTIN_CAP = 2000;
 /** DB OR 에 싣는 변형 수 상한(원문 포함). queryVariants 는 랭킹용으로 최대 8개를 돌려주지만 쿼리는 이만큼만. */
 const DB_VARIANTS = 5;
 
@@ -74,15 +73,18 @@ export async function GET(request: Request) {
     const own = new Map(tree.map((n) => [n.id, n.archivedAt]));
     archivedIds = [...archivedPageIds(tree)].filter((id) => !own.get(id));
   }
-  // notIn 이 너무 길면 쿼리 파라미터 한도·계획 비용이 문제 — 상한을 넘으면 id 필터를 빼고 후보를 읽은 뒤 거른다.
+  // ①에서 id 를 손에 쥐므로 보관 후손은 SQL notIn 이 아니라 여기서 뺀다(목록이 길어도 파라미터 한도와 무관).
   const archivedSet = new Set(archivedIds);
-  const postFilterArchived = archivedIds.length > ARCHIVED_NOTIN_CAP;
-  // 사후 거름 경로에선 후손이 후보 자리를 차지해 limit(최대 100) 을 못 채울 수 있다 → 500 으로 고정해 넉넉히 읽는다.
-  const pageTake = postFilterArchived ? POST_FILTER_TAKE : CANDIDATE_TAKE;
-  const pageWhere = (vs: string[]) => ({
+  // ① 일치 id. 변형 중 하나라도 3글자 미만이면 GIN 이 못 도우므로 짧은 질의 길로.
+  const matchIds = (vs: string[]) =>
+    vs.every(usesTrigramIndex)
+      ? trigramPageIds(workspaceId, vs)
+      : shortQueryPageIds(workspaceId, vs, { includeArchived, includeTaskNotes });
+  // ② 그 id 로 다시 거른다 — 여기엔 ILIKE 를 다시 싣지 않는다(실으면 PG 가 그걸 먼저 평가해 본문을 다 푼다).
+  const pageWhere = (ids: string[]) => ({
     workspaceId, deletedAt: null, ...(includeArchived ? {} : { archivedAt: null }),
-    ...(archivedIds.length && !postFilterArchived ? { id: { notIn: archivedIds } } : {}), OR: vs.flatMap((v) => [{ title: ci(v) }, { markdown: ci(v) }]),
-    // 태스크 설명은 기본 제외 — AND 로 묶어 위 OR 와 충돌하지 않게 한다.
+    id: { in: ids.filter((id) => !archivedSet.has(id)) },
+    // 태스크 설명은 기본 제외
     ...(includeTaskNotes ? {} : { AND: [TASK_NOTE_EXCLUDE] }),
   });
   const pageSelect = {
@@ -118,8 +120,8 @@ export async function GET(request: Request) {
     wantPages
       ? fetchWithFallback(
           async (vs) => {
-            const rows = await prisma.page.findMany({ where: pageWhere(vs), select: pageSelect, take: pageTake });
-            return postFilterArchived ? rows.filter((r) => !archivedSet.has(r.id)) : rows;
+            const where = pageWhere(await matchIds(vs));
+            return where.id.in.length ? prisma.page.findMany({ where, select: pageSelect, take: CANDIDATE_TAKE }) : [];
           },
           (p) => ({ id: p.id, kind: (p.kind === "database" ? "board" : "doc") as SearchKind, title: p.title, body: "", projectId: p.projectId, projectName: null, updatedAt: p.updatedAt }),
         )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon } from "./icons";
 import { useDialogEscape } from "@/lib/useDialogEscape";
 import {
@@ -365,7 +365,7 @@ const taskInp: CSSProperties = {
   flex: 1,
   height: 34,
   border: "1px solid var(--border-default)",
-  borderRadius: 9,
+  borderRadius: "var(--ds-r-sm)",
   background: "var(--surface-sunken)",
   padding: "0 12px",
   fontSize: "var(--ds-fs-md)",
@@ -382,17 +382,11 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
   const propRows = properties.filter((p) => p.id !== titleId && p.id !== statusProp?.id);
 
   const [tab, setTab] = useState<Tab>("desc");
-  const [toast, setToast] = useState<string | null>(null);
   const [mdPreview, setMdPreview] = useState(true);
   const [md, setMd] = useState("");
   const [mdLoading, setMdLoading] = useState(false);
 
   const contentPageId = row.contentPageId ?? null;
-
-  const flash = useCallback((msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 1800);
-  }, []);
 
   // Esc 닫기 + 닫으면 연 요소로 포커스 복귀
   useDialogEscape(true, onClose);
@@ -479,14 +473,6 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
         <header className="ws-drawer-head">
           <IdChip id={shortId(row.id)} />
           <span className="ws-drawer-head-spacer" />
-          <button
-            type="button"
-            className="ws-btn-soft"
-            onClick={() => flash("슬랙 리마인드는 준비 중이에요")}
-          >
-            <Icon name="slack" size={15} />
-            슬랙으로 리마인드
-          </button>
           <button type="button" className="ws-icon-btn" onClick={onClose} aria-label="닫기">
             <Icon name="close" size={18} />
           </button>
@@ -652,7 +638,7 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                   {checklist.length === 0 && <p className="ws-empty-hint">체크리스트가 없어요. 아래에서 항목을 추가하세요.</p>}
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <input value={newCheck} onChange={(e) => setNewCheck(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addCheck(); }} placeholder="체크리스트 항목 추가" style={taskInp} aria-label="체크리스트 항목" />
+                  <input value={newCheck} onChange={(e) => setNewCheck(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addCheck(); }} placeholder="체크리스트 항목 추가" className="ws-focus-ring" style={taskInp} aria-label="체크리스트 항목" />
                   <button type="button" className="ws-btn-soft" aria-label="체크리스트 항목 추가" title="체크리스트 항목 추가" onClick={() => void addCheck()} disabled={!newCheck.trim()}><Icon name="plus" size={14} /></button>
                 </div>
               </div>
@@ -666,8 +652,8 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                       <Avatar name={c.user?.name ?? "?"} size={28} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-strong)" }}>{c.user?.name ?? "익명"}</span>
-                          <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{new Date(c.createdAt).toLocaleString("ko-KR")}</span>
+                          <span style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-strong)" }}>{c.user?.name ?? "익명"}</span>
+                          <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{new Date(c.createdAt).toLocaleString("ko-KR")}</span>
                         </div>
                         <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-body)", lineHeight: 1.55, margin: "3px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.body}</p>
                       </div>
@@ -676,7 +662,7 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
                   {comments.length === 0 && <p className="ws-empty-hint">아직 댓글이 없어요.</p>}
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  <input value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addComment(); }} placeholder="댓글을 남겨보세요" style={taskInp} aria-label="댓글" />
+                  <input value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addComment(); }} placeholder="댓글을 남겨보세요" className="ws-focus-ring" style={taskInp} aria-label="댓글" />
                   <button type="button" className="ws-btn-soft" onClick={() => void addComment()} disabled={!newComment.trim()}><Icon name="slack" size={14} /> 등록</button>
                 </div>
               </div>
@@ -684,7 +670,6 @@ export default function TaskDetail({ row, properties, roles, titleId, onChange, 
           </div>
         </div>
 
-        {toast && <div className="ws-detail-toast">{toast}</div>}
       </aside>
     </div>
   );

@@ -117,13 +117,14 @@ export const ImageInline = createReactInlineContentSpec(
 
 /* ───────────────────────── 블록: 콜아웃 ───────────────────────── */
 
-const CALLOUT_META: Record<string, { color: string; label: string }> = {
+// color = 라벨 글자색, bar = 테두리·액센트 바(없으면 color). 경고는 글자만 AA 용 짙은 토큰을 쓰고 바는 원래 경고색.
+const CALLOUT_META: Record<string, { color: string; label: string; bar?: string }> = {
   NOTE: { color: "var(--color-primary)", label: "노트" },
   INFO: { color: "var(--color-primary)", label: "정보" },
   TIP: { color: "#0CA678", label: "팁" },
   SUCCESS: { color: "#0CA678", label: "완료" },
-  WARNING: { color: "#E0900F", label: "주의" },
-  CAUTION: { color: "#E0900F", label: "주의" },
+  WARNING: { color: "var(--color-warning-text)", bar: "var(--yellow-600)", label: "주의" },
+  CAUTION: { color: "var(--color-warning-text)", bar: "var(--yellow-600)", label: "주의" },
   DANGER: { color: "#D14343", label: "위험" },
   ERROR: { color: "#D14343", label: "오류" },
 };
@@ -152,7 +153,7 @@ export const CalloutBlock = createReactBlockSpec(
         <div
           data-callout-kind={String(block.props.kind).toUpperCase()}
           style={{
-            borderLeft: `3px solid ${meta.color}`,
+            borderLeft: `3px solid ${meta.bar ?? meta.color}`,
             padding: "8px 12px 4px",
             background: "var(--surface-sunken)",
             width: "100%",
@@ -179,7 +180,7 @@ export const CalloutBlock = createReactBlockSpec(
           >
             {meta.label}
           </button>
-          <div ref={contentRef} style={{ fontSize: 13.5, color: "var(--text-body)" }} />
+          <div ref={contentRef} style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-body)" }} />
         </div>
       );
     },
@@ -201,14 +202,14 @@ export const EmbedBlock = createReactBlockSpec(
         data-embed={String(block.props.target)}
         style={{
           border: "1px solid var(--border-subtle)",
-          borderRadius: 10,
+          borderRadius: "var(--ds-r-md)",
           padding: "10px 14px",
           background: "var(--surface-card)",
           fontSize: "var(--ds-fs-md)",
           width: "100%",
         }}
       >
-        <span style={{ color: "var(--text-muted)", fontSize: 11.5, marginRight: 6 }}>임베드</span>
+        <span style={{ color: "var(--text-muted)", fontSize: "var(--ds-fs-sm)", marginRight: 6 }}>임베드</span>
         <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>{String(block.props.target)}</span>
       </div>
     ),

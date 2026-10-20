@@ -132,7 +132,7 @@ export default function Settings() {
               <div
                 key={w.id}
                 style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9,
+                  display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: "var(--ds-r-sm)",
                   border: `1px solid ${w.current ? "var(--color-primary)" : "var(--border-subtle)"}`,
                   background: w.current ? "var(--surface-muted, rgba(0,0,0,0.02))" : "var(--surface-card)",
                 }}
@@ -142,7 +142,7 @@ export default function Settings() {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{ROLE_LABEL[w.role] ?? w.role} · {w.memberCount}명</div>
+                  <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>{ROLE_LABEL[w.role] ?? w.role} · {w.memberCount}명</div>
                 </div>
                 {w.current ? (
                   <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 600, color: "var(--color-primary)" }}>현재</span>
@@ -167,8 +167,8 @@ export default function Settings() {
 
       {/* 내 프로필 */}
       <Section title="내 프로필">
-        <div style={{ fontSize: 13.5, color: "var(--text-strong)", fontWeight: 600 }}>{info.me?.name ?? "이름 없음"}</div>
-        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+        <div style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-strong)", fontWeight: 600 }}>{info.me?.name ?? "이름 없음"}</div>
+        <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 2 }}>
           {info.me?.email ?? "-"} · {info.role ? ROLE_LABEL[info.role] : "-"}
         </div>
       </Section>
@@ -299,14 +299,14 @@ function TrashSection() {
         {items.map((t) => (
           <div
             key={t.id}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
           >
             <span style={{ display: "flex", color: "var(--text-muted)" }}>
               <Icon name={t.kind === "database" ? "table" : "doc"} />
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                 {t.project?.name ?? "미분류"} · 삭제 {new Date(t.deletedAt).toLocaleString("ko-KR")}
               </div>
             </div>
@@ -386,7 +386,7 @@ function AgentTokens() {
             <div
               key={t.id}
               style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9,
+                display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: "var(--ds-r-sm)",
                 border: "1px solid var(--border-subtle)", background: "var(--surface-card)",
                 opacity: t.revokedAt ? 0.55 : 1,
               }}
@@ -397,9 +397,9 @@ function AgentTokens() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)" }}>
                   {t.name}
-                  {t.revokedAt && <span style={{ marginLeft: 8, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>회수됨</span>}
+                  {t.revokedAt && <span style={{ marginLeft: 8, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", fontWeight: 500 }}>회수됨</span>}
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                   {ROLE_LABEL[t.role] ?? t.role} · 발급 {new Date(t.createdAt).toLocaleDateString("ko-KR")}
                   {t.lastUsedAt ? ` · 마지막 사용 ${new Date(t.lastUsedAt).toLocaleString("ko-KR")}` : " · 미사용"}
                 </div>
@@ -427,7 +427,7 @@ function AgentTokens() {
         <button onClick={issue} disabled={busy || !name.trim()} style={primaryBtn}>발급</button>
       </div>
       {issued && (
-        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 9, border: "1px solid var(--color-primary)", background: "var(--surface-muted, rgba(0,0,0,0.02))" }}>
+        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--color-primary)", background: "var(--surface-muted, rgba(0,0,0,0.02))" }}>
           <div style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: "var(--text-strong)", marginBottom: 4 }}>
             토큰이 발급되었습니다 — 지금 복사하세요. 다시 볼 수 없습니다.
           </div>
@@ -731,7 +731,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       {form && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: 9, border: "1px solid var(--color-primary)", marginBottom: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--color-primary)", marginBottom: 10 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input ref={envInput} value={form.env} onChange={(e) => setForm({ ...form, env: e.target.value })} disabled={form.editing} placeholder="환경 (dev·prod·local…)" style={{ ...inputStyle, width: 140 }} />
             <input ref={keyInput} value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value.toUpperCase() })} disabled={form.editing} placeholder="KEY_NAME" style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
@@ -774,8 +774,8 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       {groups.some((g) => !g.consistent) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 600, color: "var(--text-strong)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)" }}>
             <StatusPill label="syncGroup 불일치" color="orange" />
             같은 묶음인데 값이 서로 다른 키가 있습니다(워크스페이스 전체).
           </div>
@@ -796,7 +796,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
           {vars.map((v) => (
             <div
               key={v.id}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
             >
               <span style={{ display: "flex", color: "var(--color-primary)" }}>
                 <Icon name="lock" />
@@ -804,9 +804,9 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <span style={{ fontFamily: "var(--font-mono)" }}>{v.key}</span>
-                  <span style={{ marginLeft: 8, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>{v.env}</span>
+                  <span style={{ marginLeft: 8, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", fontWeight: 500 }}>{v.env}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                   v{v.version} · {v.valueLength}자{v.syncGroup ? ` · ${v.syncGroup}` : ""} · {v.updatedByName ?? "-"} · {new Date(v.updatedAt).toLocaleString("ko-KR")}
                   {v.note ? ` · ${v.note}` : ""}
                 </div>
@@ -874,7 +874,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
       </p>
 
       {tform && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: 9, border: "1px solid var(--color-primary)", marginBottom: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--color-primary)", marginBottom: 10 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input value={tform.env} onChange={(e) => setTform({ ...tform, env: e.target.value })} placeholder="환경 (dev·prod·local…)" style={{ ...inputStyle, width: 140 }} />
             <select value={tform.kind} onChange={(e) => setTform({ ...tform, kind: e.target.value as TargetForm["kind"] })} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
@@ -929,17 +929,17 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
           {targets.map((t) => (
             <div
               key={t.id}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: "var(--ds-r-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-card)" }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 600, color: "var(--text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {TARGET_KIND_LABEL[t.kind] ?? t.kind}
-                  <span style={{ marginLeft: 8, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>{t.env}</span>
+                  <span style={{ marginLeft: 8, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", fontWeight: 500 }}>{t.env}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {t.summary} · {t.accountSummary} · {t.lastPushedAt ? `마지막 반영 ${new Date(t.lastPushedAt).toLocaleString("ko-KR")}` : "아직 반영 안 됨"}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2, fontSize: 11.5, color: "var(--text-muted)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2, fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)" }}>
                   {t.lastDriftAt ? (
                     <>
                       <span>마지막 점검 {new Date(t.lastDriftAt).toLocaleString("ko-KR")}</span>
@@ -967,7 +967,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
 
       {isAdmin && logs.length > 0 && (
         <details style={{ marginTop: 12 }}>
-          <summary style={{ fontSize: 12.5, cursor: "pointer", color: "var(--text-muted)" }}>감사 로그 (최근 {logs.length}건)</summary>
+          <summary style={{ fontSize: "var(--ds-fs-md)", cursor: "pointer", color: "var(--text-muted)" }}>감사 로그 (최근 {logs.length}건)</summary>
           <ul style={{ maxHeight: 240, overflowY: "auto", margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--ds-fs-sm)", color: "var(--text-body)" }}>
             {logs.map((l) => (
               <li key={l.id}>
@@ -988,7 +988,7 @@ function EnvVaultSection({ isAdmin }: { isAdmin: boolean }) {
 function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
     <div id={id} style={{ scrollMarginTop: 16, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16, marginTop: 16 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>
+      <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>
         {title}
       </div>
       {children}
@@ -1000,7 +1000,7 @@ function NavCard({ href, icon, label }: { href: string; icon: IconName; label: s
   return (
     <Link
       href={href}
-      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 10, border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontWeight: 600, textDecoration: "none" }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: "var(--ds-r-md)", border: "1px solid var(--border-default)", background: "var(--surface-card)", color: "var(--text-strong)", fontSize: "var(--ds-fs-md)", fontWeight: 600, textDecoration: "none" }}
     >
       <span style={{ display: "flex", color: "var(--color-primary)" }}>
         <Icon name={icon} />
@@ -1010,5 +1010,5 @@ function NavCard({ href, icon, label }: { href: string; icon: IconName; label: s
   );
 }
 
-const labelStyle: CSSProperties = { display: "block", fontSize: 12.5, color: "var(--text-muted)", marginBottom: 4 };
+const labelStyle: CSSProperties = { display: "block", fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginBottom: 4 };
 const hint: CSSProperties = { fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 8 };

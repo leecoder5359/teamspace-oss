@@ -330,36 +330,39 @@ export default function PageEditor({ pageId, initial }: { pageId: string; initia
 
   return (
     <div className="ws-editor">
-      <input
-        className="ws-title-input"
-        value={title}
-        placeholder="제목 없음"
-        onChange={(e) => {
-          setTitle(e.target.value);
-          titleRef.current = e.target.value;
-          setDupTitle(false);
-          scheduleSave();
-        }}
-        onBlur={() => void save()}
-      />
+      {/* U-29: 화면 제목 — 입력을 h1 로 감싸 제목 구조를 잡고, 겉모양은 .ws-title-h1 이 그대로 둔다 */}
+      <h1 className="ws-title-h1">
+        <input
+          className="ws-title-input"
+          value={title}
+          placeholder="제목 없음"
+          onChange={(e) => {
+            setTitle(e.target.value);
+            titleRef.current = e.target.value;
+            setDupTitle(false);
+            scheduleSave();
+          }}
+          onBlur={() => void save()}
+        />
+      </h1>
       <div className="ws-save-state">
         {saveLabel}
-        {state === "conflict" && <span style={{ color: "#E0900F" }}>다른 곳에서 먼저 수정됨 — 아래에서 정리하세요</span>}
-        {dupTitle && state !== "conflict" && <span role="status" style={{ color: "#E0900F", marginLeft: 8 }}>{DUPLICATE_RENAME_NOTICE}</span>}
+        {state === "conflict" && <span style={{ color: "var(--color-warning-text)" }}>다른 곳에서 먼저 수정됨 — 아래에서 정리하세요</span>}
+        {dupTitle && state !== "conflict" && <span role="status" style={{ color: "var(--color-warning-text)", marginLeft: 8 }}>{DUPLICATE_RENAME_NOTICE}</span>}
       </div>
 
       {conflict && (
         <div
           role="alert"
           style={{
-            border: "1px solid #E0900F", borderLeft: "3px solid #E0900F", borderRadius: "0 10px 10px 0",
+            border: "1px solid var(--yellow-600)", borderLeft: "3px solid var(--yellow-600)", borderRadius: "0 var(--ds-r-md) var(--ds-r-md) 0",
             background: "var(--surface-sunken)", padding: "12px 14px", margin: "8px 0 14px",
           }}
         >
-          <div style={{ fontWeight: 700, fontSize: "var(--ds-fs-md)", color: "#E0900F", marginBottom: 4 }}>
+          <div style={{ fontWeight: 700, fontSize: "var(--ds-fs-md)", color: "var(--color-warning-text)", marginBottom: 4 }}>
             다른 곳에서 먼저 저장됐습니다
           </div>
-          <p style={{ fontSize: 12.5, color: "var(--text-sub)", margin: "0 0 10px", lineHeight: 1.6 }}>
+          <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", margin: "0 0 10px", lineHeight: 1.6 }}>
             {conflict.conflicts.length === 0
               ? "겹치는 편집이 없어 자동으로 합칠 수 있습니다. 내가 쓴 내용은 그대로 남습니다."
               : `같은 자리를 서로 다르게 고친 곳이 ${conflict.conflicts.length}군데 있습니다. 어느 쪽도 지우지 않았으니 확인하고 정리하세요.`}
@@ -368,12 +371,12 @@ export default function PageEditor({ pageId, initial }: { pageId: string; initia
           {conflict.conflicts.map((c, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
               <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", padding: "6px 9px", background: "var(--surface-card)" }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-primary)", marginBottom: 3 }}>내 편집</div>
-                <pre style={{ margin: 0, fontSize: 11.5, whiteSpace: "pre-wrap", color: "var(--text-body)" }}>{c.mine || "(빈 줄)"}</pre>
+                <div style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--color-primary)", marginBottom: 3 }}>내 편집</div>
+                <pre style={{ margin: 0, fontSize: "var(--ds-fs-sm)", whiteSpace: "pre-wrap", color: "var(--text-body)" }}>{c.mine || "(빈 줄)"}</pre>
               </div>
               <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-sm)", padding: "6px 9px", background: "var(--surface-card)" }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#E0900F", marginBottom: 3 }}>서버</div>
-                <pre style={{ margin: 0, fontSize: 11.5, whiteSpace: "pre-wrap", color: "var(--text-body)" }}>{c.theirs || "(빈 줄)"}</pre>
+                <div style={{ fontSize: "var(--ds-fs-xs)", fontWeight: 700, color: "var(--color-warning-text)", marginBottom: 3 }}>서버</div>
+                <pre style={{ margin: 0, fontSize: "var(--ds-fs-sm)", whiteSpace: "pre-wrap", color: "var(--text-body)" }}>{c.theirs || "(빈 줄)"}</pre>
               </div>
             </div>
           ))}

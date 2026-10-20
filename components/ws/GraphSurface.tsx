@@ -272,7 +272,7 @@ export default function GraphSurface() {
         <button className="ws-btn-soft" disabled={empty} onClick={() => download("wiki-graph.graphml", "application/xml", graphToGraphML(data))}>GraphML</button>
       </div>
 
-      <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4 }}>
+      <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 4 }}>
         노드 {data.nodes.length} · 간선 {data.edges.length} · 휠=확대 · 배경 끌기=이동 · 노드 끌기=고정 · 클릭=기준 선택 · 더블클릭(⌥/⌘-클릭)=문서 열기
         {focus && <> · 기준 <b style={{ color: "var(--color-primary)" }}>{data.nodes.find((n) => n.id === focus)?.title}</b></>}
       </p>
@@ -280,7 +280,7 @@ export default function GraphSurface() {
       {empty ? (
         <div className="ws-docs-empty" style={{ marginTop: 24 }}>
           <span style={{ color: "var(--text-muted)" }}><Icon name="link" size={32} /></span>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>{filtered ? "이 필터에 맞는 노드가 없어요" : "그래프에 그릴 문서가 없어요"}</div>
+          <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>{filtered ? "이 필터에 맞는 노드가 없어요" : "그래프에 그릴 문서가 없어요"}</div>
           {!filtered && (
             <>
               <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>
@@ -293,7 +293,7 @@ export default function GraphSurface() {
           )}
         </div>
       ) : (
-        <div style={{ marginTop: 12, border: "1px solid var(--border-subtle)", borderRadius: 14, background: "var(--surface-card)", overflow: "hidden" }}>
+        <div style={{ marginTop: 12, border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-lg)", background: "var(--surface-card)", overflow: "hidden" }}>
           <svg
             ref={svgRef}
             viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
@@ -378,7 +378,7 @@ export default function GraphSurface() {
           </svg>
         </div>
       )}
-      <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 6 }}>
+      <p style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 6 }}>
         노드를 클릭하면 그 문서를 기준으로 삼는다(깊이 필터가 여기에 걸린다). 문서를 열려면 더블클릭(또는 ⌥/⌘-클릭) — 링크가 없는 노드는 열리지 않는다.
       </p>
     </div>

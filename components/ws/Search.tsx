@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
+import { primaryBtnNowrap } from "./ui";
 import { docsHubHref } from "@/lib/docsHubUrl";
 import { responseErrorMessage } from "@/lib/fetchErrorMessage";
 
 /* 전역 검색 + 물어보기(Vault Q&A). /api/search · /api/ask. */
 
 type Hit = { id: string; title: string; snippet: string };
-type Results = { docs: Hit[]; decisions: Hit[] };
+/** indexed:false = 3글자 미만이라 트라이그램을 못 써서 본문은 최근 문서 창 안에서만 찾았다(app/api/search, lib/searchPageIds). */
+type Results = { docs: Hit[]; decisions: Hit[]; indexed?: boolean };
 
 type AskSource = { id: string; title: string; kind: "doc" | "decision"; passage: string; heading: string | null };
 type AskResult = { question: string; answer: string; mode: "llm" | "extractive" | "empty"; sources: AskSource[] };
@@ -187,9 +189,8 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
             onClick={submit}
             disabled={loading || q.trim() === ""}
             style={{
-              border: "1px solid transparent", background: "var(--color-primary)", color: "#fff",
-              borderRadius: "var(--ds-r-sm)", padding: "6px 14px", fontSize: "var(--ds-fs-md)", fontWeight: 600, cursor: "pointer",
-              whiteSpace: "nowrap", opacity: loading || q.trim() === "" ? 0.5 : 1,
+              ...primaryBtnNowrap, borderRadius: "var(--ds-r-sm)", padding: "6px 14px",
+              opacity: loading || q.trim() === "" ? 0.5 : 1,
             }}
           >
             {mode === "ask" ? "질문" : "검색"}
@@ -219,6 +220,11 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
           )}
         </div>
       )}
+      {mode === "search" && !loading && !err && res?.indexed === false && (
+        <p style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", marginTop: 10 }}>
+          2글자 이하는 제목 전체와 최근 수정 문서 100개의 본문만 검색합니다.
+        </p>
+      )}
     </div>
   );
 }
@@ -226,7 +232,7 @@ export default function Search({ initialQ = "" }: { initialQ?: string }) {
 const MODE_BADGE: Record<AskResult["mode"], { label: string; color: string }> = {
   llm: { label: "AI 합성", color: "var(--color-primary)" },
   extractive: { label: "근거 발췌", color: "var(--text-muted)" },
-  empty: { label: "결과 없음", color: "var(--text-disabled)" },
+  empty: { label: "결과 없음", color: "var(--text-muted)" },
 };
 
 function ConceptView({ loading, concept, onOpen }: { loading: boolean; concept: ConceptResult | null; onOpen: (s: AskSource) => void }) {
@@ -244,7 +250,7 @@ function ConceptView({ loading, concept, onOpen }: { loading: boolean; concept: 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           <span style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-muted)", fontWeight: 600 }}>확장어</span>
           {concept.expanded.map((t) => (
-            <span key={t} style={{ fontSize: 11.5, color: "var(--text-sub)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "1px 9px" }}>{t}</span>
+            <span key={t} style={{ fontSize: "var(--ds-fs-sm)", color: "var(--text-sub)", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-pill)", padding: "1px 9px" }}>{t}</span>
           ))}
         </div>
       )}
@@ -252,20 +258,20 @@ function ConceptView({ loading, concept, onOpen }: { loading: boolean; concept: 
         <div className="ws-empty-hint">관련 문서를 찾지 못했어요.</div>
       ) : (
         <section>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>관련 {concept.results.length}</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>관련 {concept.results.length}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {concept.results.map((s) => (
               <button
                 key={`${s.kind}-${s.id}`}
                 onClick={() => onOpen(s)}
-                style={{ textAlign: "left", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
+                style={{ textAlign: "left", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-base)", fontWeight: 600, color: "var(--text-strong)" }}>
                   <Icon name={s.kind === "doc" ? "doc" : "flag"} size={13} />
                   {s.title}
                   {s.heading && <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 500, color: "var(--text-muted)" }}>› {s.heading}</span>}
                 </div>
-                {s.passage && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{s.passage}</div>}
+                {s.passage && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{s.passage}</div>}
               </button>
             ))}
           </div>
@@ -290,30 +296,30 @@ function AskView({ loading, ask, q, onOpen }: { loading: boolean; ask: AskResult
     <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--ds-r-pill)", padding: "1px 8px" }}>
+          <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 700, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--ds-r-pill)", padding: "1px 8px" }}>
             {badge.label}
           </span>
         </div>
-        <div style={{ fontSize: 13.5, color: "var(--text-strong)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ask.answer}</div>
+        <div style={{ fontSize: "var(--ds-fs-base)", color: "var(--text-strong)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ask.answer}</div>
       </div>
 
       {ask.sources.length > 0 && (
         <section>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>출처 {ask.sources.length}</div>
+          <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 8 }}>출처 {ask.sources.length}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {ask.sources.map((s, i) => (
               <button
                 key={`${s.kind}-${s.id}`}
                 onClick={() => onOpen(s)}
-                style={{ textAlign: "left", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
+                style={{ textAlign: "left", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--ds-fs-base)", fontWeight: 600, color: "var(--text-strong)" }}>
                   <span style={{ color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>[{i + 1}]</span>
                   <Icon name={s.kind === "doc" ? "doc" : "flag"} size={13} />
                   {s.title}
                   {s.heading && <span style={{ fontSize: "var(--ds-fs-sm)", fontWeight: 500, color: "var(--text-muted)" }}>› {s.heading}</span>}
                 </div>
-                {s.passage && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{s.passage}</div>}
+                {s.passage && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{s.passage}</div>}
               </button>
             ))}
           </div>
@@ -326,7 +332,7 @@ function AskView({ loading, ask, q, onOpen }: { loading: boolean; ask: AskResult
 function Group({ label, icon, hits, hrefFor }: { label: string; icon: "doc" | "flag"; hits: Hit[]; hrefFor: (id: string) => string }) {
   return (
     <section>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ fontSize: "var(--ds-fs-md)", fontWeight: 700, color: "var(--text-muted)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
         <Icon name={icon} size={14} /> {label}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -334,10 +340,10 @@ function Group({ label, icon, hits, hrefFor }: { label: string; icon: "doc" | "f
           <Link
             key={h.id}
             href={hrefFor(h.id)}
-            style={{ display: "block", textAlign: "left", textDecoration: "none", color: "inherit", border: "1px solid var(--border-subtle)", borderRadius: 10, background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
+            style={{ display: "block", textAlign: "left", textDecoration: "none", color: "inherit", border: "1px solid var(--border-subtle)", borderRadius: "var(--ds-r-md)", background: "var(--surface-card)", padding: "11px 14px", cursor: "pointer", font: "inherit" }}
           >
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-strong)" }}>{h.title}</div>
-            {h.snippet && <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.5 }}>{h.snippet}</div>}
+            <div style={{ fontSize: "var(--ds-fs-base)", fontWeight: 600, color: "var(--text-strong)" }}>{h.title}</div>
+            {h.snippet && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", marginTop: 3, lineHeight: 1.5 }}>{h.snippet}</div>}
           </Link>
         ))}
       </div>

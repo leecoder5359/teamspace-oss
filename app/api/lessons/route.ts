@@ -19,6 +19,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { viewerPersonId } from "@/lib/viewerPerson";
 import { readBody } from "@/lib/apiBody";
 import { z } from "zod";
+import { gzipJson } from "@/lib/gzipJson";
 
 const LessonBody = z.object({
   title: z.string().optional(),
@@ -85,10 +86,10 @@ export async function GET(req: Request) {
   ]);
   const meta = lessons.map(withLessonMeta);
   if (sc.scope === "teammates") {
-    return NextResponse.json({ lessons: await attachTeammateMeta(guard.workspaceId, viewer.personId as string, meta, members), total });
+    return gzipJson(req, { lessons: await attachTeammateMeta(guard.workspaceId, viewer.personId as string, meta, members), total });
   }
-  if (sc.scope === "mine") return NextResponse.json({ lessons: await attachCopiedFrom(guard.workspaceId, meta), total });
-  return NextResponse.json({ lessons: meta, total });
+  if (sc.scope === "mine") return gzipJson(req, { lessons: await attachCopiedFrom(guard.workspaceId, meta), total });
+  return gzipJson(req, { lessons: meta, total });
 }
 
 // POST /api/lessons { title, body, projectId?, stack?, personal?, mode?, keywords? } → 레슨 등록 (mode 가 ondemand 가 아니면 컨텍스트 주입에 포함됨)

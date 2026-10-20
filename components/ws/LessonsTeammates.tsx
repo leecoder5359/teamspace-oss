@@ -64,14 +64,14 @@ export default function LessonsTeammates() {
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px 60px" }}>
       <div style={{ maxWidth: 860, margin: "0 auto" }}>
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
+        <p style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-muted)", margin: "0 0 14px" }}>
           팀원이 공개한 <b>개인 레슨</b>입니다. 가져오면 내 개인 레슨으로 복사되어 내 세션에만 주입됩니다. (CLI: <code>pnpm ws lesson copy &lt;id&gt;</code>)
         </p>
-        {err && <div style={{ fontSize: 12.5, color: "var(--color-danger)", marginBottom: 10 }}>{err}</div>}
+        {err && <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--color-danger)", marginBottom: 10 }}>{err}</div>}
         {groups.length === 0 ? (
           <div className="ws-docs-empty">
             <span style={{ color: "var(--text-muted)" }}><Icon name="users" size={32} /></span>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀원이 공개한 레슨이 없어요</div>
+            <div style={{ fontSize: "var(--ds-fs-lg)", fontWeight: 700, color: "var(--text-strong)", marginTop: 14 }}>팀원이 공개한 레슨이 없어요</div>
             <div style={{ fontSize: "var(--ds-fs-md)", color: "var(--text-sub)", marginTop: 6 }}>팀원이 내 레슨 탭에서 개인 레슨을 만들면 여기에 보입니다.</div>
           </div>
         ) : (

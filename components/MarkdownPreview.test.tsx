@@ -160,6 +160,15 @@ describe("MarkdownPreview 위키링크·태그·콜아웃", () => {
     expect(container.textContent).not.toContain("[!WARNING]");
   });
 
+  it("WARNING 콜아웃 — 라벨 글자는 경고 글자색, 테두리·바는 이전 경고색 토큰(yellow-600)", () => {
+    const { container } = render(<MarkdownPreview markdown={"> [!WARNING] 주의\n> 본문"} />);
+    const label = [...container.querySelectorAll<HTMLElement>("div")].find((d) => d.textContent === "주의")!;
+    expect(label.getAttribute("style")).toContain("color: var(--color-warning-text)");
+    const box = label.parentElement!;
+    expect(box.getAttribute("style")).toContain("var(--yellow-600)");
+    expect(box.getAttribute("style")).not.toContain("warning-text");
+  });
+
   it("임베드는 renderEmbed 로 위임한다", () => {
     const { container } = render(
       <MarkdownPreview markdown={"![[다른 노트]]"} renderEmbed={(t) => <i>embed:{t}</i>} />,

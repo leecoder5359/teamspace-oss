@@ -4,6 +4,7 @@
 //   css        — globals.css → saebit.css 순서로 계산한 (컨텍스트, 선택자) → 선언 맵.
 //   css-redundant / css-unused — 같은 선택자에 덮이는 선언 / 소스에 쓰이지 않는 ws-* 클래스 선택자.
 //   tokens     — 토큰과 정확히 같은 리터럴(치환 대상)과 남는 리터럴(반 픽셀·비표준) 집계.
+//   drift      — 반 픽셀 글자 크기·토큰 밖 반경 리터럴 목록. style-audit.test.ts 의 repo guard 가 0 을 기대한다(CI).
 // 사용: pnpm exec tsx scripts/style-audit.ts <mode> > out.txt  (전후 diff 로 비교)
 import fs from "node:fs";
 import path from "node:path";
@@ -127,6 +128,30 @@ export function tokenEdits(src: string, tokens: Tokens): { edits: TokenEdit[]; k
 
 export function applyEdits(src: string, edits: TokenEdit[]): string {
   return [...edits].sort((a, b) => b.start - a.start).reduce((s, e) => s.slice(0, e.start) + e.to + s.slice(e.end), src);
+}
+
+// 가장 작은 반경 토큰(8px)보다 작은 미세 반경 — 색 견본 네모·kbd·하이라이트·진행 막대·체크박스. 8px 로 올리면 작은 네모가 동그라미가 된다.
+export const MICRO_RADIUS = new Set(["2px", "3px", "4px", "5px"]);
+
+export type Drift = { line: number; prop: "fontSize" | "borderRadius"; value: string };
+
+// CI 가드: 반 픽셀 글자 크기, 토큰에도 MICRO_RADIUS 에도 없는 px 반경(여러 값 문자열은 칸별). 스타일 자리인지 따지지 않는다 —
+// 타입 없는 상수에 담아 style 로 넘기면 isStyleObject 가 못 보기 때문.
+export function driftLiterals(src: string, tokens: Tokens): Drift[] {
+  const sf = source(src);
+  const tokenValues = new Set(Object.entries(tokens).filter(([k]) => k.startsWith("--ds-r-")).map(([, v]) => v));
+  const out: Drift[] = [];
+  visitTracked(sf, (p, prop) => {
+    const init = p.initializer;
+    if (!ts.isNumericLiteral(init) && !ts.isStringLiteral(init)) return;
+    const value = normalizeValue(prop, init, tokens);
+    const line = lineOf(sf, init);
+    if (prop === "fontSize" && /^\d+\.\d+px$/.test(value)) out.push({ line, prop, value });
+    if (prop === "borderRadius")
+      for (const part of value.split(/\s+/))
+        if (/^\d+(\.\d+)?px$/.test(part) && !tokenValues.has(part) && !MICRO_RADIUS.has(part)) out.push({ line, prop, value: part });
+  });
+  return out;
 }
 
 export type ConstMap = Record<string, Record<string, string>>;
@@ -332,7 +357,8 @@ function stripNot(sel: string): string {
 function classUsed(cls: string, sources: string[]): boolean {
   const esc = cls.replace(/[-]/g, "\\-");
   const whole = new RegExp(`(^|[^\\w-])${esc}([^\\w-]|$)`);
-  const prefixes = [...cls].flatMap((c, i) => (c === "-" && i > 2 ? [`${cls.slice(0, i + 1)}\${`] : []));
+  // `ws-row--${tone}`·`ws-toc-l${level}` 처럼 템플릿으로 끝을 채우는 경우 — 접두사가 어디서 끊기든 쓰임으로 본다
+  const prefixes = [...cls].flatMap((_, i) => (i > 2 ? [`${cls.slice(0, i + 1)}\${`] : []));
   return sources.some((s) => whole.test(s) || prefixes.some((p) => s.includes(p)));
 }
 
@@ -376,6 +402,28 @@ function resolveImport(fromFile: string, spec: string): string | null {
   if (!base) return null;
   const hit = [".tsx", ".ts"].map((e) => base + e).find((f) => fs.existsSync(f));
   return hit ? path.relative(ROOT, hit) : null;
+}
+
+// 스타일시트 없이 혼자 서야 하는 화면 — 토큰(var(--ds-*))이 풀리지 않으니 리터럴을 그대로 둔다.
+export const DRIFT_ALLOW_FILES: Record<string, string> = {
+  "app/global-error.tsx": "루트 레이아웃까지 깨졌을 때 뜨는 화면이라 스타일시트가 안 올 수 있다",
+  "app/offline/page.tsx": "서비스 워커가 미리 받아 두는 오프라인 화면이라 외부 자원에 기대지 않는다",
+};
+
+// 6–7px 반경이 한 변 14px 이하인 요소에 붙은 자리 — 8px 로 올리면 모양이 바뀐다(높이 12 막대의 반경 6 은 반원 끝).
+export const DRIFT_ALLOW_VALUES: Record<string, { values: string[]; reason: string }> = {
+  "components/ws/Dashboard.tsx": { values: ["borderRadius=6px"], reason: "상태 분포 막대(높이 12px)의 반원 끝" },
+};
+
+export function driftReport(): string[] {
+  const tokens = parseTokens(read("app/saebit.css"));
+  return tsxFiles()
+    .filter((f) => !(f in DRIFT_ALLOW_FILES))
+    .flatMap((f) =>
+      driftLiterals(read(f), tokens)
+        .filter((d) => !DRIFT_ALLOW_VALUES[f]?.values.includes(`${d.prop}=${d.value}`))
+        .map((d) => `${f}:${d.line}\t${d.prop}=${d.value}`),
+    );
 }
 
 function main(mode: string): string[] {
@@ -424,8 +472,10 @@ function main(mode: string): string[] {
         const exact = (prop: string) => edits.filter((e) => e.prop === prop).length;
         return [`${f}\tfontSize exact=${exact("fontSize")} kept=${keptBy("fontSize")}\tborderRadius exact=${exact("borderRadius")} kept=${keptBy("borderRadius")}`];
       });
+    case "drift":
+      return driftReport();
     default:
-      throw new Error(`unknown mode: ${mode} (tsx | constants | css | css-redundant | css-unused | tokens)`);
+      throw new Error(`unknown mode: ${mode} (tsx | constants | css | css-redundant | css-unused | tokens | drift)`);
   }
 }
 
